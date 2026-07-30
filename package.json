@@ -1,0 +1,19 @@
+{
+  "name": "laostay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LaoStay — backend API + WebAdmin, ແລ່ນພ້ອມກັນດ້ວຍຄຳສັ່ງດຽວ",
+  "scripts": {
+    "dev": "concurrently --names \"API,ADMIN\" --prefix-colors \"yellow.bold,cyan.bold\" --kill-others-on-fail \"npm:dev:api\" \"npm:dev:admin\"",
+    "dev:api": "npm --prefix backend run start:dev",
+    "dev:admin": "npm --prefix webadmin run dev",
+    "setup": "npm install && npm --prefix backend install && npm --prefix webadmin install && npm --prefix backend run db:generate",
+    "seed": "npm --prefix backend run seed",
+    "smoke": "npm --prefix backend run smoke",
+    "studio": "npm --prefix backend run db:studio",
+    "build": "npm --prefix backend run build && npm --prefix webadmin run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
