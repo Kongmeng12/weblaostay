@@ -66,11 +66,18 @@ function weekStart(ref: Date): Date {
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return d;
 }
-/** A real timestamp on the given day — for `timestamptz` columns. */
+/**
+ * A real timestamp on the given day — for `timestamptz` columns.
+ *
+ * Clamped to the past. Without that, seeding at 05:00 UTC writes rows "created"
+ * at 21:00 the same day, which sort ahead of anything the running system
+ * creates afterwards and make a brand-new booking look like the oldest one.
+ */
 function atTime(d: Date, hour: number, minute: number): Date {
   const out = new Date(d);
   out.setUTCHours(hour, minute, 0, 0);
-  return out;
+  const cutoff = Date.now() - 60_000;
+  return out.getTime() > cutoff ? new Date(cutoff) : out;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -329,12 +336,85 @@ async function main() {
   const promoIds = await seedPromos();
 
   const bookings = await seedBookings({ propertyIds, rooms, userIds, promoIds });
+  // After the bookings, so the nights they occupy keep their `booked` status.
+  await seedForwardAvailability(rooms);
   await seedReviews(bookings);
   await seedPayouts(propertyIds);
+  await seedChats(bookings);
   await seedNotifications(partnerIds, userIds);
   await seedAuditLogs(adminIds);
 
   await printSummary();
+}
+
+/** How far ahead every room is put on sale. */
+const AVAILABILITY_DAYS = 60;
+
+/**
+ * Opens the next two months for sale on every room.
+ *
+ * Without this the calendar only contains the nights past bookings occupy, so a
+ * customer search for next week finds a room at its base price but a booking
+ * attempt is the first thing that ever writes a row — which works, but leaves
+ * the partner with nothing to price and the search with no inventory to show.
+ *
+ * `skipDuplicates` is what keeps it safe to run after `seedBookings`: nights
+ * already marked `booked` are left exactly as they are.
+ */
+async function seedForwardAvailability(rooms: SeededRoom[]) {
+  const today = daysAgo(0);
+  const rows: { room_id: bigint; date: Date; price: number; status: string }[] = [];
+
+  for (const room of rooms) {
+    for (let d = 0; d < AVAILABILITY_DAYS; d++) {
+      const date = addDays(today, d);
+      // Weekends cost more — enough variation that the pricing calendar and the
+      // "from ₭x" line in search have something real to show.
+      const isWeekend = [0, 6].includes(date.getUTCDay());
+      rows.push({
+        room_id: room.id,
+        date,
+        price: isWeekend ? Math.round(room.price * 1.15) : room.price,
+        status: 'available',
+      });
+    }
+  }
+
+  const { count } = await prisma.room_availability.createMany({
+    data: rows,
+    skipDuplicates: true,
+  });
+  console.log(`  availability     ${count}  (${AVAILABILITY_DAYS} days × ${rooms.length} rooms)`);
+}
+
+/** A short conversation on a few recent bookings, so the chat screens open onto something. */
+async function seedChats(bookings: SeededBooking[]) {
+  const recent = bookings.filter((b) => b.status === 'confirmed' || b.status === 'staying').slice(0, 6);
+
+  const script = [
+    { sender_type: 'user', body: 'ສະບາຍດີ ຂ້ອຍຈະໄປຮອດປະມານ 20:00 ໄດ້ບໍ?' },
+    { sender_type: 'partner', body: 'ໄດ້ເລີຍ ພວກເຮົາມີພະນັກງານຢູ່ຮອດ 23:00 ຄັບ' },
+    { sender_type: 'user', body: 'ຂອບໃຈຫຼາຍ ມີບ່ອນຈອດລົດບໍ?' },
+    { sender_type: 'partner', body: 'ມີຄັບ ຈອດໄດ້ຟຣີໜ້າທີ່ພັກ' },
+  ];
+
+  let total = 0;
+  for (const [i, booking] of recent.entries()) {
+    const start = atTime(daysAgo(2), 9 + i, 0);
+    await prisma.chat_messages.createMany({
+      data: script.slice(0, 2 + (i % 3)).map((m, n) => ({
+        booking_id: booking.id,
+        sender_type: m.sender_type,
+        body: m.body,
+        sent_at: new Date(start.getTime() + n * 7 * 60_000),
+        // The guest's messages are left unread so the partner app has a badge.
+        read_at: m.sender_type === 'partner' ? new Date(start.getTime() + 60 * 60_000) : null,
+      })),
+    });
+    total += 2 + (i % 3);
+  }
+
+  console.log(`  chat messages    ${total}`);
 }
 
 /**

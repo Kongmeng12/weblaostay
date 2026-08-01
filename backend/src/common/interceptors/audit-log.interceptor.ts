@@ -33,14 +33,14 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        const admin = req.user;
-        if (!admin?.id) return;
+        const actor = req.user;
+        if (!actor?.id) return;
 
         void this.prisma.audit_logs
           .create({
             data: {
-              actor_type: 'admin',
-              actor_id: BigInt(admin.id),
+              actor_type: actor.actorType ?? 'admin',
+              actor_id: BigInt(actor.id),
               action: meta.action,
               target: resolveTarget(meta.target, req.params),
               ip_address: clientIp(req),

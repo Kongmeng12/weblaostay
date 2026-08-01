@@ -10,6 +10,8 @@ export interface PlatformSettings {
   walkin_commission_rate: number;
   /** % kept when a customer cancels. */
   cancellation_fee_rate: number;
+  /** % added to the room subtotal and shown to the guest as a service fee. */
+  service_fee_rate: number;
 }
 
 const DEFAULTS: PlatformSettings = {
@@ -18,6 +20,7 @@ const DEFAULTS: PlatformSettings = {
   commission_rate: 5,
   walkin_commission_rate: 2.5,
   cancellation_fee_rate: 30,
+  service_fee_rate: 5,
 };
 
 /**

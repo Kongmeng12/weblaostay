@@ -166,6 +166,7 @@ export interface PlatformSettings {
   commission_rate: number;
   walkin_commission_rate: number;
   cancellation_fee_rate: number;
+  service_fee_rate: number;
 }
 
 export interface AdminRow {

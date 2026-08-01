@@ -9,6 +9,7 @@ import {
   percentChange,
   rateForSource,
   percentOf,
+  bookingCode,
 } from '../../common/money';
 import { addDaysUtc, daysAgoUtc, isoDayUtc } from '../../common/dates';
 
@@ -186,12 +187,7 @@ function startOfToday(): Date {
   return d;
 }
 
-/**
- * Booking reference shown to users (STL-2A83 in the mockups). Derived from the
- * id so it is stable and needs no extra column.
- */
-export function bookingCode(id: bigint): string {
-  return 'STL-' + id.toString(16).toUpperCase().padStart(4, '0');
-}
-
-export { BOOKING_STATUS };
+// `bookingCode` moved to common/money.ts once the partner and customer APIs
+// started needing it too. Re-exported here for the modules that already import
+// it from this file.
+export { BOOKING_STATUS, bookingCode };

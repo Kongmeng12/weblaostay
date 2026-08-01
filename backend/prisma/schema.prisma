@@ -74,6 +74,7 @@ model bookings {
   total         Int
   status        String?         @default("confirmed") @db.VarChar(20)
   created_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  discount      Int             @default(0)
   booking_items booking_items[]
   promos        promos?         @relation(fields: [promo_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   properties    properties      @relation(fields: [property_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -91,6 +92,8 @@ model bookings {
   @@index([room_id], map: "idx_bookings_room")
   @@index([status, created_at(sort: Desc)], map: "idx_bookings_status_created")
   @@index([user_id], map: "idx_bookings_user")
+  @@index([status, check_out], map: "idx_bookings_status_checkout")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_bookings_user_created")
   @@schema("public")
 }
 
@@ -113,6 +116,7 @@ model chat_messages {
   sender_type String    @db.VarChar(20)
   body        String
   sent_at     DateTime? @default(now()) @db.Timestamptz(6)
+  read_at     DateTime? @db.Timestamptz(6)
   bookings    bookings  @relation(fields: [booking_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([booking_id, sent_at], map: "idx_chat_messages_booking")
@@ -134,18 +138,19 @@ model notifications {
 }
 
 model partners {
-  id              BigInt       @id @default(autoincrement())
-  email           String       @unique @db.VarChar(255)
-  password_hash   String       @db.VarChar(255)
-  owner_name      String       @db.VarChar(255)
-  phone           String       @db.VarChar(50)
-  status          String?      @default("pending") @db.VarChar(20)
-  bank_name       String?      @db.VarChar(100)
-  bank_account    String?      @db.VarChar(100)
-  commission_rate Decimal?     @default(5.00) @db.Decimal(5, 2)
-  created_at      DateTime?    @default(now()) @db.Timestamptz(6)
+  id              BigInt           @id @default(autoincrement())
+  email           String           @unique @db.VarChar(255)
+  password_hash   String           @db.VarChar(255)
+  owner_name      String           @db.VarChar(255)
+  phone           String           @db.VarChar(50)
+  status          String?          @default("pending") @db.VarChar(20)
+  bank_name       String?          @db.VarChar(100)
+  bank_account    String?          @db.VarChar(100)
+  commission_rate Decimal?         @default(5.00) @db.Decimal(5, 2)
+  created_at      DateTime?        @default(now()) @db.Timestamptz(6)
   payouts         payouts[]
   properties      properties[]
+  refresh_tokens  refresh_tokens[]
 
   @@index([status], map: "idx_partners_status")
   @@schema("public")
@@ -161,10 +166,13 @@ model payments {
   status          String?   @default("pending") @db.VarChar(20)
   paid_at         DateTime? @db.Timestamptz(6)
   txn_ref         String?   @db.VarChar(100)
+  expires_at      DateTime? @db.Timestamptz(6)
+  raw_callback    Json?
   bookings        bookings  @relation(fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([booking_id], map: "idx_payments_booking")
   @@index([status], map: "idx_payments_status")
+  @@index([txn_ref], map: "idx_payments_txn_ref")
   @@schema("public")
 }
 
@@ -219,21 +227,28 @@ model properties {
 
   @@index([partner_id], map: "idx_properties_partner")
   @@index([province], map: "idx_properties_province")
+  @@index([type], map: "idx_properties_type")
   @@schema("public")
 }
 
 model refresh_tokens {
   id         BigInt    @id @default(autoincrement())
-  admin_id   BigInt
+  admin_id   BigInt?
   token_hash String    @unique @db.VarChar(255)
   expires_at DateTime  @db.Timestamptz(6)
   revoked_at DateTime? @db.Timestamptz(6)
   ip_address String?   @db.VarChar(50)
   created_at DateTime  @default(now()) @db.Timestamptz(6)
-  admins     admins    @relation(fields: [admin_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  partner_id BigInt?
+  user_id    BigInt?
+  admins     admins?   @relation(fields: [admin_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  partners   partners? @relation(fields: [partner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([admin_id], map: "idx_refresh_tokens_admin")
   @@index([expires_at], map: "idx_refresh_tokens_expires")
+  @@index([partner_id], map: "idx_refresh_tokens_partner")
+  @@index([user_id], map: "idx_refresh_tokens_user")
   @@schema("public")
 }
 
@@ -278,6 +293,7 @@ model rooms {
   capacity          Int
   qty               Int
   is_active         Boolean?            @default(true)
+  photos            Json?
   booking_items     booking_items[]
   bookings          bookings[]
   room_availability room_availability[]
@@ -288,18 +304,19 @@ model rooms {
 }
 
 model users {
-  id            BigInt      @id @default(autoincrement())
-  email         String      @unique @db.VarChar(255)
-  phone         String      @db.VarChar(50)
-  full_name     String      @db.VarChar(255)
-  password_hash String      @db.VarChar(255)
-  is_verified   Boolean?    @default(false)
-  tier          String?     @default("silver") @db.VarChar(20)
-  points        Int?        @default(0)
-  status        String?     @default("active") @db.VarChar(20)
-  created_at    DateTime?   @default(now()) @db.Timestamptz(6)
-  bookings      bookings[]
-  wishlists     wishlists[]
+  id             BigInt           @id @default(autoincrement())
+  email          String           @unique @db.VarChar(255)
+  phone          String           @db.VarChar(50)
+  full_name      String           @db.VarChar(255)
+  password_hash  String           @db.VarChar(255)
+  is_verified    Boolean?         @default(false)
+  tier           String?          @default("silver") @db.VarChar(20)
+  points         Int?             @default(0)
+  status         String?          @default("active") @db.VarChar(20)
+  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  bookings       bookings[]
+  refresh_tokens refresh_tokens[]
+  wishlists      wishlists[]
 
   @@index([status], map: "idx_users_status")
   @@schema("public")

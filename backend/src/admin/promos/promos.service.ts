@@ -1,9 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PROMO_TYPE, type PromoType } from '../../common/money';
 
-export const PROMO_TYPE = { PERCENT: 'percent', FIXED: 'fixed' } as const;
-export type PromoType = (typeof PROMO_TYPE)[keyof typeof PROMO_TYPE];
+// Re-exported for the controller and the existing admin DTOs, which import the
+// promo vocabulary from here. The definition itself lives in common/money.ts
+// now that the customer booking flow needs it too.
+export { PROMO_TYPE, type PromoType };
 
 export interface PromoInput {
   code: string;

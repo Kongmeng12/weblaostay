@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaginationDto, paged } from '../../common/dto/pagination.dto';
+import { recalcPropertyRating } from '../../common/reviews';
 
 export interface ListReviewsQuery extends PaginationDto {
   flagged?: boolean;
@@ -113,21 +114,4 @@ export class ReviewsService {
     if (!exists) throw new NotFoundException(`ບໍ່ພົບຮີວິວ #${id} · Review not found`);
     return this.prisma.reviews.update({ where: { id }, data: { is_flagged: flagged } });
   }
-}
-
-/** Recomputes `properties.rating` / `review_count` from visible reviews only. */
-async function recalcPropertyRating(tx: Prisma.TransactionClient, propertyId: bigint) {
-  const agg = await tx.reviews.aggregate({
-    where: { property_id: propertyId, is_hidden: false },
-    _avg: { stars: true },
-    _count: true,
-  });
-
-  await tx.properties.update({
-    where: { id: propertyId },
-    data: {
-      rating: new Prisma.Decimal((agg._avg.stars ?? 0).toFixed(2)),
-      review_count: agg._count,
-    },
-  });
 }

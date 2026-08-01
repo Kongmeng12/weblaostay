@@ -60,6 +60,13 @@ class UpdateSettingsDto {
   @Min(0)
   @Max(100)
   cancellation_fee_rate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  service_fee_rate?: number;
 }
 
 class CreateAdminDto {

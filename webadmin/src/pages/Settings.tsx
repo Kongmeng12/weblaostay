@@ -125,6 +125,13 @@ export function Settings() {
           value={form?.cancellation_fee_rate}
           disabled={!canEditMoney}
           onChange={(v) => form && setForm({ ...form, cancellation_fee_rate: v })}
+        />
+        <RateRow
+          title="ຄ່າບໍລິການ (ລູກຄ້າຈ່າຍ)"
+          hint="ບວກເທິງຄ່າຫ້ອງ ໃນການຈອງຜ່ານແອັບ — walk-in ບໍ່ເກັບ"
+          value={form?.service_fee_rate}
+          disabled={!canEditMoney}
+          onChange={(v) => form && setForm({ ...form, service_fee_rate: v })}
           last
         />
 

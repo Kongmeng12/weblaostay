@@ -2,12 +2,21 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
+import { mkdirSync } from 'node:fs';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { UPLOAD_ROOT, UPLOAD_URL_PREFIX } from './uploads/storage.interface';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: false,
+    // The payment webhook's HMAC is computed over the bytes the provider sent.
+    // Re-serialising the parsed JSON would change key order and whitespace, and
+    // every signature would fail.
+    rawBody: true,
+  });
   const config = app.get(ConfigService);
 
   app.setGlobalPrefix('api');
@@ -22,8 +31,20 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   });
 
-  // No cross-origin resource policy fuss: this process serves JSON only.
+  // No cross-origin resource policy fuss: this process serves JSON and the
+  // uploaded photos, which the apps load from a different origin.
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
+
+  // Uploaded property and room photos. Served outside the /api prefix so the
+  // URLs stored in the database stay stable if the API is ever versioned.
+  mkdirSync(UPLOAD_ROOT, { recursive: true });
+  app.useStaticAssets(UPLOAD_ROOT, {
+    prefix: UPLOAD_URL_PREFIX,
+    // The filenames are random, so a long cache is safe: a given URL's bytes
+    // never change.
+    maxAge: '30d',
+    index: false,
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

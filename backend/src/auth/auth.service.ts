@@ -9,8 +9,15 @@ import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { LoginDto, RegisterAdminDto } from './dto/auth.dto';
+import {
+  LoginDto,
+  RegisterAdminDto,
+  RegisterPartnerDto,
+  RegisterCustomerDto,
+} from './dto/auth.dto';
 import { ROLE, isRole, type Role } from '../common/roles';
+import { ACTOR, type ActorType } from '../common/actors';
+import { PARTNER_STATUS } from '../common/money';
 
 export interface TokenPair {
   accessToken: string;
@@ -20,6 +27,14 @@ export interface TokenPair {
 
 export interface AuthResult extends TokenPair {
   admin: { id: string; email: string; name: string; role: Role };
+}
+
+export interface PartnerAuthResult extends TokenPair {
+  partner: { id: string; email: string; ownerName: string; phone: string; status: string };
+}
+
+export interface CustomerAuthResult extends TokenPair {
+  user: { id: string; email: string; fullName: string; phone: string; tier: string };
 }
 
 /**
@@ -36,6 +51,15 @@ const ARGON_OPTS: argon2.Options = {
   parallelism: 1,
 };
 
+const BAD_CREDENTIALS = 'ອີເມວ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ · Invalid credentials';
+
+/** Which `refresh_tokens` column owns a session, per actor. */
+const OWNER_COLUMN = {
+  [ACTOR.ADMIN]: 'admin_id',
+  [ACTOR.PARTNER]: 'partner_id',
+  [ACTOR.USER]: 'user_id',
+} as const;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -46,6 +70,8 @@ export class AuthService {
     private readonly config: ConfigService,
   ) {}
 
+  // ── admin ─────────────────────────────────────────────────────────────────
+
   async login(dto: LoginDto, ip: string): Promise<AuthResult> {
     const admin = await this.prisma.admins.findUnique({ where: { email: dto.email } });
 
@@ -53,13 +79,11 @@ export class AuthService {
     // the response cannot be used to enumerate valid admin accounts.
     if (!admin) {
       await argon2.hash(dto.password, ARGON_OPTS).catch(() => undefined);
-      throw new UnauthorizedException('ອີເມວ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ · Invalid credentials');
+      throw new UnauthorizedException(BAD_CREDENTIALS);
     }
 
     const ok = await argon2.verify(admin.password_hash, dto.password).catch(() => false);
-    if (!ok) {
-      throw new UnauthorizedException('ອີເມວ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ · Invalid credentials');
-    }
+    if (!ok) throw new UnauthorizedException(BAD_CREDENTIALS);
 
     if (!isRole(admin.role)) {
       throw new UnauthorizedException(`ສິດບໍ່ຖືກຕ້ອງ · Unknown role "${admin.role}"`);
@@ -71,10 +95,10 @@ export class AuthService {
     });
 
     await this.prisma.audit_logs.create({
-      data: { actor_type: 'admin', actor_id: admin.id, action: 'login', target: 'admins:' + admin.id, ip_address: ip },
+      data: { actor_type: ACTOR.ADMIN, actor_id: admin.id, action: 'login', target: 'admins:' + admin.id, ip_address: ip },
     });
 
-    const tokens = await this.issueTokens(admin.id, admin.email, admin.role, ip);
+    const tokens = await this.issueTokens(ACTOR.ADMIN, admin.id, admin.email, ip, admin.role);
     return {
       ...tokens,
       admin: { id: admin.id.toString(), email: admin.email, name: admin.name, role: admin.role },
@@ -98,7 +122,13 @@ export class AuthService {
     const admin = await this.createAdmin({ ...dto, role: ROLE.SUPER_ADMIN });
     this.logger.log(`Bootstrap super_admin created: ${admin.email}`);
 
-    const tokens = await this.issueTokens(admin.id, admin.email, ROLE.SUPER_ADMIN, ip);
+    const tokens = await this.issueTokens(
+      ACTOR.ADMIN,
+      admin.id,
+      admin.email,
+      ip,
+      ROLE.SUPER_ADMIN,
+    );
     return {
       ...tokens,
       admin: {
@@ -119,13 +149,139 @@ export class AuthService {
     });
   }
 
+  // ── partner ───────────────────────────────────────────────────────────────
+
+  async partnerLogin(dto: LoginDto, ip: string): Promise<PartnerAuthResult> {
+    const partner = await this.prisma.partners.findUnique({ where: { email: dto.email } });
+
+    if (!partner) {
+      await argon2.hash(dto.password, ARGON_OPTS).catch(() => undefined);
+      throw new UnauthorizedException(BAD_CREDENTIALS);
+    }
+
+    const ok = await argon2.verify(partner.password_hash, dto.password).catch(() => false);
+    if (!ok) throw new UnauthorizedException(BAD_CREDENTIALS);
+
+    // A pending partner may sign in — the app shows them "under review". Only a
+    // rejected application is turned away here.
+    if (partner.status === PARTNER_STATUS.REJECTED) {
+      throw new UnauthorizedException('ໃບສະໝັກບໍ່ຜ່ານການອະນຸມັດ · Application was rejected');
+    }
+
+    await this.prisma.audit_logs.create({
+      data: {
+        actor_type: ACTOR.PARTNER,
+        actor_id: partner.id,
+        action: 'login',
+        target: 'partners:' + partner.id,
+        ip_address: ip,
+      },
+    });
+
+    const tokens = await this.issueTokens(ACTOR.PARTNER, partner.id, partner.email, ip);
+    return { ...tokens, partner: partnerIdentity(partner) };
+  }
+
+  /**
+   * Partner sign-up creates the account *and* its first property in one
+   * transaction, both at `pending`. That is exactly the row the Approvals
+   * screen already looks for, so no admin-side code changes.
+   */
+  async partnerRegister(dto: RegisterPartnerDto, ip: string): Promise<PartnerAuthResult> {
+    const taken = await this.prisma.partners.findUnique({
+      where: { email: dto.email },
+      select: { id: true },
+    });
+    if (taken) {
+      throw new ConflictException('ອີເມວນີ້ມີບັນຊີແລ້ວ · That email is already registered');
+    }
+
+    const password_hash = await argon2.hash(dto.password, ARGON_OPTS);
+
+    const partner = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.partners.create({
+        data: {
+          email: dto.email,
+          password_hash,
+          owner_name: dto.ownerName,
+          phone: dto.phone,
+          status: PARTNER_STATUS.PENDING,
+          bank_name: dto.bankName ?? null,
+          bank_account: dto.bankAccount ?? null,
+        },
+      });
+
+      await tx.properties.create({
+        data: {
+          partner_id: created.id,
+          name: dto.propertyName,
+          type: dto.propertyType,
+          province: dto.province,
+          address: dto.address,
+        },
+      });
+
+      return created;
+    });
+
+    this.logger.log(`Partner application received: ${partner.email}`);
+
+    const tokens = await this.issueTokens(ACTOR.PARTNER, partner.id, partner.email, ip);
+    return { ...tokens, partner: partnerIdentity(partner) };
+  }
+
+  // ── customer ──────────────────────────────────────────────────────────────
+
+  async customerLogin(dto: LoginDto, ip: string): Promise<CustomerAuthResult> {
+    const user = await this.prisma.users.findUnique({ where: { email: dto.email } });
+
+    if (!user) {
+      await argon2.hash(dto.password, ARGON_OPTS).catch(() => undefined);
+      throw new UnauthorizedException(BAD_CREDENTIALS);
+    }
+
+    const ok = await argon2.verify(user.password_hash, dto.password).catch(() => false);
+    if (!ok) throw new UnauthorizedException(BAD_CREDENTIALS);
+
+    const tokens = await this.issueTokens(ACTOR.USER, user.id, user.email, ip);
+    return { ...tokens, user: customerIdentity(user) };
+  }
+
+  async customerRegister(dto: RegisterCustomerDto, ip: string): Promise<CustomerAuthResult> {
+    const taken = await this.prisma.users.findUnique({
+      where: { email: dto.email },
+      select: { id: true },
+    });
+    if (taken) {
+      throw new ConflictException('ອີເມວນີ້ມີບັນຊີແລ້ວ · That email is already registered');
+    }
+
+    const password_hash = await argon2.hash(dto.password, ARGON_OPTS);
+    const user = await this.prisma.users.create({
+      data: {
+        email: dto.email,
+        password_hash,
+        full_name: dto.fullName,
+        phone: dto.phone,
+      },
+    });
+
+    const tokens = await this.issueTokens(ACTOR.USER, user.id, user.email, ip);
+    return { ...tokens, user: customerIdentity(user) };
+  }
+
+  // ── shared session handling ───────────────────────────────────────────────
+
   /**
    * Refresh with rotation: the presented token is revoked and a new pair is
    * issued. Reusing an already-revoked token revokes the whole family, which
    * is the standard response to a stolen refresh token.
+   *
+   * One implementation for all three actors — the stored row says which one it
+   * belongs to, so there is no way for the three to drift apart.
    */
   async refresh(refreshToken: string, ip: string): Promise<TokenPair> {
-    let payload: { sub: string };
+    let payload: { sub: string; typ?: ActorType };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {
         secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
@@ -141,10 +297,17 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token ບໍ່ຖືກຕ້ອງ · Unknown token');
     }
 
+    const actor = actorOf(stored);
+    if (!actor) {
+      throw new UnauthorizedException('Refresh token ບໍ່ຖືກຕ້ອງ · Orphaned token');
+    }
+
     if (stored.revoked_at) {
       // Replay of a rotated token — treat the session as compromised.
-      await this.revokeAllForAdmin(stored.admin_id);
-      this.logger.warn(`Refresh token reuse detected for admin ${stored.admin_id}; all sessions revoked`);
+      await this.revokeAllFor(actor.type, actor.id);
+      this.logger.warn(
+        `Refresh token reuse detected for ${actor.type} ${actor.id}; all sessions revoked`,
+      );
       throw new UnauthorizedException('Session ຖືກຍົກເລີກ · Session revoked, please log in again');
     }
 
@@ -152,8 +315,8 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token ໝົດອາຍຸ · Expired');
     }
 
-    const admin = await this.prisma.admins.findUnique({ where: { id: BigInt(payload.sub) } });
-    if (!admin || !isRole(admin.role)) {
+    const account = await this.loadAccount(actor.type, actor.id);
+    if (!account) {
       throw new UnauthorizedException('ບັນຊີບໍ່ມີຢູ່ແລ້ວ · Account no longer exists');
     }
 
@@ -162,7 +325,7 @@ export class AuthService {
       data: { revoked_at: new Date() },
     });
 
-    return this.issueTokens(admin.id, admin.email, admin.role, ip);
+    return this.issueTokens(actor.type, actor.id, account.email, ip, account.role);
   }
 
   async logout(refreshToken: string): Promise<{ ok: true }> {
@@ -178,33 +341,71 @@ export class AuthService {
   }
 
   async revokeAllForAdmin(adminId: bigint): Promise<void> {
+    return this.revokeAllFor(ACTOR.ADMIN, adminId);
+  }
+
+  async revokeAllFor(actorType: ActorType, id: bigint): Promise<void> {
     await this.prisma.refresh_tokens.updateMany({
-      where: { admin_id: adminId, revoked_at: null },
+      where: { [OWNER_COLUMN[actorType]]: id, revoked_at: null },
       data: { revoked_at: new Date() },
     });
   }
 
-  private async issueTokens(id: bigint, email: string, role: Role, ip: string): Promise<TokenPair> {
+  private async loadAccount(
+    actorType: ActorType,
+    id: bigint,
+  ): Promise<{ email: string; role?: Role } | null> {
+    if (actorType === ACTOR.ADMIN) {
+      const admin = await this.prisma.admins.findUnique({
+        where: { id },
+        select: { email: true, role: true },
+      });
+      if (!admin || !isRole(admin.role)) return null;
+      return { email: admin.email, role: admin.role };
+    }
+
+    if (actorType === ACTOR.PARTNER) {
+      const partner = await this.prisma.partners.findUnique({
+        where: { id },
+        select: { email: true, status: true },
+      });
+      if (!partner || partner.status === PARTNER_STATUS.REJECTED) return null;
+      return { email: partner.email };
+    }
+
+    const user = await this.prisma.users.findUnique({ where: { id }, select: { email: true } });
+    return user ? { email: user.email } : null;
+  }
+
+  private async issueTokens(
+    actorType: ActorType,
+    id: bigint,
+    email: string,
+    ip: string,
+    role?: Role,
+  ): Promise<TokenPair> {
     // jsonwebtoken types expiresIn as a template-literal duration ("15m"), which
     // a plain string from .env cannot satisfy — hence the cast.
     const accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m') as Ttl;
     const refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '7d') as Ttl;
 
+    // `typ` is what keeps the three actors apart: all tokens share one secret,
+    // so each passport strategy refuses a payload whose typ is not its own.
     const accessToken = await this.jwt.signAsync(
-      { sub: id.toString(), email, role },
+      { sub: id.toString(), typ: actorType, email, ...(role ? { role } : {}) },
       { secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'), expiresIn: accessTtl },
     );
 
     // A random jti keeps two refresh tokens issued in the same second distinct,
     // so their hashes never collide on the unique index.
     const refreshToken = await this.jwt.signAsync(
-      { sub: id.toString(), jti: randomBytes(16).toString('hex') },
+      { sub: id.toString(), typ: actorType, jti: randomBytes(16).toString('hex') },
       { secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'), expiresIn: refreshTtl },
     );
 
     await this.prisma.refresh_tokens.create({
       data: {
-        admin_id: id,
+        [OWNER_COLUMN[actorType]]: id,
         token_hash: hashToken(refreshToken),
         expires_at: addDuration(new Date(), String(refreshTtl)),
         ip_address: ip,
@@ -213,6 +414,50 @@ export class AuthService {
 
     return { accessToken, refreshToken, expiresIn: String(accessTtl) };
   }
+}
+
+/** Which actor a stored session belongs to — exactly one column is set. */
+function actorOf(row: {
+  admin_id: bigint | null;
+  partner_id: bigint | null;
+  user_id: bigint | null;
+}): { type: ActorType; id: bigint } | null {
+  if (row.admin_id !== null) return { type: ACTOR.ADMIN, id: row.admin_id };
+  if (row.partner_id !== null) return { type: ACTOR.PARTNER, id: row.partner_id };
+  if (row.user_id !== null) return { type: ACTOR.USER, id: row.user_id };
+  return null;
+}
+
+function partnerIdentity(p: {
+  id: bigint;
+  email: string;
+  owner_name: string;
+  phone: string;
+  status: string | null;
+}) {
+  return {
+    id: p.id.toString(),
+    email: p.email,
+    ownerName: p.owner_name,
+    phone: p.phone,
+    status: p.status ?? PARTNER_STATUS.PENDING,
+  };
+}
+
+function customerIdentity(u: {
+  id: bigint;
+  email: string;
+  full_name: string;
+  phone: string;
+  tier: string | null;
+}) {
+  return {
+    id: u.id.toString(),
+    email: u.email,
+    fullName: u.full_name,
+    phone: u.phone,
+    tier: u.tier ?? 'silver',
+  };
 }
 
 /**

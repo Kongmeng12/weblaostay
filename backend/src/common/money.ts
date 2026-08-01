@@ -55,6 +55,85 @@ export const AVAILABILITY_STATUS = {
   BOOKED: 'booked',
   CLOSED: 'closed',
 } as const;
+export type AvailabilityStatus =
+  (typeof AVAILABILITY_STATUS)[keyof typeof AVAILABILITY_STATUS];
+
+/** `promos.type` — how `promos.value` is read. */
+export const PROMO_TYPE = { PERCENT: 'percent', FIXED: 'fixed' } as const;
+export type PromoType = (typeof PROMO_TYPE)[keyof typeof PROMO_TYPE];
+
+/** `properties.type`, as used by the seed and the customer search filter. */
+export const PROPERTY_TYPES = [
+  'homestay',
+  'guesthouse',
+  'hotel',
+  'resort',
+  'villa',
+  'apartment',
+] as const;
+
+/** `rooms.bed_type`. */
+export const BED_TYPES = ['single', 'double', 'twin', 'king'] as const;
+
+/** `chat_messages.sender_type` — the same three strings as ACTOR. */
+export const SENDER_TYPE = { USER: 'user', PARTNER: 'partner', ADMIN: 'admin' } as const;
+
+/**
+ * Booking reference shown to guests and partners: the id in hex, so
+ * `STL-0142` is booking 322. Kept short enough to read over the phone.
+ */
+export function bookingCode(id: bigint): string {
+  return 'STL-' + id.toString(16).toUpperCase().padStart(4, '0');
+}
+
+/**
+ * Resolves a search term to candidate booking ids.
+ *
+ * `bookingCode` renders the id in hex, so "STL-0142" means id 322 — but a hex
+ * code can be all digits, which is indistinguishable from someone pasting a raw
+ * id. Rather than guess, both readings are returned and matched with `IN`:
+ *
+ *   "STL-0142" → [322]        (prefixed: unambiguously hex)
+ *   "142"      → [322, 142]   (bare: could be either)
+ *   "2A83"     → [10883]      (has hex letters: only one reading)
+ */
+export function parseBookingRef(input: string): bigint[] {
+  const trimmed = input.trim().toUpperCase();
+  const hadPrefix = trimmed.startsWith('STL-');
+  const cleaned = hadPrefix ? trimmed.slice(4) : trimmed;
+
+  if (!/^[0-9A-F]+$/.test(cleaned) || cleaned.length > 15) return [];
+
+  const candidates: bigint[] = [];
+  try {
+    candidates.push(BigInt('0x' + cleaned));
+  } catch {
+    /* not parseable as hex */
+  }
+  if (!hadPrefix && /^\d+$/.test(cleaned)) {
+    try {
+      const asDecimal = BigInt(cleaned);
+      if (!candidates.includes(asDecimal)) candidates.push(asDecimal);
+    } catch {
+      /* not parseable as decimal */
+    }
+  }
+  return candidates;
+}
+
+/**
+ * Discount a promo takes off a subtotal, in whole kip.
+ * Never more than the subtotal itself — a fixed-value promo on a cheap stay
+ * must not make the total negative.
+ */
+export function promoDiscount(
+  type: string,
+  value: number,
+  subtotalKip: number,
+): number {
+  const raw = type === PROMO_TYPE.PERCENT ? percentOf(subtotalKip, value) : Math.round(value);
+  return Math.min(Math.max(raw, 0), subtotalKip);
+}
 
 /**
  * Apply a percentage rate to a kip amount, rounding to the nearest whole kip.
