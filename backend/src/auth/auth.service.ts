@@ -1,23 +1,23 @@
 import {
-  Injectable,
-  UnauthorizedException,
+  BadRequestException,
   ConflictException,
+  Injectable,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as argon2 from 'argon2';
-import { createHash, randomBytes } from 'node:crypto';
+import { Prisma, user_role, user_status, type otp_purpose } from '@prisma/client';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import {
+import { SettingsService } from '../common/settings.service';
+import { PasswordService } from './password.service';
+import { LoginGuardService } from './login-guard.service';
+import type {
   LoginDto,
-  RegisterAdminDto,
-  RegisterPartnerDto,
   RegisterCustomerDto,
+  RegisterPartnerDto,
 } from './dto/auth.dto';
-import { ROLE, isRole, type Role } from '../common/roles';
-import { ACTOR, type ActorType } from '../common/actors';
-import { PARTNER_STATUS } from '../common/money';
 
 export interface TokenPair {
   accessToken: string;
@@ -25,40 +25,26 @@ export interface TokenPair {
   expiresIn: string;
 }
 
+export interface Identity {
+  id: string;
+  email: string;
+  role: user_role;
+  adminRole: string | null;
+  fullName: string | null;
+  phone: string | null;
+  isVerified: boolean;
+  partnerId: string | null;
+  partnerStatus: string | null;
+}
+
 export interface AuthResult extends TokenPair {
-  admin: { id: string; email: string; name: string; role: Role };
+  user: Identity;
 }
 
-export interface PartnerAuthResult extends TokenPair {
-  partner: { id: string; email: string; ownerName: string; phone: string; status: string };
-}
-
-export interface CustomerAuthResult extends TokenPair {
-  user: { id: string; email: string; fullName: string; phone: string; tier: string };
-}
-
-/**
- * argon2id with parameters sized for an admin login (a handful per day), not a
- * high-throughput consumer endpoint.
- */
 /** The duration form jsonwebtoken accepts for `expiresIn` ("15m", "7d", 3600). */
 type Ttl = NonNullable<JwtSignOptions['expiresIn']>;
 
-const ARGON_OPTS: argon2.Options = {
-  type: argon2.argon2id,
-  memoryCost: 19_456, // 19 MiB — OWASP minimum
-  timeCost: 2,
-  parallelism: 1,
-};
-
 const BAD_CREDENTIALS = 'ອີເມວ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ · Invalid credentials';
-
-/** Which `refresh_tokens` column owns a session, per actor. */
-const OWNER_COLUMN = {
-  [ACTOR.ADMIN]: 'admin_id',
-  [ACTOR.PARTNER]: 'partner_id',
-  [ACTOR.USER]: 'user_id',
-} as const;
 
 @Injectable()
 export class AuthService {
@@ -68,347 +54,442 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly settings: SettingsService,
+    private readonly passwords: PasswordService,
+    private readonly loginGuard: LoginGuardService,
   ) {}
 
-  // ── admin ─────────────────────────────────────────────────────────────────
+  // ── sign in ───────────────────────────────────────────────────────────────
 
-  async login(dto: LoginDto, ip: string): Promise<AuthResult> {
-    const admin = await this.prisma.admins.findUnique({ where: { email: dto.email } });
+  async login(dto: LoginDto, ip: string, userAgent: string | null): Promise<AuthResult> {
+    const email = dto.email.trim().toLowerCase();
 
-    // Same error and roughly the same work whether the email exists or not, so
-    // the response cannot be used to enumerate valid admin accounts.
-    if (!admin) {
-      await argon2.hash(dto.password, ARGON_OPTS).catch(() => undefined);
+    // Lockout is checked before any password work, so a locked account costs an
+    // attacker a cheap 429 rather than a hash verification.
+    await this.loginGuard.assertNotLocked(email);
+
+    const user = await this.prisma.users.findUnique({
+      where: { email },
+      include: { user_profiles: true, partners: true },
+    });
+
+    if (!user || user.deleted_at !== null) {
+      // Same work and the same error whether the account exists or not, so the
+      // response cannot be used to enumerate accounts.
+      await this.passwords.wasteTime(dto.password);
+      await this.loginGuard.record(email, false, ip, userAgent);
       throw new UnauthorizedException(BAD_CREDENTIALS);
     }
 
-    const ok = await argon2.verify(admin.password_hash, dto.password).catch(() => false);
-    if (!ok) throw new UnauthorizedException(BAD_CREDENTIALS);
-
-    if (!isRole(admin.role)) {
-      throw new UnauthorizedException(`ສິດບໍ່ຖືກຕ້ອງ · Unknown role "${admin.role}"`);
+    const { ok, needsRehash } = await this.passwords.verify(dto.password, user.password_hash);
+    if (!ok) {
+      await this.loginGuard.record(email, false, ip, userAgent);
+      throw new UnauthorizedException(BAD_CREDENTIALS);
     }
 
-    await this.prisma.admins.update({
-      where: { id: admin.id },
-      data: { last_login_at: new Date() },
-    });
+    if (user.status === user_status.suspended) {
+      await this.loginGuard.record(email, false, ip, userAgent);
+      throw new UnauthorizedException('ບັນຊີຖືກລະງັບ · This account is suspended');
+    }
 
-    await this.prisma.audit_logs.create({
-      data: { actor_type: ACTOR.ADMIN, actor_id: admin.id, action: 'login', target: 'admins:' + admin.id, ip_address: ip },
-    });
-
-    const tokens = await this.issueTokens(ACTOR.ADMIN, admin.id, admin.email, ip, admin.role);
-    return {
-      ...tokens,
-      admin: { id: admin.id.toString(), email: admin.email, name: admin.name, role: admin.role },
-    };
-  }
-
-  /**
-   * Self-service registration is only open while no admin exists yet — it
-   * bootstraps the very first super_admin. After that, accounts are created
-   * from the Settings screen by an existing super_admin.
-   */
-  async register(dto: RegisterAdminDto, ip: string): Promise<AuthResult> {
-    const existingCount = await this.prisma.admins.count();
-    if (existingCount > 0) {
-      throw new ConflictException(
-        'ມີຜູ້ດູແລໃນລະບົບແລ້ວ — ໃຫ້ super_admin ເປັນຜູ້ສ້າງບັນຊີໃໝ່ · ' +
-          'Registration is closed; ask a super_admin to create the account',
+    // The seed writes bcrypt; move it to argon2 now that we hold the plaintext.
+    if (needsRehash) {
+      void this.passwords.upgradeInBackground(user.user_id, dto.password, (id, hash) =>
+        this.prisma.users.update({ where: { user_id: id }, data: { password_hash: hash } }),
       );
     }
 
-    const admin = await this.createAdmin({ ...dto, role: ROLE.SUPER_ADMIN });
-    this.logger.log(`Bootstrap super_admin created: ${admin.email}`);
+    await Promise.all([
+      this.prisma.users.update({
+        where: { user_id: user.user_id },
+        data: { last_login_at: new Date() },
+      }),
+      this.loginGuard.record(email, true, ip, userAgent),
+      this.loginGuard.clearFailures(email),
+      this.prisma.audit_logs.create({
+        data: {
+          user_id: user.user_id,
+          action: 'login',
+          module_name: 'auth',
+          table_name: 'users',
+          record_id: user.user_id,
+          ip_address: ip.slice(0, 64),
+          user_agent: userAgent,
+        },
+      }),
+    ]);
 
-    const tokens = await this.issueTokens(
-      ACTOR.ADMIN,
-      admin.id,
-      admin.email,
-      ip,
-      ROLE.SUPER_ADMIN,
-    );
-    return {
-      ...tokens,
-      admin: {
-        id: admin.id.toString(),
-        email: admin.email,
-        name: admin.name,
-        role: ROLE.SUPER_ADMIN,
-      },
-    };
+    const tokens = await this.issueTokens(user.user_id, user.email, user.role, ip, userAgent);
+    return { ...tokens, user: toIdentity(user) };
   }
 
-  /** Shared by bootstrap registration and by the Settings screen. */
-  async createAdmin(dto: RegisterAdminDto) {
-    const password_hash = await argon2.hash(dto.password, ARGON_OPTS);
-    return this.prisma.admins.create({
-      data: { email: dto.email, name: dto.name, password_hash, role: dto.role },
-      select: { id: true, email: true, name: true, role: true, last_login_at: true },
-    });
-  }
+  // ── registration ──────────────────────────────────────────────────────────
 
-  // ── partner ───────────────────────────────────────────────────────────────
+  async registerCustomer(
+    dto: RegisterCustomerDto,
+    ip: string,
+    userAgent: string | null,
+  ): Promise<AuthResult> {
+    const email = dto.email.trim().toLowerCase();
+    await this.assertEmailFree(email);
 
-  async partnerLogin(dto: LoginDto, ip: string): Promise<PartnerAuthResult> {
-    const partner = await this.prisma.partners.findUnique({ where: { email: dto.email } });
+    const password_hash = await this.passwords.hash(dto.password);
 
-    if (!partner) {
-      await argon2.hash(dto.password, ARGON_OPTS).catch(() => undefined);
-      throw new UnauthorizedException(BAD_CREDENTIALS);
-    }
-
-    const ok = await argon2.verify(partner.password_hash, dto.password).catch(() => false);
-    if (!ok) throw new UnauthorizedException(BAD_CREDENTIALS);
-
-    // A pending partner may sign in — the app shows them "under review". Only a
-    // rejected application is turned away here.
-    if (partner.status === PARTNER_STATUS.REJECTED) {
-      throw new UnauthorizedException('ໃບສະໝັກບໍ່ຜ່ານການອະນຸມັດ · Application was rejected');
-    }
-
-    await this.prisma.audit_logs.create({
+    const user = await this.prisma.users.create({
       data: {
-        actor_type: ACTOR.PARTNER,
-        actor_id: partner.id,
-        action: 'login',
-        target: 'partners:' + partner.id,
-        ip_address: ip,
+        role: user_role.CUSTOMER,
+        email,
+        phone: dto.phone,
+        password_hash,
+        user_profiles: { create: { full_name: dto.fullName } },
       },
+      include: { user_profiles: true, partners: true },
     });
 
-    const tokens = await this.issueTokens(ACTOR.PARTNER, partner.id, partner.email, ip);
-    return { ...tokens, partner: partnerIdentity(partner) };
+    const tokens = await this.issueTokens(user.user_id, user.email, user.role, ip, userAgent);
+    return { ...tokens, user: toIdentity(user) };
   }
 
   /**
-   * Partner sign-up creates the account *and* its first property in one
-   * transaction, both at `pending`. That is exactly the row the Approvals
-   * screen already looks for, so no admin-side code changes.
+   * Partner sign-up creates the account, the business and its first property in
+   * one transaction, all at `pending`. That is exactly the row the Approvals
+   * screen looks for, so no admin-side code has to know registration happened.
    */
-  async partnerRegister(dto: RegisterPartnerDto, ip: string): Promise<PartnerAuthResult> {
-    const taken = await this.prisma.partners.findUnique({
-      where: { email: dto.email },
-      select: { id: true },
-    });
-    if (taken) {
-      throw new ConflictException('ອີເມວນີ້ມີບັນຊີແລ້ວ · That email is already registered');
-    }
+  async registerPartner(
+    dto: RegisterPartnerDto,
+    ip: string,
+    userAgent: string | null,
+  ): Promise<AuthResult> {
+    const email = dto.email.trim().toLowerCase();
+    await this.assertEmailFree(email);
 
-    const password_hash = await argon2.hash(dto.password, ARGON_OPTS);
+    const password_hash = await this.passwords.hash(dto.password);
 
-    const partner = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.partners.create({
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.users.create({
         data: {
-          email: dto.email,
-          password_hash,
-          owner_name: dto.ownerName,
+          role: user_role.PARTNER,
+          email,
           phone: dto.phone,
-          status: PARTNER_STATUS.PENDING,
-          bank_name: dto.bankName ?? null,
-          bank_account: dto.bankAccount ?? null,
+          password_hash,
+          user_profiles: { create: { full_name: dto.ownerName } },
+        },
+      });
+
+      const partner = await tx.partners.create({
+        data: {
+          user_id: created.user_id,
+          business_name: dto.businessName,
+          contact_phone: dto.phone,
         },
       });
 
       await tx.properties.create({
         data: {
-          partner_id: created.id,
-          name: dto.propertyName,
-          type: dto.propertyType,
-          province: dto.province,
-          address: dto.address,
+          partner_id: partner.partner_id,
+          property_name: dto.propertyName,
+          property_type: dto.propertyType,
+          province_id: BigInt(dto.provinceId),
+          district_id: dto.districtId ? BigInt(dto.districtId) : null,
+          address_detail: dto.address,
+          // Not sellable until an admin approves the partner.
+          status: 'draft',
         },
       });
 
-      return created;
+      return tx.users.findUniqueOrThrow({
+        where: { user_id: created.user_id },
+        include: { user_profiles: true, partners: true },
+      });
     });
 
-    this.logger.log(`Partner application received: ${partner.email}`);
+    this.logger.log(`Partner application received: ${email}`);
 
-    const tokens = await this.issueTokens(ACTOR.PARTNER, partner.id, partner.email, ip);
-    return { ...tokens, partner: partnerIdentity(partner) };
+    const tokens = await this.issueTokens(user.user_id, user.email, user.role, ip, userAgent);
+    return { ...tokens, user: toIdentity(user) };
   }
 
-  // ── customer ──────────────────────────────────────────────────────────────
-
-  async customerLogin(dto: LoginDto, ip: string): Promise<CustomerAuthResult> {
-    const user = await this.prisma.users.findUnique({ where: { email: dto.email } });
-
-    if (!user) {
-      await argon2.hash(dto.password, ARGON_OPTS).catch(() => undefined);
-      throw new UnauthorizedException(BAD_CREDENTIALS);
-    }
-
-    const ok = await argon2.verify(user.password_hash, dto.password).catch(() => false);
-    if (!ok) throw new UnauthorizedException(BAD_CREDENTIALS);
-
-    const tokens = await this.issueTokens(ACTOR.USER, user.id, user.email, ip);
-    return { ...tokens, user: customerIdentity(user) };
-  }
-
-  async customerRegister(dto: RegisterCustomerDto, ip: string): Promise<CustomerAuthResult> {
-    const taken = await this.prisma.users.findUnique({
-      where: { email: dto.email },
-      select: { id: true },
-    });
-    if (taken) {
-      throw new ConflictException('ອີເມວນີ້ມີບັນຊີແລ້ວ · That email is already registered');
-    }
-
-    const password_hash = await argon2.hash(dto.password, ARGON_OPTS);
-    const user = await this.prisma.users.create({
-      data: {
-        email: dto.email,
-        password_hash,
-        full_name: dto.fullName,
-        phone: dto.phone,
-      },
-    });
-
-    const tokens = await this.issueTokens(ACTOR.USER, user.id, user.email, ip);
-    return { ...tokens, user: customerIdentity(user) };
-  }
-
-  // ── shared session handling ───────────────────────────────────────────────
+  // ── sessions ──────────────────────────────────────────────────────────────
 
   /**
    * Refresh with rotation: the presented token is revoked and a new pair is
-   * issued. Reusing an already-revoked token revokes the whole family, which
-   * is the standard response to a stolen refresh token.
-   *
-   * One implementation for all three actors — the stored row says which one it
-   * belongs to, so there is no way for the three to drift apart.
+   * issued. Reusing an already-revoked token revokes every session for that
+   * user, which is the standard response to a stolen refresh token.
    */
-  async refresh(refreshToken: string, ip: string): Promise<TokenPair> {
-    let payload: { sub: string; typ?: ActorType };
+  async refresh(refreshToken: string, ip: string, userAgent: string | null): Promise<TokenPair> {
     try {
-      payload = await this.jwt.verifyAsync(refreshToken, {
+      await this.jwt.verifyAsync(refreshToken, {
         secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
       });
     } catch {
       throw new UnauthorizedException('Refresh token ບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ · Invalid or expired');
     }
 
-    const hash = hashToken(refreshToken);
-    const stored = await this.prisma.refresh_tokens.findUnique({ where: { token_hash: hash } });
+    const stored = await this.prisma.user_sessions.findUnique({
+      where: { refresh_token_hash: hashToken(refreshToken) },
+      include: { users: true },
+    });
 
-    if (!stored) {
-      throw new UnauthorizedException('Refresh token ບໍ່ຖືກຕ້ອງ · Unknown token');
-    }
-
-    const actor = actorOf(stored);
-    if (!actor) {
-      throw new UnauthorizedException('Refresh token ບໍ່ຖືກຕ້ອງ · Orphaned token');
-    }
+    if (!stored) throw new UnauthorizedException('Refresh token ບໍ່ຖືກຕ້ອງ · Unknown token');
 
     if (stored.revoked_at) {
-      // Replay of a rotated token — treat the session as compromised.
-      await this.revokeAllFor(actor.type, actor.id);
+      await this.revokeAllSessions(stored.user_id);
       this.logger.warn(
-        `Refresh token reuse detected for ${actor.type} ${actor.id}; all sessions revoked`,
+        `Refresh token reuse detected for user ${stored.user_id}; all sessions revoked`,
       );
-      throw new UnauthorizedException('Session ຖືກຍົກເລີກ · Session revoked, please log in again');
+      throw new UnauthorizedException('Session ຖືກຍົກເລີກ · Session revoked, please sign in again');
     }
 
     if (stored.expires_at < new Date()) {
       throw new UnauthorizedException('Refresh token ໝົດອາຍຸ · Expired');
     }
-
-    const account = await this.loadAccount(actor.type, actor.id);
-    if (!account) {
-      throw new UnauthorizedException('ບັນຊີບໍ່ມີຢູ່ແລ້ວ · Account no longer exists');
+    if (stored.users.deleted_at !== null || stored.users.status === user_status.suspended) {
+      throw new UnauthorizedException('ບັນຊີໃຊ້ບໍ່ໄດ້ແລ້ວ · Account is no longer active');
     }
 
-    await this.prisma.refresh_tokens.update({
-      where: { id: stored.id },
+    await this.prisma.user_sessions.update({
+      where: { session_id: stored.session_id },
       data: { revoked_at: new Date() },
     });
 
-    return this.issueTokens(actor.type, actor.id, account.email, ip, account.role);
+    return this.issueTokens(
+      stored.users.user_id,
+      stored.users.email,
+      stored.users.role,
+      ip,
+      userAgent,
+    );
   }
 
   async logout(refreshToken: string): Promise<{ ok: true }> {
     // Revoking an unknown or already-revoked token is not an error: the caller
     // wanted the session gone and it is gone.
-    await this.prisma.refresh_tokens
+    await this.prisma.user_sessions
       .updateMany({
-        where: { token_hash: hashToken(refreshToken), revoked_at: null },
+        where: { refresh_token_hash: hashToken(refreshToken), revoked_at: null },
         data: { revoked_at: new Date() },
       })
       .catch(() => undefined);
     return { ok: true };
   }
 
-  async revokeAllForAdmin(adminId: bigint): Promise<void> {
-    return this.revokeAllFor(ACTOR.ADMIN, adminId);
-  }
-
-  async revokeAllFor(actorType: ActorType, id: bigint): Promise<void> {
-    await this.prisma.refresh_tokens.updateMany({
-      where: { [OWNER_COLUMN[actorType]]: id, revoked_at: null },
+  async revokeAllSessions(userId: bigint): Promise<void> {
+    await this.prisma.user_sessions.updateMany({
+      where: { user_id: userId, revoked_at: null },
       data: { revoked_at: new Date() },
     });
   }
 
-  private async loadAccount(
-    actorType: ActorType,
-    id: bigint,
-  ): Promise<{ email: string; role?: Role } | null> {
-    if (actorType === ACTOR.ADMIN) {
-      const admin = await this.prisma.admins.findUnique({
-        where: { id },
-        select: { email: true, role: true },
-      });
-      if (!admin || !isRole(admin.role)) return null;
-      return { email: admin.email, role: admin.role };
+  async me(userId: bigint): Promise<Identity> {
+    const user = await this.prisma.users.findUniqueOrThrow({
+      where: { user_id: userId },
+      include: { user_profiles: true, partners: true },
+    });
+    return toIdentity(user);
+  }
+
+  // ── OTP ───────────────────────────────────────────────────────────────────
+
+  /**
+   * Issues a one-time code.
+   *
+   * The code is stored hashed, like a password: a leaked table dump must not
+   * hand over live codes. In development the code is returned in the response
+   * so there is something to test with — there is no SMS gateway wired up yet,
+   * and pretending otherwise would make the endpoint untestable.
+   */
+  async requestOtp(
+    target: string,
+    purpose: otp_purpose,
+  ): Promise<{ sent: true; expiresAt: Date; devCode?: string }> {
+    const { otp_ttl_minutes, otp_max_attempts } = await this.settings.get();
+    const code = randomInt(100_000, 999_999).toString();
+    const expiresAt = new Date(Date.now() + otp_ttl_minutes * 60_000);
+
+    const user = await this.prisma.users.findFirst({
+      where: { OR: [{ email: target.toLowerCase() }, { phone: target }] },
+      select: { user_id: true },
+    });
+
+    await this.prisma.otp_verifications.create({
+      data: {
+        user_id: user?.user_id ?? null,
+        target,
+        purpose,
+        code_hash: hashToken(code),
+        max_attempts: otp_max_attempts,
+        expires_at: expiresAt,
+      },
+    });
+
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    if (!isProduction) this.logger.warn(`OTP for ${target} (${purpose}): ${code}`);
+
+    return { sent: true, expiresAt, ...(isProduction ? {} : { devCode: code }) };
+  }
+
+  async verifyOtp(target: string, purpose: otp_purpose, code: string): Promise<{ verified: true }> {
+    const otp = await this.prisma.otp_verifications.findFirst({
+      where: { target, purpose, verified_at: null },
+      orderBy: { created_at: 'desc' },
+    });
+
+    if (!otp) throw new BadRequestException('ບໍ່ພົບລະຫັດ OTP · No pending code for that target');
+    if (otp.expires_at < new Date()) {
+      throw new BadRequestException('ລະຫັດ OTP ໝົດອາຍຸ · The code has expired');
+    }
+    if (otp.attempts >= otp.max_attempts) {
+      throw new BadRequestException('ໃສ່ລະຫັດຜິດຫຼາຍເທື່ອເກີນໄປ · Too many attempts, request a new code');
     }
 
-    if (actorType === ACTOR.PARTNER) {
-      const partner = await this.prisma.partners.findUnique({
-        where: { id },
-        select: { email: true, status: true },
+    if (otp.code_hash !== hashToken(code)) {
+      await this.prisma.otp_verifications.update({
+        where: { otp_id: otp.otp_id },
+        data: { attempts: { increment: 1 } },
       });
-      if (!partner || partner.status === PARTNER_STATUS.REJECTED) return null;
-      return { email: partner.email };
+      throw new BadRequestException('ລະຫັດ OTP ບໍ່ຖືກຕ້ອງ · Incorrect code');
     }
 
-    const user = await this.prisma.users.findUnique({ where: { id }, select: { email: true } });
-    return user ? { email: user.email } : null;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.otp_verifications.update({
+        where: { otp_id: otp.otp_id },
+        data: { verified_at: new Date() },
+      });
+      if (otp.user_id && otp.purpose === 'verify') {
+        await tx.users.update({
+          where: { user_id: otp.user_id },
+          data: { is_verified: true },
+        });
+      }
+    });
+
+    return { verified: true };
+  }
+
+  // ── password reset ────────────────────────────────────────────────────────
+
+  /**
+   * Always reports success, whether or not the email exists — the response must
+   * not reveal which addresses have accounts.
+   */
+  async requestPasswordReset(email: string): Promise<{ sent: true; devToken?: string }> {
+    const { password_reset_ttl_minutes } = await this.settings.get();
+    const user = await this.prisma.users.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      select: { user_id: true, deleted_at: true },
+    });
+
+    if (!user || user.deleted_at) return { sent: true };
+
+    const token = randomBytes(32).toString('hex');
+    await this.prisma.password_reset_tokens.create({
+      data: {
+        user_id: user.user_id,
+        token_hash: hashToken(token),
+        expires_at: new Date(Date.now() + password_reset_ttl_minutes * 60_000),
+      },
+    });
+
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    if (!isProduction) this.logger.warn(`Password reset token for ${email}: ${token}`);
+
+    return { sent: true, ...(isProduction ? {} : { devToken: token }) };
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ ok: true }> {
+    const row = await this.prisma.password_reset_tokens.findUnique({
+      where: { token_hash: hashToken(token) },
+    });
+
+    if (!row || row.used_at || row.expires_at < new Date()) {
+      throw new BadRequestException('ລິ້ງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ · Invalid or expired reset link');
+    }
+
+    const password_hash = await this.passwords.hash(newPassword);
+
+    await this.prisma.$transaction([
+      this.prisma.users.update({
+        where: { user_id: row.user_id },
+        data: { password_hash },
+      }),
+      this.prisma.password_reset_tokens.update({
+        where: { token_id: row.token_id },
+        data: { used_at: new Date() },
+      }),
+      // Changing a password ends every other session — that is the point of
+      // resetting it after a compromise.
+      this.prisma.user_sessions.updateMany({
+        where: { user_id: row.user_id, revoked_at: null },
+        data: { revoked_at: new Date() },
+      }),
+    ]);
+
+    return { ok: true };
+  }
+
+  async changePassword(userId: bigint, current: string, next: string): Promise<{ ok: true }> {
+    const user = await this.prisma.users.findUniqueOrThrow({
+      where: { user_id: userId },
+      select: { password_hash: true },
+    });
+
+    const { ok } = await this.passwords.verify(current, user.password_hash);
+    if (!ok) throw new UnauthorizedException('ລະຫັດຜ່ານປັດຈຸບັນບໍ່ຖືກຕ້ອງ · Current password is wrong');
+
+    const password_hash = await this.passwords.hash(next);
+    await this.prisma.$transaction([
+      this.prisma.users.update({ where: { user_id: userId }, data: { password_hash } }),
+      this.prisma.user_sessions.updateMany({
+        where: { user_id: userId, revoked_at: null },
+        data: { revoked_at: new Date() },
+      }),
+    ]);
+
+    return { ok: true };
+  }
+
+  // ── internals ─────────────────────────────────────────────────────────────
+
+  private async assertEmailFree(email: string): Promise<void> {
+    const taken = await this.prisma.users.findUnique({
+      where: { email },
+      select: { user_id: true },
+    });
+    if (taken) throw new ConflictException('ອີເມວນີ້ມີບັນຊີແລ້ວ · That email is already registered');
   }
 
   private async issueTokens(
-    actorType: ActorType,
-    id: bigint,
+    userId: bigint,
     email: string,
+    role: user_role,
     ip: string,
-    role?: Role,
+    userAgent: string | null,
   ): Promise<TokenPair> {
-    // jsonwebtoken types expiresIn as a template-literal duration ("15m"), which
-    // a plain string from .env cannot satisfy — hence the cast.
-    const accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m') as Ttl;
-    const refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '7d') as Ttl;
+    const { access_token_ttl, refresh_token_ttl } = await this.settings.get();
+    // jsonwebtoken types expiresIn as a template-literal duration ("15m"),
+    // which a plain string from the database cannot satisfy — hence the cast.
+    const accessTtl = access_token_ttl as Ttl;
+    const refreshTtl = refresh_token_ttl as Ttl;
 
-    // `typ` is what keeps the three actors apart: all tokens share one secret,
-    // so each passport strategy refuses a payload whose typ is not its own.
     const accessToken = await this.jwt.signAsync(
-      { sub: id.toString(), typ: actorType, email, ...(role ? { role } : {}) },
+      { sub: userId.toString(), email, role },
       { secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'), expiresIn: accessTtl },
     );
 
     // A random jti keeps two refresh tokens issued in the same second distinct,
     // so their hashes never collide on the unique index.
     const refreshToken = await this.jwt.signAsync(
-      { sub: id.toString(), typ: actorType, jti: randomBytes(16).toString('hex') },
+      { sub: userId.toString(), jti: randomBytes(16).toString('hex') },
       { secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'), expiresIn: refreshTtl },
     );
 
-    await this.prisma.refresh_tokens.create({
+    await this.prisma.user_sessions.create({
       data: {
-        [OWNER_COLUMN[actorType]]: id,
-        token_hash: hashToken(refreshToken),
+        user_id: userId,
+        refresh_token_hash: hashToken(refreshToken),
         expires_at: addDuration(new Date(), String(refreshTtl)),
-        ip_address: ip,
+        ip_address: ip.slice(0, 64),
+        user_agent: userAgent,
       },
     });
 
@@ -416,60 +497,34 @@ export class AuthService {
   }
 }
 
-/** Which actor a stored session belongs to — exactly one column is set. */
-function actorOf(row: {
-  admin_id: bigint | null;
-  partner_id: bigint | null;
-  user_id: bigint | null;
-}): { type: ActorType; id: bigint } | null {
-  if (row.admin_id !== null) return { type: ACTOR.ADMIN, id: row.admin_id };
-  if (row.partner_id !== null) return { type: ACTOR.PARTNER, id: row.partner_id };
-  if (row.user_id !== null) return { type: ACTOR.USER, id: row.user_id };
-  return null;
-}
+type UserWithRelations = Prisma.usersGetPayload<{
+  include: { user_profiles: true; partners: true };
+}>;
 
-function partnerIdentity(p: {
-  id: bigint;
-  email: string;
-  owner_name: string;
-  phone: string;
-  status: string | null;
-}) {
+function toIdentity(user: UserWithRelations): Identity {
   return {
-    id: p.id.toString(),
-    email: p.email,
-    ownerName: p.owner_name,
-    phone: p.phone,
-    status: p.status ?? PARTNER_STATUS.PENDING,
-  };
-}
-
-function customerIdentity(u: {
-  id: bigint;
-  email: string;
-  full_name: string;
-  phone: string;
-  tier: string | null;
-}) {
-  return {
-    id: u.id.toString(),
-    email: u.email,
-    fullName: u.full_name,
-    phone: u.phone,
-    tier: u.tier ?? 'silver',
+    id: user.user_id.toString(),
+    email: user.email,
+    role: user.role,
+    adminRole: user.admin_role,
+    fullName: user.user_profiles?.full_name ?? null,
+    phone: user.phone,
+    isVerified: user.is_verified,
+    partnerId: user.partners?.partner_id.toString() ?? null,
+    partnerStatus: user.partners?.status ?? null,
   };
 }
 
 /**
- * Refresh tokens are stored as SHA-256 digests. A leaked database dump then
- * yields no usable tokens. argon2 is unnecessary here: the token is 200+ bits
- * of entropy already, so there is nothing to brute-force.
+ * Refresh tokens, OTP codes and reset tokens are stored as SHA-256 digests. A
+ * leaked database dump then yields nothing usable. argon2 is unnecessary here:
+ * these are high-entropy random values, so there is nothing to brute-force.
  */
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-/** Understands the "15m" / "7d" / "3600" forms used in .env. */
+/** Understands the "15m" / "7d" / "3600" forms stored in system_settings. */
 function addDuration(from: Date, ttl: string): Date {
   const match = /^(\d+)\s*([smhd])?$/.exec(ttl.trim());
   if (!match) return new Date(from.getTime() + 7 * 86_400_000);

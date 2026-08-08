@@ -12,12 +12,23 @@ const BASE = '/api';
 const ACCESS_KEY = 'laostay.accessToken';
 const REFRESH_KEY = 'laostay.refreshToken';
 
-export interface AdminIdentity {
+export type AdminRole = 'super_admin' | 'finance' | 'staff';
+
+/**
+ * Whoever is signed in. The API has one `users` table for every kind of
+ * account, so `role` says which kind and `adminRole` narrows it further — this
+ * app refuses anyone whose `role` is not ADMIN.
+ */
+export interface Identity {
   id: string;
   email: string;
-  name: string;
-  role: 'super_admin' | 'finance' | 'staff';
-  roleLabel?: string;
+  role: 'CUSTOMER' | 'PARTNER' | 'ADMIN';
+  adminRole: AdminRole | null;
+  fullName: string | null;
+  phone: string | null;
+  isVerified: boolean;
+  partnerId: string | null;
+  partnerStatus: string | null;
 }
 
 export class ApiError extends Error {
@@ -139,7 +150,6 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
-  put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
 
@@ -149,27 +159,32 @@ export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
   expiresIn: string;
-  admin: AdminIdentity;
+  user: Identity;
 }
 
-export function login(email: string, password: string) {
-  return request<AuthResponse>('/auth/admin/login', {
+/**
+ * One sign-in endpoint for everyone.
+ *
+ * Which is why the check below matters: a customer's credentials are perfectly
+ * valid at `/auth/login` and would hand back a working token. The token simply
+ * opens nothing here — every admin route is guarded — so refusing at sign-in is
+ * about saying why, rather than letting them in to a console of 403s.
+ */
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const res = await request<AuthResponse>('/auth/login', {
     method: 'POST',
     body: { email, password },
     anonymous: true,
   });
-}
 
-export function registerFirstAdmin(email: string, name: string, password: string) {
-  return request<AuthResponse>('/auth/admin/register', {
-    method: 'POST',
-    body: { email, name, password, role: 'super_admin' },
-    anonymous: true,
-  });
+  if (res.user.role !== 'ADMIN') {
+    throw new ApiError(403, 'ບັນຊີນີ້ບໍ່ແມ່ນຜູ້ດູແລລະບົບ · This account is not an administrator');
+  }
+  return res;
 }
 
 export function me() {
-  return request<AdminIdentity>('/auth/me');
+  return request<Identity>('/auth/me');
 }
 
 export async function logout() {

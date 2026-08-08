@@ -1,16 +1,17 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
-import { AdminModule } from './admin/admin.module';
-import { PartnerModule } from './partner/partner.module';
-import { CustomerModule } from './customer/customer.module';
+import { CatalogModule } from './catalog/catalog.module';
+import { BookingModule } from './booking/booking.module';
 import { PaymentsModule } from './payments/payments.module';
-import { ChatModule } from './chat/chat.module';
+import { PartnerModule } from './partner/partner.module';
+import { AdminModule } from './admin/admin.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { HealthController } from './health.controller';
 
@@ -23,14 +24,17 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
   imports: [
     ConfigModule.forRoot({ isGlobal: true, cache: true }),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
+    // Drives the hold sweeper. Without it, an abandoned checkout keeps a room
+    // off sale for good.
+    ScheduleModule.forRoot(),
     PrismaModule,
     CommonModule,
     AuthModule,
-    AdminModule,
-    PartnerModule,
-    CustomerModule,
+    CatalogModule,
+    BookingModule,
     PaymentsModule,
-    ChatModule,
+    PartnerModule,
+    AdminModule,
     UploadsModule,
   ],
   controllers: [HealthController],

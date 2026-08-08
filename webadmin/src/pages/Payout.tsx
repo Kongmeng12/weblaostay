@@ -15,7 +15,8 @@ import {
   Modal,
 } from '../components/ui';
 
-type Filter = 'all' | 'pending' | 'paid';
+/** Mirrors `payout_status`. */
+type Filter = 'all' | 'pending' | 'processing' | 'paid' | 'failed';
 
 export function Payout() {
   const qc = useQueryClient();
@@ -111,6 +112,7 @@ export function Payout() {
             { value: 'all', label: 'ທັງໝົດ' },
             { value: 'pending', label: 'ລໍໂອນ' },
             { value: 'paid', label: 'ໂອນແລ້ວ' },
+            { value: 'failed', label: 'ລົ້ມເຫຼວ' },
           ]}
         />
       </div>
@@ -143,7 +145,7 @@ export function Payout() {
               render: (r) => laoDateRange(r.periodStart, r.periodEnd),
             },
             { key: 'bookings', header: 'ການຈອງ', align: 'right', render: (r) => r.bookings },
-            { key: 'gmv', header: 'GMV', align: 'right', render: (r) => kip(r.gmv) },
+            { key: 'gross', header: 'GMV', align: 'right', render: (r) => kip(r.gross) },
             {
               key: 'commission',
               header: 'ຄ່າຄອມ',
@@ -154,7 +156,7 @@ export function Payout() {
               key: 'net',
               header: 'ຍອດໂອນສຸດທິ',
               align: 'right',
-              render: (r) => <b style={{ color: c.accent }}>{kip(r.netAmount)}</b>,
+              render: (r) => <b style={{ color: c.accent }}>{kip(r.net)}</b>,
             },
             {
               key: 'status',

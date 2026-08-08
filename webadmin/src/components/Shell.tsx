@@ -1,9 +1,16 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, type AdminRole } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { c, f, radius, avatarFor } from '../theme';
 import { initials } from '../lib/format';
+
+/** What each `admin_role` is called on screen. */
+const ROLE_LABEL: Record<AdminRole, string> = {
+  super_admin: 'ຜູ້ດູແລສູງສຸດ',
+  finance: 'ຝ່າຍການເງິນ',
+  staff: 'ພະນັກງານ',
+};
 
 interface NavItem {
   to: string;
@@ -12,7 +19,7 @@ interface NavItem {
   title: string;
   subtitle: string;
   /** Roles allowed to see the entry. Undefined means everyone. */
-  roles?: ('super_admin' | 'finance' | 'staff')[];
+  roles?: AdminRole[];
 }
 
 export const NAV: NavItem[] = [
@@ -38,14 +45,18 @@ export function Shell() {
   const { admin, signOut } = useAuth();
   const location = useLocation();
 
-  // Drives the badge on "ອະນຸມັດ Partner" so it always reflects reality.
+  // Drives the badge on "ອະນຸມັດ Partner" so it always reflects reality. The
+  // endpoint returns one key per partner_status, so a run with nothing pending
+  // omits "pending" entirely rather than sending a zero.
   const { data: approvalCounts } = useQuery({
     queryKey: ['approvals', 'counts'],
-    queryFn: () => api.get<{ pending: number }>('/admin/approvals/counts'),
+    queryFn: () => api.get<Partial<Record<string, number>>>('/admin/approvals/counts'),
     refetchInterval: 60_000,
   });
 
-  const visible = NAV.filter((n) => !n.roles || (admin && n.roles.includes(admin.role)));
+  const visible = NAV.filter(
+    (n) => !n.roles || (admin?.adminRole ? n.roles.includes(admin.adminRole) : false),
+  );
   const current = [...NAV].reverse().find((n) => matches(location.pathname, n.to)) ?? NAV[0];
 
   return (
@@ -177,7 +188,7 @@ export function Shell() {
                 flex: 'none',
               }}
             >
-              {initials(admin?.name ?? '?')}
+              {initials(admin?.fullName ?? admin?.email ?? '?')}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
@@ -189,10 +200,10 @@ export function Shell() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {admin?.name}
+                {admin?.fullName ?? admin?.email}
               </div>
               <div style={{ font: f(400, 10), color: c.onDarkSoft }}>
-                {admin?.roleLabel ?? admin?.role}
+                {admin?.adminRole ? ROLE_LABEL[admin.adminRole] : '—'}
               </div>
             </div>
             <button

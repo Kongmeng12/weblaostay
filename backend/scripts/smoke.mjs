@@ -1,22 +1,23 @@
 /**
- * End-to-end smoke test against a running API.
+ * End-to-end smoke test against a running v2 API.
  *
+ *   npm run db:reset       (rebuilds the schema and reseeds)
  *   npm run start:dev      (in one terminal)
  *   npm run smoke          (in another)
  *
- * Logs in as each seeded role, exercises every endpoint across all three APIs,
- * and asserts the boundaries actually hold — a staff account must be refused at
- * the payout endpoints, a partner must not see another partner's bookings, and
- * a partner token must not be accepted on an admin route.
- *
- * Run `npm run seed` first: the checks assume the seeded accounts, the 60 days
- * of forward availability, and the promo codes it creates.
+ * Exercises the whole booking loop and, more importantly, asserts the
+ * boundaries hold: inventory cannot be oversold, a hold that expires comes
+ * back, one partner cannot see another's rows, and staff cannot move money.
  */
+import { Client } from 'pg';
+import fs from 'node:fs';
+import path from 'node:path';
+import url from 'node:url';
+
 const BASE = process.env.SMOKE_BASE ?? 'http://localhost:3100/api';
-const PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'LaoStay@2026';
-// Fixed by the seed, which upserts both sets of accounts on every run.
-const PARTNER_PASSWORD = 'Partner@2026';
-const CUSTOMER_PASSWORD = 'Customer@2026';
+const ADMIN_PW = 'LaoStay@2026';
+const PARTNER_PW = 'Partner@2026';
+const CUSTOMER_PW = 'Customer@2026';
 
 let pass = 0;
 let fail = 0;
@@ -32,14 +33,14 @@ function bad(name, detail) {
   console.log(`  \x1b[31mFAIL\x1b[0m  ${name}  ${detail}`);
 }
 
-async function call(method, path, { token, body } = {}) {
-  const res = await fetch(BASE + path, {
+async function call(method, p, { token, body, form } = {}) {
+  const res = await fetch(BASE + p, {
     method,
     headers: {
-      'Content-Type': 'application/json',
+      ...(form ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    ...(form ? { body: form } : body ? { body: JSON.stringify(body) } : {}),
   });
   let json = null;
   try {
@@ -51,11 +52,11 @@ async function call(method, path, { token, body } = {}) {
 }
 
 /** Asserts the status code, and optionally a predicate over the payload. */
-async function expect(name, method, path, opts = {}) {
-  const { token, body, status = 200, check } = opts;
-  const res = await call(method, path, { token, body });
+async function expect(name, method, p, opts = {}) {
+  const { token, body, form, status = 200, check } = opts;
+  const res = await call(method, p, { token, body, form });
   if (res.status !== status) {
-    bad(name, `expected ${status}, got ${res.status} ${JSON.stringify(res.body)?.slice(0, 140)}`);
+    bad(name, `expected ${status}, got ${res.status} ${JSON.stringify(res.body)?.slice(0, 160)}`);
     return null;
   }
   if (check) {
@@ -76,16 +77,10 @@ function summarise(body) {
   return '';
 }
 
-async function login(email) {
-  const res = await call('POST', '/auth/admin/login', { body: { email, password: PASSWORD } });
-  if (res.status !== 200) throw new Error(`login failed for ${email}: ${JSON.stringify(res.body)}`);
-  return res.body;
-}
-
-async function loginAs(kind, email, password) {
-  const res = await call('POST', `/auth/${kind}/login`, { body: { email, password } });
+async function login(email, password) {
+  const res = await call('POST', '/auth/login', { body: { email, password } });
   if (res.status !== 200) {
-    throw new Error(`${kind} login failed for ${email}: ${JSON.stringify(res.body)}`);
+    throw new Error(`login failed for ${email}: ${JSON.stringify(res.body)}`);
   }
   return res.body;
 }
@@ -103,45 +98,36 @@ const PNG_1PX = Buffer.from(
   'base64',
 );
 
-/** Multipart upload — fetch builds the body, so no boundary handling here. */
-async function upload(path, token, { filename = 'photo.png', type = 'image/png', bytes = PNG_1PX } = {}) {
+function imageForm(bytes = PNG_1PX, type = 'image/png', filename = 'photo.png') {
   const form = new FormData();
   form.append('file', new Blob([bytes], { type }), filename);
-
-  const res = await fetch(BASE + path, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  });
-  let json = null;
-  try {
-    json = await res.json();
-  } catch {
-    /* empty body is fine */
-  }
-  return { status: res.status, body: json };
+  return form;
 }
 
-async function expectUpload(name, path, token, opts = {}) {
-  const { status = 201, check, ...fileOpts } = opts;
-  const res = await upload(path, token, fileOpts);
-  if (res.status !== status) {
-    bad(name, `expected ${status}, got ${res.status} ${JSON.stringify(res.body)?.slice(0, 140)}`);
-    return null;
-  }
-  if (check) {
-    const problem = check(res.body);
-    if (problem) {
-      bad(name, problem);
-      return null;
-    }
-  }
-  ok(name);
-  return res.body;
+// ── direct database access, for the invariants an API cannot show ───────────
+
+const here = path.dirname(url.fileURLToPath(import.meta.url));
+const env = Object.fromEntries(
+  fs
+    .readFileSync(path.join(here, '..', '.env'), 'utf8')
+    .split('\n')
+    .filter((l) => l.trim() && !l.trim().startsWith('#') && l.includes('='))
+    .map((l) => {
+      const i = l.indexOf('=');
+      return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
+    }),
+);
+
+let db;
+async function sql(query, params = []) {
+  const { rows } = await db.query(query, params);
+  return rows;
 }
 
 async function main() {
   console.log(`\nSmoke test → ${BASE}\n`);
+  db = new Client({ connectionString: env.DATABASE_URL });
+  await db.connect();
 
   // ── health ────────────────────────────────────────────────────────────────
   console.log('health');
@@ -151,550 +137,354 @@ async function main() {
 
   // ── auth ──────────────────────────────────────────────────────────────────
   console.log('\nauth');
-  const superAdmin = await login('amnuay@laostay.la');
-  ok('POST /auth/admin/login (super_admin)');
-  const finance = await login('bounmy@laostay.la');
-  ok('POST /auth/admin/login (finance)');
-  const staff = await login('phonsy@laostay.la');
-  ok('POST /auth/admin/login (staff)');
 
-  const T = superAdmin.accessToken;
+  // The seed writes bcrypt (pgcrypto has no argon2). Signing in must accept it
+  // and then replace it — otherwise every seeded account is stuck on the weaker
+  // hash forever.
+  const [before] = await sql(
+    `SELECT left(password_hash, 8) AS algo FROM users WHERE email = 'souda.v@gmail.com'`,
+  );
+  const customer = await login('souda.v@gmail.com', CUSTOMER_PW);
+  ok('POST /auth/login with a bcrypt seed password', `was ${before.algo}`);
 
-  await expect('POST /auth/admin/login rejects a wrong password', 'POST', '/auth/admin/login', {
-    body: { email: 'amnuay@laostay.la', password: 'definitely-not-it' },
-    status: 401,
-  });
+  await new Promise((r) => setTimeout(r, 800)); // the rehash is fire-and-forget
+  const [after] = await sql(
+    `SELECT left(password_hash, 8) AS algo FROM users WHERE email = 'souda.v@gmail.com'`,
+  );
+  if (after.algo.startsWith('$argon2')) ok('the hash was upgraded to argon2 on sign-in');
+  else bad('the hash was upgraded to argon2 on sign-in', `still ${after.algo}`);
+
+  const C = customer.accessToken;
+  const admin = await login('amnuay@laostay.la', ADMIN_PW);
+  const finance = await login('bounmy@laostay.la', ADMIN_PW);
+  const staff = await login('phonsy@laostay.la', ADMIN_PW);
+  ok('POST /auth/login for all three admin roles');
+  const A = admin.accessToken;
+
+  const partnerA = await login('vintage@laostay.la', PARTNER_PW);
+  const partnerB = await login('homsabay@laostay.la', PARTNER_PW);
+  ok('POST /auth/login for two partners');
+  const P = partnerA.accessToken;
+
   await expect('GET /auth/me', 'GET', '/auth/me', {
-    token: T,
-    check: (b) => (b?.role === 'super_admin' ? null : `unexpected role ${b?.role}`),
+    token: C,
+    check: (b) => (b?.role === 'CUSTOMER' ? null : `role is ${b?.role}`),
   });
-  await expect('GET /admin/bookings without a token is refused', 'GET', '/admin/bookings', {
+  await expect('an unauthenticated request is refused', 'GET', '/customer/bookings', {
     status: 401,
+  });
+  await expect('a customer token is refused on a partner route', 'GET', '/partner/properties', {
+    token: C,
+    status: 403,
+  });
+  await expect('a partner token is refused on an admin route', 'GET', '/admin/dashboard', {
+    token: P,
+    status: 403,
   });
 
   const refreshed = await expect('POST /auth/refresh rotates the token', 'POST', '/auth/refresh', {
-    body: { refreshToken: superAdmin.refreshToken },
+    body: { refreshToken: customer.refreshToken },
     check: (b) => (b?.accessToken ? null : 'no accessToken returned'),
   });
   if (refreshed) {
     await expect('POST /auth/refresh rejects a reused token', 'POST', '/auth/refresh', {
-      body: { refreshToken: superAdmin.refreshToken },
+      body: { refreshToken: customer.refreshToken },
       status: 401,
     });
   }
+  // Reuse detection revoked every session for that user, so continue fresh.
+  const CFRESH = (await login('souda.v@gmail.com', CUSTOMER_PW)).accessToken;
 
-  // Refresh-reuse detection revokes every session for that admin, so continue
-  // with a fresh login rather than the now-dead token.
-  const fresh = await login('amnuay@laostay.la');
-  const A = fresh.accessToken;
-
-  // ── dashboard ─────────────────────────────────────────────────────────────
-  console.log('\ndashboard');
-  await expect('GET /admin/dashboard/kpis', 'GET', '/admin/dashboard/kpis', {
-    token: A,
-    check: (b) =>
-      typeof b?.revenue?.value === 'number' && typeof b?.bookings?.value === 'number'
-        ? null
-        : 'kpi payload shape is wrong',
-  });
-  await expect('GET /admin/dashboard/gmv', 'GET', '/admin/dashboard/gmv?days=14', {
-    token: A,
-    check: (b) => (b?.series?.length === 14 ? null : `expected 14 points, got ${b?.series?.length}`),
-  });
-  await expect('GET /admin/dashboard/recent-bookings', 'GET', '/admin/dashboard/recent-bookings', {
-    token: A,
-    check: (b) => (Array.isArray(b) && b.length ? null : 'no recent bookings'),
-  });
-  await expect('GET /admin/dashboard/payout-summary', 'GET', '/admin/dashboard/payout-summary', {
-    token: A,
-  });
-
-  // ── bookings ──────────────────────────────────────────────────────────────
-  console.log('\nbookings');
-  const bookings = await expect('GET /admin/bookings', 'GET', '/admin/bookings?limit=5', {
-    token: A,
-    check: (b) => (b?.items?.length ? null : 'no bookings returned'),
-  });
-  await expect('GET /admin/bookings?status=done', 'GET', '/admin/bookings?status=done&limit=3', {
-    token: A,
-  });
-  await expect('GET /admin/bookings/status-counts', 'GET', '/admin/bookings/status-counts', {
-    token: A,
-  });
-  if (bookings?.items?.length) {
-    const first = bookings.items[0];
-    await expect('GET /admin/bookings/:id', 'GET', `/admin/bookings/${first.id}`, {
-      token: A,
-      check: (b) => (b?.code ? null : 'detail missing booking code'),
+  // ── brute-force lockout ───────────────────────────────────────────────────
+  console.log('\nlogin guard');
+  const victim = 'lin.zhao@qq.com';
+  await sql(`DELETE FROM login_attempts WHERE identifier = $1`, [victim]);
+  let locked = false;
+  for (let i = 0; i < 8; i++) {
+    const res = await call('POST', '/auth/login', {
+      body: { email: victim, password: 'wrong-on-purpose' },
     });
-    await expect(
-      'GET /admin/bookings?q=<code> finds it',
-      'GET',
-      `/admin/bookings?q=${encodeURIComponent(first.code)}`,
-      { token: A, check: (b) => (b?.items?.length ? null : 'search by code returned nothing') },
-    );
-  }
-
-  // ── customers ─────────────────────────────────────────────────────────────
-  console.log('\ncustomers');
-  const customers = await expect('GET /admin/customers', 'GET', '/admin/customers', { token: A });
-  await expect('GET /admin/customers/summary', 'GET', '/admin/customers/summary', { token: A });
-  if (customers?.items?.length) {
-    await expect('GET /admin/customers/:id', 'GET', `/admin/customers/${customers.items[0].id}`, {
-      token: A,
-    });
-  }
-
-  // ── approvals ─────────────────────────────────────────────────────────────
-  console.log('\napprovals');
-  const approvals = await expect('GET /admin/approvals', 'GET', '/admin/approvals', {
-    token: A,
-    check: (b) => (Array.isArray(b) ? null : 'expected an array'),
-  });
-  await expect('GET /admin/approvals/counts', 'GET', '/admin/approvals/counts', { token: A });
-
-  // ── partners ──────────────────────────────────────────────────────────────
-  console.log('\npartners');
-  await expect('GET /admin/partners', 'GET', '/admin/partners', { token: A });
-  await expect('GET /admin/partners/provinces', 'GET', '/admin/partners/provinces', { token: A });
-
-  // ── reviews ───────────────────────────────────────────────────────────────
-  console.log('\nreviews');
-  const reviews = await expect('GET /admin/reviews', 'GET', '/admin/reviews', { token: A });
-  await expect('GET /admin/reviews?flagged=true', 'GET', '/admin/reviews?flagged=true', {
-    token: A,
-    check: (b) =>
-      b.items.every((r) => r.isFlagged) ? null : 'flagged filter returned unflagged reviews',
-  });
-  await expect('GET /admin/reviews/counts', 'GET', '/admin/reviews/counts', { token: A });
-
-  // ── promos ────────────────────────────────────────────────────────────────
-  console.log('\npromos');
-  await expect('GET /admin/promos', 'GET', '/admin/promos', { token: A });
-  const promoCode = `SMOKE${Date.now().toString().slice(-6)}`;
-  const created = await expect('POST /admin/promos', 'POST', '/admin/promos', {
-    token: A,
-    status: 201,
-    body: { code: promoCode, type: 'percent', value: 10, expiresAt: '2027-01-01' },
-  });
-  await expect('POST /admin/promos rejects percent > 100', 'POST', '/admin/promos', {
-    token: A,
-    status: 400,
-    body: { code: promoCode + 'X', type: 'percent', value: 150, expiresAt: '2027-01-01' },
-  });
-  if (created) {
-    await expect('PATCH /admin/promos/:id', 'PATCH', `/admin/promos/${created.id}`, {
-      token: A,
-      body: { value: 12 },
-    });
-    await expect('DELETE /admin/promos/:id', 'DELETE', `/admin/promos/${created.id}`, { token: A });
-  }
-
-  // ── settings ──────────────────────────────────────────────────────────────
-  console.log('\nsettings');
-  await expect('GET /admin/settings', 'GET', '/admin/settings', {
-    token: A,
-    check: (b) => (b?.commission_rate === 5 ? null : `commission_rate is ${b?.commission_rate}`),
-  });
-  await expect('GET /admin/settings/admins', 'GET', '/admin/settings/admins', {
-    token: A,
-    check: (b) => (b?.length >= 3 ? null : `expected >= 3 admins, got ${b?.length}`),
-  });
-  await expect('GET /admin/settings/audit-logs', 'GET', '/admin/settings/audit-logs', { token: A });
-
-  // ── payouts + RBAC ────────────────────────────────────────────────────────
-  console.log('\npayouts and RBAC');
-  const payouts = await expect('GET /admin/payouts (finance)', 'GET', '/admin/payouts', {
-    token: finance.accessToken,
-    check: (b) => (Array.isArray(b?.items) ? null : 'expected items array'),
-  });
-  await expect('GET /admin/payouts is refused for staff', 'GET', '/admin/payouts', {
-    token: staff.accessToken,
-    status: 403,
-  });
-  await expect('POST /admin/payouts/pay-all is refused for staff', 'POST', '/admin/payouts/pay-all', {
-    token: staff.accessToken,
-    status: 403,
-  });
-  await expect('POST /admin/bookings/:id/cancel is refused for staff', 'POST', '/admin/bookings/1/cancel', {
-    token: staff.accessToken,
-    status: 403,
-  });
-  await expect('POST /admin/settings/admins is refused for finance', 'POST', '/admin/settings/admins', {
-    token: finance.accessToken,
-    status: 403,
-    body: { email: 'nope@laostay.la', name: 'Nope', password: 'Password123', role: 'staff' },
-  });
-
-  // Commission arithmetic must be exact, not approximately right.
-  if (payouts?.items?.length) {
-    const wrong = payouts.items.filter((p) => p.gmv !== p.commission + p.netAmount);
-    if (wrong.length) bad('payout maths: gmv === commission + net', `${wrong.length} row(s) do not balance`);
-    else ok('payout maths: gmv === commission + net', `${payouts.items.length} rows checked`);
-  }
-
-  // ── audit trail ───────────────────────────────────────────────────────────
-  console.log('\naudit trail');
-  const before = await call('GET', '/admin/settings/audit-logs?limit=1', { token: A });
-  if (approvals?.length) {
-    const target = approvals[0];
-    await expect('PATCH /admin/approvals/:id/approve', 'PATCH', `/admin/approvals/${target.id}/approve`, {
-      token: A,
-      check: (b) => (b?.status === 'verified' ? null : `status is ${b?.status}`),
-    });
-    await expect(
-      'PATCH /admin/approvals/:id/approve twice is rejected',
-      'PATCH',
-      `/admin/approvals/${target.id}/approve`,
-      { token: A, status: 400 },
-    );
-
-    // The interceptor writes asynchronously; give it a moment to land.
-    await new Promise((r) => setTimeout(r, 700));
-    const after = await call('GET', '/admin/settings/audit-logs?limit=1', { token: A });
-    if ((after.body?.total ?? 0) > (before.body?.total ?? 0)) {
-      ok('approve_partner wrote an audit_logs row', `total ${before.body?.total} → ${after.body?.total}`);
-    } else {
-      bad('approve_partner wrote an audit_logs row', `total stayed at ${after.body?.total}`);
+    if (res.status === 429) {
+      locked = true;
+      break;
     }
   }
+  if (locked) ok('repeated wrong passwords lock the account out (429)');
+  else bad('repeated wrong passwords lock the account out (429)', 'never got a 429');
+  await sql(`DELETE FROM login_attempts WHERE identifier = $1`, [victim]);
 
-  // ── partner auth and tenant isolation ─────────────────────────────────────
-  console.log('\npartner auth');
-  const partnerA = await loginAs('partner', 'vintage@laostay.la', PARTNER_PASSWORD);
-  ok('POST /auth/partner/login');
-  const partnerB = await loginAs('partner', 'homsabay@laostay.la', PARTNER_PASSWORD);
-  ok('POST /auth/partner/login (second partner)');
-  const P = partnerA.accessToken;
-
-  await expect('GET /auth/partner/me', 'GET', '/auth/partner/me', {
-    token: P,
-    check: (b) => (b?.email === 'vintage@laostay.la' ? null : `unexpected email ${b?.email}`),
+  // ── OTP and password reset ────────────────────────────────────────────────
+  console.log('\notp & password reset');
+  const otp = await expect('POST /auth/otp/request', 'POST', '/auth/otp/request', {
+    body: { target: '+856 20 5789 1234', purpose: 'verify' },
+    check: (b) => (b?.devCode ? null : 'no devCode returned outside production'),
   });
-
-  // The three actors share one signing secret, so the `typ` claim is the only
-  // thing keeping them apart. These two checks are that guarantee.
-  await expect('a partner token is refused on an admin route', 'GET', '/admin/bookings', {
-    token: P,
-    status: 401,
-  });
-  await expect('an admin token is refused on a partner route', 'GET', '/partner/properties', {
-    token: A,
-    status: 401,
-  });
-
-  await expect('POST /auth/partner/login rejects a wrong password', 'POST', '/auth/partner/login', {
-    body: { email: 'vintage@laostay.la', password: 'definitely-not-it' },
-    status: 401,
-  });
-
-  const newPartnerEmail = `applicant-${Date.now()}@laostay.la`;
-  const application = await expect(
-    'POST /auth/partner/register creates a pending application',
-    'POST',
-    '/auth/partner/register',
-    {
-      status: 201,
-      body: {
-        email: newPartnerEmail,
-        password: 'Applicant@2026',
-        ownerName: 'ທ້າວ ທົດສອບ',
-        phone: '+856 20 1111 2222',
-        propertyName: 'Smoke Test Guesthouse',
-        propertyType: 'guesthouse',
-        province: 'ນະຄອນຫຼວງວຽງຈັນ',
-        address: 'ບ້ານທົດສອບ ເມືອງຈັນທະບູລີ',
-      },
-      check: (b) => (b?.partner?.status === 'pending' ? null : `status is ${b?.partner?.status}`),
-    },
-  );
-  await expect('POST /auth/partner/register rejects a duplicate email', 'POST', '/auth/partner/register', {
-    status: 409,
-    body: {
-      email: newPartnerEmail,
-      password: 'Applicant@2026',
-      ownerName: 'ທ້າວ ທົດສອບ',
-      phone: '+856 20 1111 2222',
-      propertyName: 'Smoke Test Guesthouse',
-      propertyType: 'guesthouse',
-      province: 'ນະຄອນຫຼວງວຽງຈັນ',
-      address: 'ບ້ານທົດສອບ ເມືອງຈັນທະບູລີ',
-    },
-  });
-  if (application) {
-    await expect(
-      'a pending partner cannot create a property',
-      'POST',
-      '/partner/properties',
-      {
-        token: application.accessToken,
-        status: 403,
-        body: {
-          name: 'Second Place',
-          type: 'hotel',
-          province: 'ນະຄອນຫຼວງວຽງຈັນ',
-          address: 'ບ້ານໃດໜຶ່ງ',
-        },
-      },
-    );
-  }
-
-  // ── partner api ───────────────────────────────────────────────────────────
-  console.log('\npartner api');
-  const partnerProps = await expect('GET /partner/properties', 'GET', '/partner/properties', {
-    token: P,
-    check: (b) => (Array.isArray(b) && b.length ? null : 'no properties returned'),
-  });
-  await expect('GET /partner/dashboard', 'GET', '/partner/dashboard', {
-    token: P,
-    check: (b) => (typeof b?.occupancy?.percent === 'number' ? null : 'dashboard shape is wrong'),
-  });
-  await expect('GET /partner/payouts', 'GET', '/partner/payouts', {
-    token: P,
-    check: (b) => (Array.isArray(b?.items) ? null : 'no payout items array'),
-  });
-  await expect('GET /partner/reviews', 'GET', '/partner/reviews', { token: P });
-  await expect('GET /partner/bookings', 'GET', '/partner/bookings?limit=5', { token: P });
-  await expect('GET /partner/bookings/status-counts', 'GET', '/partner/bookings/status-counts', {
-    token: P,
-  });
-  await expect('GET /partner/notifications', 'GET', '/partner/notifications', { token: P });
-
-  const propA = partnerProps?.[0];
-  const roomA = propA?.rooms?.[0];
-
-  // Tenant isolation: partner B must not see partner A's property, and must get
-  // a 404 rather than a 403 — a 403 would confirm the id exists.
-  if (propA) {
-    await expect(
-      "partner B cannot read partner A's property",
-      'GET',
-      `/partner/properties/${propA.id}`,
-      { token: partnerB.accessToken, status: 404 },
-    );
-    await expect(
-      "partner B cannot edit partner A's property",
-      'PATCH',
-      `/partner/properties/${propA.id}`,
-      { token: partnerB.accessToken, status: 404, body: { name: 'Hijacked' } },
-    );
-  }
-  if (roomA) {
-    await expect(
-      "partner B cannot read partner A's room calendar",
-      'GET',
-      `/partner/rooms/${roomA.id}/availability?from=${day(1)}&to=${day(8)}`,
-      { token: partnerB.accessToken, status: 404 },
-    );
-  }
-
-  // ── partner calendar ──────────────────────────────────────────────────────
-  console.log('\npartner calendar');
-  if (roomA) {
-    const calendar = await expect(
-      'GET /partner/rooms/:id/availability',
-      'GET',
-      `/partner/rooms/${roomA.id}/availability?from=${day(20)}&to=${day(27)}`,
-      {
-        token: P,
-        check: (b) => (b?.days?.length === 7 ? null : `expected 7 days, got ${b?.days?.length}`),
-      },
-    );
-    await expect(
-      'PATCH /partner/rooms/:id/availability sets a price',
-      'PATCH',
-      `/partner/rooms/${roomA.id}/availability`,
-      {
-        token: P,
-        body: { from: day(20), to: day(23), price: 777_000 },
-        check: (b) => (b?.updated === 3 ? null : `updated ${b?.updated}, expected 3`),
-      },
-    );
-    const repriced = await call('GET', `/partner/rooms/${roomA.id}/availability?from=${day(20)}&to=${day(23)}`, {
-      token: P,
+  if (otp) {
+    await expect('POST /auth/otp/verify rejects a wrong code', 'POST', '/auth/otp/verify', {
+      status: 400,
+      body: { target: '+856 20 5789 1234', purpose: 'verify', code: '000000' },
     });
-    const allPriced = repriced.body?.days?.every((d) => d.price === 777_000);
-    if (allPriced) ok('the new price is what the calendar reads back');
-    else bad('the new price is what the calendar reads back', JSON.stringify(repriced.body?.days));
-
-    await expect(
-      'PATCH availability rejects a reversed range',
-      'PATCH',
-      `/partner/rooms/${roomA.id}/availability`,
-      { token: P, status: 400, body: { from: day(23), to: day(20), price: 500_000 } },
-    );
-    if (calendar) ok('calendar fills gaps with the base price');
+    await expect('POST /auth/otp/verify accepts the right code', 'POST', '/auth/otp/verify', {
+      body: { target: '+856 20 5789 1234', purpose: 'verify', code: otp.devCode },
+      check: (b) => (b?.verified ? null : 'not verified'),
+    });
   }
+  await expect(
+    'POST /auth/password/forgot is silent about unknown emails',
+    'POST',
+    '/auth/password/forgot',
+    { body: { email: 'nobody@nowhere.la' }, check: (b) => (b?.sent ? null : 'did not report sent') },
+  );
 
-  // ── customer catalogue (public) ───────────────────────────────────────────
-  console.log('\ncustomer catalogue');
+  // ── catalogue ─────────────────────────────────────────────────────────────
+  console.log('\ncatalogue');
   await expect('GET /properties (no token needed)', 'GET', '/properties?limit=5');
-  await expect('GET /properties/provinces', 'GET', '/properties/provinces');
+  await expect('GET /locations/provinces', 'GET', '/locations/provinces', {
+    check: (b) => (b?.length === 18 ? null : `expected 18 provinces, got ${b?.length}`),
+  });
+  await expect('GET /amenities', 'GET', '/amenities', {
+    check: (b) => (b?.length >= 20 ? null : `only ${b?.length} amenities`),
+  });
+  await expect('full-text search finds Mekong View', 'GET', '/properties?q=mekong', {
+    check: (b) =>
+      b?.items?.some((i) => i.name.includes('Mekong')) ? null : 'no match for "mekong"',
+  });
+  await expect('geo search returns a distance and sorts by it', 'GET',
+    '/properties?lat=17.9668&lng=102.61&radiusKm=300&sort=distance', {
+      check: (b) => {
+        const d = b?.items?.map((i) => i.distanceKm);
+        if (!d?.length) return 'no results';
+        if (d.some((x) => x === null)) return 'a distance came back null';
+        return d.every((x, i) => i === 0 || x >= d[i - 1]) ? null : `not sorted: ${d.join(',')}`;
+      },
+    });
 
   const dated = await expect(
-    'GET /properties filtered by a date range',
+    'a dated search only returns properties that can take the booking',
     'GET',
     `/properties?checkIn=${day(30)}&checkOut=${day(33)}&guests=2&limit=50`,
-    { check: (b) => (b?.items?.length ? null : 'no available properties for the range') },
+    {
+      check: (b) => {
+        if (!b?.items?.length) return 'no available properties';
+        const bad = b.items.find((i) => i.nights !== 3 || !(i.staySubtotal > 0));
+        return bad ? `bad pricing on ${bad.name}` : null;
+      },
+    },
   );
 
-  // Book at partner A's own property on purpose: the chat checks further down
-  // assert who can and cannot see the conversation, and that only means
-  // anything if we know which partner owns the booking.
-  const listing =
-    dated?.items?.find((i) => String(i.id) === String(propA?.id)) ?? dated?.items?.[0];
-  if (propA && listing && String(listing.id) !== String(propA.id)) {
-    bad("partner A's property is bookable", 'it was not in the dated search results');
-  }
-
+  const listing = dated?.items?.[0];
+  let roomTypeId = null;
   if (listing) {
-    await expect(
-      'a dated search prices the whole stay',
-      'GET',
-      `/properties?checkIn=${day(30)}&checkOut=${day(33)}&guests=2&limit=1`,
-      {
+    const detail = await expect('GET /properties/:id', 'GET',
+      `/properties/${listing.id}?checkIn=${day(30)}&checkOut=${day(33)}`, {
+        check: (b) => (b?.roomTypes?.length ? null : 'no room types'),
+      });
+    await expect('GET /properties/:id/calendar', 'GET',
+      `/properties/${listing.id}/calendar?from=${day(30)}&to=${day(33)}`, {
         check: (b) => {
-          const item = b?.items?.[0];
-          if (!item) return 'no item';
-          if (item.nights !== 3) return `nights is ${item.nights}, expected 3`;
-          return item.staySubtotal > item.fromPricePerNight ? null : 'stay subtotal is not 3 nights';
+          const rt = b?.roomTypes?.[0];
+          return rt?.days?.length === 3 ? null : `expected 3 nights, got ${rt?.days?.length}`;
         },
-      },
-    );
-
-    const detail = await expect('GET /properties/:id', 'GET', `/properties/${listing.id}?checkIn=${day(30)}&checkOut=${day(33)}`, {
-      check: (b) => (b?.rooms?.length ? null : 'property has no rooms'),
-    });
-    await expect(
-      'GET /properties/:id/calendar',
-      'GET',
-      `/properties/${listing.id}/calendar?from=${day(30)}&to=${day(33)}`,
-      { check: (b) => (b?.rooms?.length ? null : 'no room calendars') },
-    );
-    await expect('GET /properties/:id 404s for an unknown id', 'GET', '/properties/99999999', {
-      status: 404,
-    });
-
-    var bookableRoom = detail?.rooms?.find((r) => r.available);
-    if (!bookableRoom) bad('the property detail marks a room available', 'none were available');
-    else ok('the property detail marks a room available');
+      });
+    roomTypeId = detail?.roomTypes?.find((r) => r.available)?.id ?? null;
+    if (roomTypeId) ok('the property page marks a room type available');
+    else bad('the property page marks a room type available', 'none were');
   }
-
-  await expect('POST /promos/validate accepts a live code', 'POST', '/promos/validate', {
-    body: { code: 'WEEKEND15', subtotal: 1_000_000 },
-    check: (b) => (b?.discount === 150_000 ? null : `discount is ${b?.discount}, expected 150000`),
-  });
-  await expect('POST /promos/validate rejects an expired code', 'POST', '/promos/validate', {
-    body: { code: 'NEWYEAR50' },
-    status: 400,
-  });
-  await expect('POST /promos/validate 404s for an unknown code', 'POST', '/promos/validate', {
-    body: { code: 'NOSUCHCODE' },
+  await expect('GET /properties/:id 404s for an unknown id', 'GET', '/properties/99999999', {
     status: 404,
   });
 
-  // ── customer booking, payment and review ──────────────────────────────────
-  console.log('\ncustomer booking');
-  const customer = await loginAs('customer', 'souda.v@gmail.com', CUSTOMER_PASSWORD);
-  ok('POST /auth/customer/login');
-  const C = customer.accessToken;
-
-  await expect('GET /auth/customer/me', 'GET', '/auth/customer/me', { token: C });
-  await expect('a suspended customer cannot log in', 'POST', '/auth/customer/login', {
-    body: { email: 'vilay.p@gmail.com', password: CUSTOMER_PASSWORD },
-    // The account authenticates, then the strategy refuses it on first use.
-    check: (b) => (b?.accessToken ? null : 'expected the login itself to succeed'),
-  });
-  const suspended = await call('POST', '/auth/customer/login', {
-    body: { email: 'vilay.p@gmail.com', password: CUSTOMER_PASSWORD },
-  });
-  await expect('a suspended customer is refused on an authenticated route', 'GET', '/customer/me', {
-    token: suspended.body?.accessToken,
-    status: 403,
-  });
-
-  await expect('GET /customer/me', 'GET', '/customer/me', {
-    token: C,
-    check: (b) => (b?.email === 'souda.v@gmail.com' ? null : `unexpected email ${b?.email}`),
-  });
-  await expect('a customer token is refused on a partner route', 'GET', '/partner/properties', {
-    token: C,
-    status: 401,
-  });
-
+  // ── booking with an inventory hold ────────────────────────────────────────
+  console.log('\nbooking & hold');
   let booking = null;
-  if (typeof bookableRoom !== 'undefined' && bookableRoom) {
-    const stay = { roomId: String(bookableRoom.id), checkIn: day(30), checkOut: day(33), guests: 2 };
+  if (roomTypeId) {
+    const stay = { roomTypeId, checkIn: day(30), checkOut: day(33), guests: 2 };
 
-    const quote = await expect('POST /customer/bookings/quote', 'POST', '/customer/bookings/quote', {
-      token: C,
+    await expect('POST /customer/bookings/quote', 'POST', '/customer/bookings/quote', {
+      token: CFRESH,
       body: stay,
       check: (b) =>
-        b?.subtotal + b?.fee - b?.discount === b?.total
+        b.subtotal + b.serviceFee + b.tax + b.cleaningFee - b.discount === b.total
           ? null
-          : `subtotal ${b?.subtotal} + fee ${b?.fee} - discount ${b?.discount} !== total ${b?.total}`,
+          : `subtotal ${b.subtotal} + fee ${b.serviceFee} + tax ${b.tax} !== total ${b.total}`,
     });
 
-    await expect('a quote with a promo code discounts the total', 'POST', '/customer/bookings/quote', {
-      token: C,
-      body: { ...stay, promoCode: 'WEEKEND15' },
-      check: (b) => (b?.discount > 0 && b?.total < quote?.total ? null : 'the promo changed nothing'),
-    });
+    await expect('a booking is refused when check-out precedes check-in', 'POST',
+      '/customer/bookings', {
+        token: CFRESH, status: 400,
+        body: { ...stay, checkIn: day(33), checkOut: day(30) },
+      });
+    await expect('a booking is refused for more guests than the room holds', 'POST',
+      '/customer/bookings', { token: CFRESH, status: 400, body: { ...stay, guests: 25 } });
 
-    await expect('a booking is refused when check-out precedes check-in', 'POST', '/customer/bookings', {
-      token: C,
-      status: 400,
-      body: { ...stay, checkIn: day(33), checkOut: day(30) },
-    });
-    await expect('a booking is refused for more guests than the room holds', 'POST', '/customer/bookings', {
-      token: C,
-      status: 400,
-      body: { ...stay, guests: 20 },
-    });
+    const [beforeInv] = await sql(
+      `SELECT held_count, booked_count FROM room_inventory
+        WHERE room_type_id = $1 AND date = $2`,
+      [roomTypeId, day(30)],
+    );
 
+    const idem = `smoke-${Date.now()}`;
     booking = await expect('POST /customer/bookings', 'POST', '/customer/bookings', {
-      token: C,
+      token: CFRESH,
       status: 201,
-      body: stay,
-      check: (b) => {
-        if (b?.status !== 'pending') return `status is ${b?.status}, expected pending`;
-        if (b?.subtotal + b?.fee - b?.discount !== b?.total) return 'the stored totals do not balance';
-        return null;
-      },
+      body: { ...stay, idempotencyKey: idem },
+      check: (b) => (b?.status === 'pending' ? null : `status is ${b?.status}`),
     });
 
-    await expect('GET /customer/bookings lists it', 'GET', '/customer/bookings?limit=50', {
-      token: C,
-      check: (b) => (b?.items?.some((i) => String(i.id) === String(booking?.id)) ? null : 'the new booking is missing'),
-    });
-    await expect('the newest booking sorts first', 'GET', '/customer/bookings?limit=1', {
-      token: C,
-      check: (b) =>
-        String(b?.items?.[0]?.id) === String(booking?.id)
-          ? null
-          : `first item is ${b?.items?.[0]?.id}, expected ${booking?.id}`,
-    });
+    const [afterInv] = await sql(
+      `SELECT held_count, booked_count FROM room_inventory
+        WHERE room_type_id = $1 AND date = $2`,
+      [roomTypeId, day(30)],
+    );
+    if (Number(afterInv.held_count) === Number(beforeInv.held_count) + 1) {
+      ok('booking takes a hold', `held ${beforeInv.held_count} → ${afterInv.held_count}`);
+    } else {
+      bad('booking takes a hold', `held ${beforeInv.held_count} → ${afterInv.held_count}`);
+    }
+
+    if (booking) {
+      // A retried request — a flaky connection, a double tap — must return the
+      // booking that already exists, not hold a second room.
+      await expect('the same idempotency key returns the same booking', 'POST',
+        '/customer/bookings', {
+          token: CFRESH,
+          status: 201,
+          body: { ...stay, idempotencyKey: idem },
+          check: (b) => (String(b?.id) === String(booking.id) ? null : `got ${b?.id}, first was ${booking.id}`),
+        });
+
+      const [replayed] = await sql(
+        `SELECT held_count FROM room_inventory WHERE room_type_id = $1 AND date = $2`,
+        [roomTypeId, day(30)],
+      );
+      if (Number(replayed.held_count) === Number(afterInv.held_count)) {
+        ok('the replay did not take a second hold');
+      } else {
+        bad('the replay did not take a second hold',
+          `held ${afterInv.held_count} → ${replayed.held_count}`);
+      }
+    }
+  }
+
+  // ── overbooking ───────────────────────────────────────────────────────────
+  //
+  // The point of the exercise. Sequential bookings would pass even with no
+  // locking at all — it is simultaneous requests that catch a read-then-write
+  // race, so these all go out at once and the count of successes has to land
+  // exactly on the capacity that was free beforehand.
+  console.log('\noverbooking');
+  if (roomTypeId) {
+    // Capacity for a stay is the tightest night in it, and every night has to
+    // be open — one closed night makes the whole range unbookable.
+    const [{ capacity, open_nights }] = await sql(
+      `SELECT min(available_count)::int AS capacity, count(*)::int AS open_nights
+         FROM room_inventory
+        WHERE room_type_id = $1 AND date >= $2 AND date < $3 AND status = 'open'`,
+      [roomTypeId, day(30), day(33)],
+    );
+    if (open_nights !== 3) {
+      bad('the three nights under test are all open', `only ${open_nights} are`);
+    }
+
+    const attempts = capacity + 4;
+    const results = await Promise.all(
+      Array.from({ length: attempts }, () =>
+        call('POST', '/customer/bookings', {
+          token: CFRESH,
+          body: { roomTypeId, checkIn: day(30), checkOut: day(33), guests: 1 },
+        }),
+      ),
+    );
+
+    const created = results.filter((r) => r.status === 201).length;
+    const refused = results.filter((r) => r.status === 409).length;
+    const other = results.filter((r) => r.status !== 201 && r.status !== 409);
+
+    if (other.length) {
+      bad('concurrent bookings return only 201 or 409',
+        other.map((r) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 80)}`).join(' | '));
+    } else {
+      ok('concurrent bookings return only 201 or 409', `${created} created, ${refused} refused`);
+    }
+
+    if (created === capacity) {
+      ok('exactly the free rooms were sold', `capacity ${capacity}, sold ${created}`);
+    } else {
+      bad('exactly the free rooms were sold', `capacity ${capacity} but ${created} succeeded`);
+    }
+    if (refused > 0) ok('the requests past capacity got 409', `${refused} of ${attempts}`);
+    else bad('the requests past capacity got 409', 'nothing was refused');
+
+    const [over] = await sql(
+      `SELECT count(*)::int n FROM room_inventory WHERE held_count + booked_count > total_count`,
+    );
+    if (over.n === 0) ok('held + booked never exceeded total');
+    else bad('held + booked never exceeded total', `${over.n} oversold night(s)`);
+  }
+
+  // ── the sweeper ───────────────────────────────────────────────────────────
+  console.log('\nhold sweeper');
+  if (booking) {
+    // Backdate the hold and wait for the minute-ly sweep to reclaim it.
+    await sql(`UPDATE bookings SET hold_expires_at = now() - interval '1 hour'
+                WHERE booking_id = $1 AND status = 'pending'`, [booking.id]);
+    const [heldBefore] = await sql(
+      `SELECT held_count FROM room_inventory WHERE room_type_id = $1 AND date = $2`,
+      [roomTypeId, day(30)],
+    );
+
+    process.stdout.write('  ...waiting up to 70s for the sweeper\n');
+    let swept = false;
+    for (let i = 0; i < 35 && !swept; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const [row] = await sql(`SELECT status FROM bookings WHERE booking_id = $1`, [booking.id]);
+      if (row.status === 'cancelled') swept = true;
+    }
+
+    if (swept) {
+      const [heldAfter] = await sql(
+        `SELECT held_count FROM room_inventory WHERE room_type_id = $1 AND date = $2`,
+        [roomTypeId, day(30)],
+      );
+      ok('an expired hold is cancelled and the room released',
+        `held ${heldBefore.held_count} → ${heldAfter.held_count}`);
+      if (Number(heldAfter.held_count) < Number(heldBefore.held_count)) {
+        ok('the released night went back on sale');
+      } else {
+        bad('the released night went back on sale', 'held_count did not fall');
+      }
+    } else {
+      bad('an expired hold is cancelled and the room released', 'still pending after 70s');
+    }
   }
 
   // ── payment ───────────────────────────────────────────────────────────────
   console.log('\npayment');
-  if (booking) {
-    const payment = await expect('POST /customer/bookings/:id/pay issues a QR', 'POST', `/customer/bookings/${booking.id}/pay`, {
-      token: C,
-      status: 201,
-      check: (b) => {
-        if (!b?.qrPayload?.startsWith('000201')) return 'the QR payload is not EMVCo';
-        if (b?.amount !== booking.total) return `QR is for ${b?.amount}, booking is ${booking.total}`;
-        return null;
-      },
+  let paidBooking = null;
+  if (roomTypeId) {
+    const created = await call('POST', '/customer/bookings', {
+      token: CFRESH,
+      body: { roomTypeId, checkIn: day(45), checkOut: day(47), guests: 1 },
     });
-
-    const second = await call('POST', `/customer/bookings/${booking.id}/pay`, { token: C });
-    if (String(second.body?.id) === String(payment?.id)) {
-      ok('paying twice reuses the same QR', `payment ${payment?.id}`);
-    } else {
-      bad('paying twice reuses the same QR', `got ${second.body?.id}, first was ${payment?.id}`);
+    if (created.status !== 201) {
+      bad('a booking to pay for', `create returned ${created.status} ${JSON.stringify(created.body)}`);
     }
+    paidBooking = created.status === 201 ? created.body : null;
+  }
+  if (paidBooking) {
+    const payment = await expect('POST /customer/bookings/:id/pay issues a QR', 'POST',
+      `/customer/bookings/${paidBooking.id}/pay`, {
+        token: CFRESH, status: 201,
+        check: (b) => {
+          if (!b?.qrPayload?.startsWith('000201')) return 'the QR payload is not EMVCo';
+          if (b.amount !== paidBooking.total) return `QR is ${b.amount}, booking is ${paidBooking.total}`;
+          return null;
+        },
+      });
+
+    const second = await call('POST', `/customer/bookings/${paidBooking.id}/pay`, { token: CFRESH });
+    if (String(second.body?.id) === String(payment?.id)) ok('paying twice reuses the same QR');
+    else bad('paying twice reuses the same QR', `got ${second.body?.id}, first ${payment?.id}`);
 
     await expect('an unsigned webhook is rejected', 'POST', '/payments/phajay/webhook', {
       status: 401,
@@ -702,273 +492,421 @@ async function main() {
     });
 
     if (payment) {
-      await expect('POST /payments/dev/settle/:id settles it', 'POST', `/payments/dev/settle/${payment.id}`, {
-        check: (b) => (b?.paid === true ? null : `settle returned ${JSON.stringify(b)}`),
-      });
+      const [beforeSettle] = await sql(
+        `SELECT held_count, booked_count FROM room_inventory
+          WHERE room_type_id = $1 AND date = $2`, [roomTypeId, day(45)],
+      );
+
+      await expect('POST /payments/dev/settle/:id settles it', 'POST',
+        `/payments/dev/settle/${payment.id}`, {
+          check: (b) => (b?.paid === true ? null : `settle returned ${JSON.stringify(b)}`),
+        });
       await expect('settling twice is a no-op', 'POST', `/payments/dev/settle/${payment.id}`, {
         check: (b) => (b?.duplicate === true ? null : `expected duplicate, got ${JSON.stringify(b)}`),
       });
-      await expect('the booking is confirmed after payment', 'GET', `/customer/bookings/${booking.id}`, {
-        token: C,
-        check: (b) => (b?.status === 'confirmed' ? null : `status is ${b?.status}`),
-      });
-      await expect('GET /customer/payments/:id', 'GET', `/customer/payments/${payment.id}`, {
-        token: C,
-        check: (b) => (b?.status === 'paid' ? null : `payment status is ${b?.status}`),
-      });
-      await expect('another customer cannot read that payment', 'GET', `/customer/payments/${payment.id}`, {
-        token: (await loginAs('customer', 'mali.x@gmail.com', CUSTOMER_PASSWORD)).accessToken,
-        status: 404,
-      });
+      await expect('the booking is confirmed after payment', 'GET',
+        `/customer/bookings/${paidBooking.id}`, {
+          token: CFRESH,
+          check: (b) => (b?.status === 'confirmed' ? null : `status is ${b?.status}`),
+        });
+
+      // The room does not leave inventory on payment, it changes column: the
+      // hold becomes a booking. Anything else and the same night is either sold
+      // twice or lost.
+      const [afterSettle] = await sql(
+        `SELECT held_count, booked_count FROM room_inventory
+          WHERE room_type_id = $1 AND date = $2`, [roomTypeId, day(45)],
+      );
+      const heldFell = Number(afterSettle.held_count) === Number(beforeSettle.held_count) - 1;
+      const bookedRose = Number(afterSettle.booked_count) === Number(beforeSettle.booked_count) + 1;
+      if (heldFell && bookedRose) {
+        ok('payment moved the hold into booked',
+          `held ${beforeSettle.held_count}→${afterSettle.held_count}, ` +
+          `booked ${beforeSettle.booked_count}→${afterSettle.booked_count}`);
+      } else {
+        bad('payment moved the hold into booked',
+          `held ${beforeSettle.held_count}→${afterSettle.held_count}, ` +
+          `booked ${beforeSettle.booked_count}→${afterSettle.booked_count}`);
+      }
+
+      const ledger = await sql(
+        `SELECT entry_type, direction, amount FROM ledger_entries
+          WHERE booking_id = $1 ORDER BY ledger_id`, [paidBooking.id],
+      );
+      const hasCharge = ledger.some((l) => l.entry_type === 'charge' && l.direction === 'credit');
+      const hasCommission = ledger.some((l) => l.entry_type === 'commission' && l.direction === 'debit');
+      if (hasCharge && hasCommission) ok('the ledger recorded charge and commission');
+      else bad('the ledger recorded charge and commission', JSON.stringify(ledger));
     }
   }
 
-  // ── double booking ────────────────────────────────────────────────────────
-  console.log('\ndouble booking');
-  if (booking) {
-    // The seeded rooms have qty > 1, so filling the night takes as many
-    // bookings as there are copies. Keep going until one is refused.
-    let refusedAt = null;
-    for (let i = 0; i < 12 && refusedAt === null; i++) {
-      const res = await call('POST', '/customer/bookings', {
-        token: C,
-        body: {
-          roomId: String(booking.room_id ?? booking.roomId ?? bookableRoom.id),
-          checkIn: day(30),
-          checkOut: day(33),
-          guests: 2,
+  // ── cancellation and refund ───────────────────────────────────────────────
+  console.log('\ncancellation & refund');
+  if (paidBooking) {
+    const [beforeCancel] = await sql(
+      `SELECT held_count, booked_count FROM room_inventory
+        WHERE room_type_id = $1 AND date = $2`, [roomTypeId, day(45)],
+    );
+
+    const cancelled = await expect('POST /customer/bookings/:id/cancel', 'POST',
+      `/customer/bookings/${paidBooking.id}/cancel`, {
+        token: CFRESH, body: { reason: 'ປ່ຽນແຜນ' },
+        check: (b) => {
+          if (b?.status !== 'cancelled') return `status is ${b?.status}`;
+          if (b.penalty + b.refund !== b.paid) {
+            return `penalty ${b.penalty} + refund ${b.refund} !== paid ${b.paid}`;
+          }
+          return null;
         },
       });
-      if (res.status === 409) refusedAt = i;
-      else if (res.status !== 201) {
-        bad('a room stops taking bookings once its copies are gone', `unexpected ${res.status} ${JSON.stringify(res.body)?.slice(0, 120)}`);
-        refusedAt = -1;
-      }
+    if (cancelled) ok('cancellation maths: penalty + refund === amount paid');
+
+    // A confirmed booking held `booked_count`, so that is the counter that has
+    // to come back — releasing the wrong one silently loses a sellable night.
+    const [afterCancel] = await sql(
+      `SELECT held_count, booked_count FROM room_inventory
+        WHERE room_type_id = $1 AND date = $2`, [roomTypeId, day(45)],
+    );
+    if (Number(afterCancel.booked_count) === Number(beforeCancel.booked_count) - 1) {
+      ok('cancelling put the night back on sale',
+        `booked ${beforeCancel.booked_count}→${afterCancel.booked_count}`);
+    } else {
+      bad('cancelling put the night back on sale',
+        `booked ${beforeCancel.booked_count}→${afterCancel.booked_count}`);
     }
-    if (refusedAt !== null && refusedAt >= 0) {
-      ok('a room stops taking bookings once its copies are gone', `refused after ${refusedAt + 1} more`);
-    } else if (refusedAt === null) {
-      bad('a room stops taking bookings once its copies are gone', 'still accepting after 12 attempts');
-    }
+
+    await expect('cancelling twice is rejected', 'POST',
+      `/customer/bookings/${paidBooking.id}/cancel`, { token: CFRESH, status: 400, body: {} });
+
+    const refundLedger = await sql(
+      `SELECT count(*)::int n FROM ledger_entries WHERE booking_id = $1 AND entry_type = 'refund'`,
+      [paidBooking.id],
+    );
+    if (refundLedger[0].n >= 1) ok('the refund reached the ledger');
+    else bad('the refund reached the ledger', 'no refund entry');
   }
 
-  // ── partner walk-in ───────────────────────────────────────────────────────
-  console.log('\npartner walk-in');
-  if (roomA) {
-    const walkIn = await expect('POST /partner/bookings/walk-in', 'POST', '/partner/bookings/walk-in', {
-      token: P,
-      status: 201,
-      body: {
-        roomId: String(roomA.id),
-        checkIn: day(45),
-        checkOut: day(47),
-        guests: 1,
-        guestName: 'ທ້າວ ຍ່າງເຂົ້າມາ',
-        guestPhone: '+856 20 8888 9999',
-      },
-      check: (b) => {
-        if (b?.source !== 'walk_in') return `source is ${b?.source}`;
-        if (b?.status !== 'confirmed') return `status is ${b?.status}`;
-        // A walk-in pays the room rate at the desk: no platform service fee.
-        if (b?.fee !== 0) return `fee is ${b?.fee}, expected 0 for a walk-in`;
-        return null;
-      },
+  // ── partner API ───────────────────────────────────────────────────────────
+  console.log('\npartner api');
+  const props = await expect('GET /partner/properties', 'GET', '/partner/properties', {
+    token: P, check: (b) => (b?.length ? null : 'no properties'),
+  });
+  await expect('GET /partner/dashboard', 'GET', '/partner/dashboard', {
+    token: P,
+    check: (b) => (typeof b?.occupancy?.percent === 'number' ? null : 'bad dashboard shape'),
+  });
+  await expect('GET /partner/payouts', 'GET', '/partner/payouts', {
+    token: P, check: (b) => (Array.isArray(b?.items) ? null : 'no items array'),
+  });
+  await expect('GET /partner/bookings', 'GET', '/partner/bookings?limit=5', { token: P });
+  await expect('GET /partner/reviews', 'GET', '/partner/reviews', { token: P });
+
+  const propA = props?.[0];
+  const rtA = propA?.roomTypes?.[0];
+
+  if (propA) {
+    await expect("partner B cannot edit partner A's property", 'PATCH',
+      `/partner/properties/${propA.id}`, {
+        token: partnerB.accessToken, status: 404, body: { name: 'Hijacked' },
+      });
+  }
+  if (rtA) {
+    await expect("partner B cannot read partner A's calendar", 'GET',
+      `/partner/room-types/${rtA.id}/calendar?from=${day(1)}&to=${day(8)}`, {
+        token: partnerB.accessToken, status: 404,
+      });
+
+    await expect('PATCH prices across a range', 'PATCH',
+      `/partner/room-types/${rtA.id}/prices`, {
+        token: P, body: { from: day(60), to: day(63), price: 777000 },
+        check: (b) => (b?.nights === 3 ? null : `updated ${b?.nights} nights`),
+      });
+    const priced = await sql(
+      `SELECT price FROM room_prices WHERE room_type_id = $1 AND date = $2`,
+      [rtA.id, day(60)],
+    );
+    if (Number(priced[0]?.price) === 777000) ok('the new price is what the calendar reads back');
+    else bad('the new price is what the calendar reads back', JSON.stringify(priced));
+
+    await expect('PATCH inventory closes a range', 'PATCH',
+      `/partner/room-types/${rtA.id}/inventory`, {
+        token: P, body: { from: day(70), to: day(72), status: 'closed' },
+        check: (b) => (b?.nights === 2 ? null : `updated ${b?.nights}`),
+      });
+    await expect('a closed night cannot be booked', 'POST', '/customer/bookings', {
+      token: CFRESH, status: 409,
+      body: { roomTypeId: rtA.id, checkIn: day(70), checkOut: day(72), guests: 1 },
     });
+    // Put it back so a re-run starts clean.
+    await call('PATCH', `/partner/room-types/${rtA.id}/inventory`, {
+      token: P, body: { from: day(70), to: day(72), status: 'open' },
+    });
+
+    const walkIn = await expect('POST /partner/bookings/walk-in', 'POST',
+      '/partner/bookings/walk-in', {
+        token: P, status: 201,
+        body: {
+          roomTypeId: rtA.id, checkIn: day(50), checkOut: day(52), guests: 1,
+          guestName: 'ທ້າວ ຍ່າງເຂົ້າມາ', guestPhone: '+856 20 8888 9999',
+        },
+        check: (b) => {
+          if (b?.source !== 'walk_in') return `source is ${b?.source}`;
+          if (b?.status !== 'confirmed') return `status is ${b?.status}`;
+          // A walk-in pays at the desk: no platform service fee.
+          if (b?.serviceFee !== 0) return `serviceFee is ${b?.serviceFee}, expected 0`;
+          return null;
+        },
+      });
 
     if (walkIn) {
-      await expect('a walk-in appears in the partner booking list', 'GET', `/partner/bookings/${walkIn.id}`, {
-        token: P,
-        check: (b) => (b?.source === 'walk_in' ? null : `source is ${b?.source}`),
+      await expect("partner B cannot read that booking", 'GET',
+        `/partner/bookings/${walkIn.id}`, { token: partnerB.accessToken, status: 404 });
+      await expect('the status ladder refuses a backwards move', 'PATCH',
+        `/partner/bookings/${walkIn.id}/status`, {
+          token: P, status: 400, body: { status: 'pending' },
+        });
+      await expect('PATCH status → staying', 'PATCH', `/partner/bookings/${walkIn.id}/status`, {
+        token: P, body: { status: 'staying' },
       });
-      await expect('partner B cannot read that booking', 'GET', `/partner/bookings/${walkIn.id}`, {
-        token: partnerB.accessToken,
-        status: 404,
-      });
-      await expect('PATCH /partner/bookings/:id/status → staying', 'PATCH', `/partner/bookings/${walkIn.id}/status`, {
-        token: P,
-        body: { status: 'staying' },
-      });
-      await expect('the status ladder refuses a backwards move', 'PATCH', `/partner/bookings/${walkIn.id}/status`, {
-        token: P,
-        status: 400,
-        body: { status: 'confirmed' },
-      });
-      await expect('PATCH /partner/bookings/:id/status → done', 'PATCH', `/partner/bookings/${walkIn.id}/status`, {
-        token: P,
-        body: { status: 'done' },
+      await expect('PATCH status → completed', 'PATCH', `/partner/bookings/${walkIn.id}/status`, {
+        token: P, body: { status: 'completed' },
       });
     }
-  }
-
-  // ── chat ──────────────────────────────────────────────────────────────────
-  console.log('\nchat');
-  if (booking) {
-    const sent = await expect('POST /customer/chat/bookings/:id/messages', 'POST', `/customer/chat/bookings/${booking.id}/messages`, {
-      token: C,
-      status: 201,
-      body: { body: 'ສະບາຍດີ ຂໍຖາມກ່ຽວກັບເວລາເຊັກອິນ' },
-      check: (b) => (b?.senderType === 'user' ? null : `senderType is ${b?.senderType}`),
-    });
-
-    await expect('the partner sees it', 'GET', `/partner/chat/bookings/${booking.id}/messages`, {
-      token: P,
-      check: (b) => (b?.messages?.length ? null : 'the partner sees no messages'),
-    });
-    await expect('the partner replies', 'POST', `/partner/chat/bookings/${booking.id}/messages`, {
-      token: P,
-      status: 201,
-      body: { body: 'ເຊັກອິນໄດ້ຕັ້ງແຕ່ 14:00 ຄັບ' },
-      check: (b) => (b?.senderType === 'partner' ? null : `senderType is ${b?.senderType}`),
-    });
-
-    if (sent) {
-      await expect('the `since` cursor returns only newer messages', 'GET', `/customer/chat/bookings/${booking.id}/messages?since=${sent.id}`, {
-        token: C,
-        check: (b) => {
-          const stale = b?.messages?.filter((m) => BigInt(m.id) <= BigInt(sent.id));
-          return stale?.length ? `${stale.length} message(s) at or before the cursor` : null;
-        },
-      });
-    }
-
-    await expect('the guest has an unread reply', 'GET', '/customer/chat/unread', {
-      token: C,
-      check: (b) => (b?.total >= 1 ? null : `unread total is ${b?.total}`),
-    });
-    await expect('PATCH marks the conversation read', 'PATCH', `/customer/chat/bookings/${booking.id}/read`, {
-      token: C,
-      check: (b) => (b?.read >= 1 ? null : `marked ${b?.read} read`),
-    });
-    await expect('an outsider cannot read the conversation', 'GET', `/partner/chat/bookings/${booking.id}/messages`, {
-      token: partnerB.accessToken,
-      status: 404,
-    });
-    await expect('an admin can read any conversation', 'GET', `/admin/chat/bookings/${booking.id}/messages`, {
-      token: A,
-      check: (b) => (b?.messages?.length ? null : 'the admin sees no messages'),
-    });
   }
 
   // ── photo upload ──────────────────────────────────────────────────────────
   console.log('\nphoto upload');
   if (propA) {
-    const before = (await call('GET', `/partner/properties/${propA.id}`, { token: P })).body?.photos?.length ?? 0;
+    const uploaded = await expect('POST /partner/properties/:id/photos', 'POST',
+      `/partner/properties/${propA.id}/photos`, {
+        token: P, status: 201, form: imageForm(),
+        check: (b) => (b?.photos?.length ? null : 'no photos returned'),
+      });
 
-    const uploaded = await expectUpload('POST /partner/properties/:id/photos', `/partner/properties/${propA.id}/photos`, P, {
-      check: (b) => (b?.photos?.length === before + 1 ? null : `photos went ${before} → ${b?.photos?.length}`),
+    await expect('a non-image is refused', 'POST', `/partner/properties/${propA.id}/photos`, {
+      token: P, status: 415,
+      form: imageForm(Buffer.from('#!/bin/sh\n', 'utf8'), 'image/png', 'evil.png'),
     });
-
-    await expectUpload('a non-image is refused', `/partner/properties/${propA.id}/photos`, P, {
-      status: 415,
-      filename: 'evil.png',
-      type: 'image/png',
-      bytes: Buffer.from('#!/bin/sh\necho not a png\n', 'utf8'),
-    });
-    await expectUpload('an unsupported type is refused', `/partner/properties/${propA.id}/photos`, P, {
-      status: 415,
-      filename: 'doc.pdf',
-      type: 'application/pdf',
-      bytes: Buffer.from('%PDF-1.4', 'utf8'),
-    });
-    await expectUpload("partner B cannot upload to partner A's property", `/partner/properties/${propA.id}/photos`, partnerB.accessToken, {
-      status: 404,
-    });
+    await expect("partner B cannot upload to partner A's property", 'POST',
+      `/partner/properties/${propA.id}/photos`, {
+        token: partnerB.accessToken, status: 404, form: imageForm(),
+      });
 
     if (uploaded) {
-      const url = uploaded.photos[uploaded.photos.length - 1].url;
-      const served = await fetch(BASE.replace(/\/api$/, '') + url);
-      if (served.ok) ok('the uploaded photo is served', url);
-      else bad('the uploaded photo is served', `GET ${url} returned ${served.status}`);
+      const newest = uploaded.photos[uploaded.photos.length - 1];
+      const served = await fetch(BASE.replace(/\/api$/, '') + newest.url);
+      if (served.ok) ok('the uploaded photo is served', newest.url);
+      else bad('the uploaded photo is served', `GET ${newest.url} → ${served.status}`);
 
-      await expect(
-        'DELETE /partner/properties/:id/photos/:index',
-        'DELETE',
-        `/partner/properties/${propA.id}/photos/${uploaded.photos.length - 1}`,
-        { token: P, check: (b) => (b?.photos?.length === before ? null : `photos left at ${b?.photos?.length}`) },
-      );
+      await expect('DELETE the photo', 'DELETE',
+        `/partner/properties/${propA.id}/photos/${newest.id}`, { token: P });
     }
   }
 
-  // ── customer review and cancellation ──────────────────────────────────────
-  console.log('\nreview and cancellation');
-  if (booking) {
-    await expect('a review is refused before the stay is done', 'POST', `/customer/bookings/${booking.id}/review`, {
-      token: C,
-      status: 400,
-      body: { stars: 5, text: 'ດີຫຼາຍ' },
+  // ── admin API and RBAC ────────────────────────────────────────────────────
+  console.log('\nadmin api & RBAC');
+  await expect('GET /admin/dashboard', 'GET', '/admin/dashboard', {
+    token: A, check: (b) => (typeof b?.gmv === 'number' ? null : 'bad shape'),
+  });
+  await expect('GET /admin/approvals', 'GET', '/admin/approvals', { token: A });
+  await expect('GET /admin/partners', 'GET', '/admin/partners?limit=5', { token: A });
+  await expect('GET /admin/customers', 'GET', '/admin/customers?limit=5', { token: A });
+  await expect('GET /admin/bookings', 'GET', '/admin/bookings?limit=5', { token: A });
+  await expect('GET /admin/audit-logs', 'GET', '/admin/audit-logs?limit=5', { token: A });
+
+  await expect('GET /admin/payouts is refused for staff', 'GET', '/admin/payouts', {
+    token: staff.accessToken, status: 403,
+  });
+  await expect('POST /admin/payouts/pay-all is refused for staff', 'POST',
+    '/admin/payouts/pay-all', { token: staff.accessToken, status: 403 });
+  await expect('GET /admin/payouts is allowed for finance', 'GET', '/admin/payouts', {
+    token: finance.accessToken,
+  });
+  await expect('PATCH /admin/settings is refused for staff', 'PATCH', '/admin/settings', {
+    token: staff.accessToken, status: 403, body: { commission_rate_app: 9 },
+  });
+  await expect('GET /admin/admins is refused for finance', 'GET', '/admin/admins', {
+    token: finance.accessToken, status: 403,
+  });
+
+  // ── staff accounts ────────────────────────────────────────────────────────
+  //
+  // The only way an ADMIN row is ever created: no public route reaches it.
+  console.log('\nstaff accounts');
+  const staffEmail = `smoke.staff.${Date.now()}@laostay.la`;
+  const staffPw = 'SmokeStaff@2026';
+
+  await expect('POST /admin/admins is refused for finance', 'POST', '/admin/admins', {
+    token: finance.accessToken, status: 403,
+    body: { email: staffEmail, fullName: 'ບໍ່ຄວນຖືກສ້າງ', password: staffPw, adminRole: 'staff' },
+  });
+
+  const newAdmin = await expect('POST /admin/admins', 'POST', '/admin/admins', {
+    token: A, status: 201,
+    body: { email: staffEmail, fullName: 'ພະນັກງານທົດສອບ', password: staffPw, adminRole: 'staff' },
+    check: (b) => (b?.adminRole === 'staff' ? null : `adminRole is ${b?.adminRole}`),
+  });
+
+  await expect('the same email twice is rejected', 'POST', '/admin/admins', {
+    token: A, status: 409,
+    body: { email: staffEmail, fullName: 'ຊ້ຳ', password: staffPw, adminRole: 'staff' },
+  });
+
+  if (newAdmin) {
+    const fresh = await call('POST', '/auth/login', {
+      body: { email: staffEmail, password: staffPw },
+    });
+    if (fresh.status === 200 && fresh.body?.user?.role === 'ADMIN') {
+      ok('the new admin can sign in');
+    } else {
+      bad('the new admin can sign in', `${fresh.status} ${JSON.stringify(fresh.body)?.slice(0, 120)}`);
+    }
+
+    await expect('a new staff account cannot reach payouts', 'GET', '/admin/payouts', {
+      token: fresh.body?.accessToken, status: 403,
     });
 
-    const cancelled = await expect('POST /customer/bookings/:id/cancel', 'POST', `/customer/bookings/${booking.id}/cancel`, {
-      token: C,
-      body: { reason: 'ປ່ຽນແຜນ' },
-      check: (b) => {
-        if (b?.booking?.status !== 'cancelled') return `status is ${b?.booking?.status}`;
-        if (b?.fee + b?.refund !== b?.paid) return `fee ${b?.fee} + refund ${b?.refund} !== paid ${b?.paid}`;
-        return null;
-      },
+    await expect('DELETE /admin/admins/:id', 'DELETE', `/admin/admins/${newAdmin.id}`, {
+      token: A,
+      check: (b) => (b?.deleted === true ? null : JSON.stringify(b)),
     });
-    if (cancelled) ok('cancellation maths: fee + refund === amount paid');
 
-    await expect('cancelling twice is rejected', 'POST', `/customer/bookings/${booking.id}/cancel`, {
-      token: C,
-      status: 400,
-      body: {},
+    // Soft-deleted, and the sessions revoked with it.
+    const after = await call('POST', '/auth/login', {
+      body: { email: staffEmail, password: staffPw },
     });
+    if (after.status === 401) ok('a deleted admin can no longer sign in');
+    else bad('a deleted admin can no longer sign in', `got ${after.status}`);
   }
 
-  // A completed stay is what a review needs, so use one the seed already made.
-  const doneStays = await call('GET', '/customer/bookings?status=done&limit=5', { token: C });
-  const reviewable = doneStays.body?.items?.find((b) => !b.reviewed);
-  if (reviewable) {
-    await expect('POST /customer/bookings/:id/review', 'POST', `/customer/bookings/${reviewable.id}/review`, {
-      token: C,
-      status: 201,
-      body: { stars: 5, text: 'ທີ່ພັກສະອາດ ພະນັກງານໃຈດີ' },
-      check: (b) => (b?.review?.stars === 5 ? null : `stars is ${b?.review?.stars}`),
-    });
-    await expect('reviewing the same stay twice is rejected', 'POST', `/customer/bookings/${reviewable.id}/review`, {
-      token: C,
-      status: 409,
-      body: { stars: 4 },
-    });
+  const whoami = await call('GET', '/auth/me', { token: A });
+  await expect('deleting your own account is refused', 'DELETE',
+    `/admin/admins/${whoami.body?.id}`, { token: A, status: 403 });
+
+  // ── settings ──────────────────────────────────────────────────────────────
+  console.log('\nsettings');
+  const settingsBefore = await call('GET', '/admin/settings', { token: A });
+  const originalFee = settingsBefore.body?.system?.service_fee_rate;
+  const originalName = settingsBefore.body?.app?.platform_name;
+
+  await expect('PATCH /admin/settings writes both halves', 'PATCH', '/admin/settings', {
+    token: finance.accessToken,
+    body: { service_fee_rate: 7, app: { platform_name: 'LaoStay · smoke' } },
+    check: (b) => {
+      if (b?.system?.service_fee_rate !== 7) {
+        return `service_fee_rate is ${b?.system?.service_fee_rate}`;
+      }
+      if (b?.app?.platform_name !== 'LaoStay · smoke') {
+        return `platform_name is ${b?.app?.platform_name}`;
+      }
+      return null;
+    },
+  });
+
+  await expect('an unknown app key is ignored, not created', 'PATCH', '/admin/settings', {
+    token: finance.accessToken,
+    body: { app: { not_a_real_key: 'x' } },
+    check: (b) => ('not_a_real_key' in (b?.app ?? {}) ? 'the unknown key was stored' : null),
+  });
+
+  await expect('a rate above 100 is rejected', 'PATCH', '/admin/settings', {
+    token: finance.accessToken, status: 400, body: { service_fee_rate: 400 },
+  });
+
+  // Put the settings back so a re-run starts from the seeded values.
+  await call('PATCH', '/admin/settings', {
+    token: finance.accessToken,
+    body: { service_fee_rate: originalFee, app: { platform_name: originalName } },
+  });
+
+  // ── approvals ─────────────────────────────────────────────────────────────
+  console.log('\napprovals');
+  const pending = await call('GET', '/admin/approvals', { token: A });
+  const applicant = pending.body?.[0];
+  if (applicant) {
+    await expect('PATCH /admin/approvals/:id/approve', 'PATCH',
+      `/admin/approvals/${applicant.id}/approve`, {
+        token: A, check: (b) => (b?.status === 'verified' ? null : `status is ${b?.status}`),
+      });
+    await expect('approving twice is rejected', 'PATCH',
+      `/admin/approvals/${applicant.id}/approve`, { token: A, status: 400 });
+
+    const [props2] = await sql(
+      `SELECT count(*)::int n FROM properties WHERE partner_id = $1 AND status = 'active'`,
+      [applicant.id],
+    );
+    if (props2.n > 0) ok('approving a partner puts their properties on sale');
+    else bad('approving a partner puts their properties on sale', 'still draft');
   }
 
-  // ── wishlist ──────────────────────────────────────────────────────────────
-  console.log('\nwishlist');
-  if (listing) {
-    await call('DELETE', `/customer/wishlist/${listing.id}`, { token: C });
-    await expect('POST /customer/wishlist/:id', 'POST', `/customer/wishlist/${listing.id}`, {
-      token: C,
-      status: 201,
-    });
-    await expect('POST /customer/wishlist/:id twice is rejected', 'POST', `/customer/wishlist/${listing.id}`, {
-      token: C,
-      status: 409,
-    });
-    await expect('GET /customer/wishlist', 'GET', '/customer/wishlist', {
-      token: C,
-      check: (b) => (b?.some((w) => String(w.propertyId) === String(listing.id)) ? null : 'the property is not in the wishlist'),
-    });
-    await expect('DELETE /customer/wishlist/:id', 'DELETE', `/customer/wishlist/${listing.id}`, {
-      token: C,
-      check: (b) => (b?.removed === 1 ? null : `removed ${b?.removed}`),
-    });
+  // ── payouts ───────────────────────────────────────────────────────────────
+  console.log('\npayouts');
+  const gen = await expect('POST /admin/payouts/generate', 'POST', '/admin/payouts/generate', {
+    token: finance.accessToken,
+    check: (b) => (typeof b?.created === 'number' ? null : 'no created count'),
+  });
+  if (gen) {
+    const balance = await sql(`
+      SELECT count(*)::int n FROM payouts p
+      JOIN payout_items i ON i.payout_id = p.payout_id
+      GROUP BY p.payout_id, p.gross_amount
+      HAVING sum(i.gross_amount) <> p.gross_amount`);
+    if (balance.length === 0) ok('every payout equals the sum of its items');
+    else bad('every payout equals the sum of its items', `${balance.length} mismatched`);
+
+    const list = await call('GET', '/admin/payouts?status=pending', { token: finance.accessToken });
+    const first = list.body?.items?.[0];
+    if (first) {
+      await expect('GET /admin/payouts/:id/items', 'GET', `/admin/payouts/${first.id}/items`, {
+        token: finance.accessToken,
+        check: (b) => (b?.items?.length ? null : 'no items'),
+      });
+      await expect('PATCH /admin/payouts/:id/pay', 'PATCH', `/admin/payouts/${first.id}/pay`, {
+        token: finance.accessToken,
+        check: (b) => (b?.status === 'paid' ? null : `status is ${b?.status}`),
+      });
+      await expect('paying twice is rejected', 'PATCH', `/admin/payouts/${first.id}/pay`, {
+        token: finance.accessToken, status: 400,
+      });
+      const payoutLedger = await sql(
+        `SELECT count(*)::int n FROM ledger_entries WHERE entry_type = 'payout' AND reference_id = $1`,
+        [first.id],
+      );
+      if (payoutLedger[0].n >= 1) ok('the payout reached the ledger');
+      else bad('the payout reached the ledger', 'no payout entry');
+    }
   }
 
-  // ── notifications ─────────────────────────────────────────────────────────
-  console.log('\nnotifications');
-  await expect('GET /customer/notifications', 'GET', '/customer/notifications', {
-    token: C,
-    check: (b) => (Array.isArray(b?.items) ? null : 'no items array'),
-  });
-  await expect('POST /partner/notifications/read-all', 'POST', '/partner/notifications/read-all', {
-    token: P,
-    check: (b) => (typeof b?.updated === 'number' ? null : 'no updated count'),
-  });
-  await expect('GET /partner/notifications?unreadOnly=true is then empty', 'GET', '/partner/notifications?unreadOnly=true', {
-    token: P,
-    check: (b) => (b?.unread === 0 ? null : `${b?.unread} still unread`),
-  });
+  // ── database invariants ───────────────────────────────────────────────────
+  console.log('\ndatabase invariants');
+  const invariants = [
+    ['no room is oversold',
+      `SELECT count(*)::int n FROM room_inventory WHERE held_count + booked_count > total_count`],
+    ['available_count agrees with its parts',
+      `SELECT count(*)::int n FROM room_inventory
+        WHERE available_count <> total_count - held_count - booked_count`],
+    ['no negative counters',
+      `SELECT count(*)::int n FROM room_inventory WHERE held_count < 0 OR booked_count < 0`],
+    ['booking totals balance',
+      `SELECT count(*)::int n FROM bookings
+        WHERE subtotal_amount + service_fee + tax_amount + cleaning_fee - discount_amount
+              <> total_amount`],
+    ['booking payout = total - commission',
+      `SELECT count(*)::int n FROM bookings WHERE total_amount - commission_amount <> payout_amount`],
+    ['payout gross = commission + net',
+      `SELECT count(*)::int n FROM payouts WHERE gross_amount <> commission_amount + net_amount`],
+    ['payout_items gross = commission + net',
+      `SELECT count(*)::int n FROM payout_items WHERE gross_amount <> commission_amount + net_amount`],
+    ['no ledger entry is negative',
+      `SELECT count(*)::int n FROM ledger_entries WHERE amount < 0`],
+  ];
+  for (const [name, query] of invariants) {
+    const [row] = await sql(query);
+    if (row.n === 0) ok(name);
+    else bad(name, `${row.n} offending row(s)`);
+  }
+
+  await db.end();
 
   console.log('\n' + '─'.repeat(64));
   console.log(`  ${pass} passed, ${fail} failed`);
@@ -980,7 +918,8 @@ async function main() {
   process.exit(fail ? 1 : 0);
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
   console.error('\nSmoke run crashed:', e.message);
+  await db?.end().catch(() => undefined);
   process.exit(1);
 });

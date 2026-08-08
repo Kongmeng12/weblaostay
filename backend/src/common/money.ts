@@ -1,86 +1,113 @@
 /**
- * Kip money helpers.
+ * Kip money helpers, for schema v2.
  *
- * Every amount in the database is an `int4` of whole kip — there are no
- * subunits and no decimals. All arithmetic here stays in integer space so a
- * commission split can never drift by a fractional kip.
+ * Every amount in the database is `bigint` of whole kip — there are no subunits
+ * and no decimals. Prisma hands those back as JavaScript `bigint`, so all
+ * arithmetic here stays in bigint space and a commission split can never drift
+ * by a fractional kip.
+ *
+ * **Money leaves the API as a `number`, not a string.** The BigInt interceptor
+ * turns every bigint into a string so ids survive JSON, but doing that to money
+ * would hand clients `"1350000"` where they expect `1350000`. View mappers
+ * therefore call `kipOf()` on the way out. That is safe: `Number.MAX_SAFE_INTEGER`
+ * is ₭9,007,199,254,740,992 — nine quadrillion kip, which no total will reach.
  *
  * Rates arrive as percentages (5 means 5%, 2.5 means 2.5%) because that is how
- * they are stored in `app_settings` and shown on the Settings screen.
+ * `system_settings` and `partners.*_commission_rate` store them.
  */
 
-/** Booking source → which commission rate applies. Matches `bookings.source`. */
-export const BOOKING_SOURCE = {
-  APP: 'app',
-  WALK_IN: 'walk_in',
-} as const;
-export type BookingSource = (typeof BOOKING_SOURCE)[keyof typeof BOOKING_SOURCE];
+import { Prisma } from '@prisma/client';
 
-/** `bookings.status` values shared by all three apps. */
-export const BOOKING_STATUS = {
-  PENDING: 'pending',
-  CONFIRMED: 'confirmed',
-  STAYING: 'staying',
-  DONE: 'done',
-  CANCELLED: 'cancelled',
-} as const;
-export type BookingStatus = (typeof BOOKING_STATUS)[keyof typeof BOOKING_STATUS];
+/** The largest kip amount that survives the trip through JSON as a number. */
+const MAX_SAFE_KIP = BigInt(Number.MAX_SAFE_INTEGER);
 
-/** Statuses that count as real revenue (a cancelled booking earns nothing). */
-export const REVENUE_STATUSES: BookingStatus[] = [
-  BOOKING_STATUS.CONFIRMED,
-  BOOKING_STATUS.STAYING,
-  BOOKING_STATUS.DONE,
-];
+/**
+ * bigint → number, for sending money to a client.
+ *
+ * Throws rather than silently truncating: a wrong number on an invoice is worse
+ * than an error, and reaching this ceiling means something upstream is broken
+ * (a rate applied twice, a currency mixed in) long before it means the platform
+ * really turned over nine quadrillion kip.
+ */
+export function kipOf(amount: bigint | number | null | undefined): number {
+  if (amount === null || amount === undefined) return 0;
+  if (typeof amount === 'number') return Math.round(amount);
+  if (amount > MAX_SAFE_KIP || amount < -MAX_SAFE_KIP) {
+    throw new RangeError(`Kip amount ${amount} is too large to serialise as a number`);
+  }
+  return Number(amount);
+}
 
-export const PARTNER_STATUS = {
-  PENDING: 'pending',
-  VERIFIED: 'verified',
-  REJECTED: 'rejected',
-} as const;
+/** Same, but keeps null as null — for optional columns like `paid_amount`. */
+export function kipOrNull(amount: bigint | null | undefined): number | null {
+  return amount === null || amount === undefined ? null : kipOf(amount);
+}
 
-export const PAYOUT_STATUS = { PENDING: 'pending', PAID: 'paid' } as const;
+/** Anything numeric the API or a DTO hands us → bigint kip. */
+export function toKip(value: bigint | number | string | Prisma.Decimal): bigint {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') return BigInt(Math.round(value));
+  if (typeof value === 'string') return BigInt(Math.round(Number(value)));
+  return BigInt(value.round().toString());
+}
 
-export const PAYMENT_STATUS = {
-  PENDING: 'pending',
-  PAID: 'paid',
-  EXPIRED: 'expired',
-  REFUNDED: 'refunded',
-} as const;
+/**
+ * Apply a percentage rate to a kip amount, rounding to the nearest whole kip.
+ *
+ * The rate is scaled to an integer first and the multiply happens before the
+ * divide, so the intermediate value stays exact in bigint space — no float ever
+ * touches a money figure. Rates carry at most two decimals (5, 2.5, 30.25),
+ * which is what `decimal(5,2)` stores.
+ */
+export function percentOf(amountKip: bigint, ratePercent: number | Prisma.Decimal): bigint {
+  const rate = typeof ratePercent === 'number' ? ratePercent : Number(ratePercent.toString());
+  // 5 → 500, 2.5 → 250. Rounded because 2.5 * 100 can land on 249.99999 in float.
+  const scaled = BigInt(Math.round(rate * 100));
+  const numerator = amountKip * scaled;
+  const denominator = 10_000n;
 
-export const USER_STATUS = { ACTIVE: 'active', SUSPENDED: 'suspended' } as const;
+  // Round half away from zero, matching what a person doing this by hand expects.
+  const half = denominator / 2n;
+  return numerator >= 0n
+    ? (numerator + half) / denominator
+    : -((-numerator + half) / denominator);
+}
 
-export const AVAILABILITY_STATUS = {
-  AVAILABLE: 'available',
-  BOOKED: 'booked',
-  CLOSED: 'closed',
-} as const;
-export type AvailabilityStatus =
-  (typeof AVAILABILITY_STATUS)[keyof typeof AVAILABILITY_STATUS];
+/**
+ * Split a total into what the platform keeps and what the partner receives.
+ * `net` is derived by subtraction so the two halves always sum back to `total`,
+ * which is the identity `payouts.gross_amount = commission_amount + net_amount`
+ * is checked against in the database.
+ */
+export function splitCommission(
+  totalKip: bigint,
+  ratePercent: number | Prisma.Decimal,
+): { commission: bigint; net: bigint } {
+  const commission = percentOf(totalKip, ratePercent);
+  return { commission, net: totalKip - commission };
+}
 
-/** `promos.type` — how `promos.value` is read. */
-export const PROMO_TYPE = { PERCENT: 'percent', FIXED: 'fixed' } as const;
-export type PromoType = (typeof PROMO_TYPE)[keyof typeof PROMO_TYPE];
+/**
+ * Cancellation maths: the property keeps `penaltyPercent`% and the rest is
+ * refunded. Refund is derived by subtraction so penalty + refund === paid,
+ * exactly.
+ */
+export function cancellationSplit(
+  paidKip: bigint,
+  penaltyPercent: number | Prisma.Decimal,
+): { penalty: bigint; refund: bigint } {
+  const penalty = percentOf(paidKip, penaltyPercent);
+  return { penalty, refund: paidKip - penalty };
+}
 
-/** `properties.type`, as used by the seed and the customer search filter. */
-export const PROPERTY_TYPES = [
-  'homestay',
-  'guesthouse',
-  'hotel',
-  'resort',
-  'villa',
-  'apartment',
-] as const;
-
-/** `rooms.bed_type`. */
-export const BED_TYPES = ['single', 'double', 'twin', 'king'] as const;
-
-/** `chat_messages.sender_type` — the same three strings as ACTOR. */
-export const SENDER_TYPE = { USER: 'user', PARTNER: 'partner', ADMIN: 'admin' } as const;
+/** `₭1,350,000` — the format used across all three apps. */
+export function formatKip(amount: bigint | number): string {
+  return '₭' + kipOf(amount).toLocaleString('en-US');
+}
 
 /**
  * Booking reference shown to guests and partners: the id in hex, so
- * `STL-0142` is booking 322. Kept short enough to read over the phone.
+ * `STL-0142` is booking 322. Short enough to read over the phone.
  */
 export function bookingCode(id: bigint): string {
   return 'STL-' + id.toString(16).toUpperCase().padStart(4, '0');
@@ -121,84 +148,25 @@ export function parseBookingRef(input: string): bigint[] {
   return candidates;
 }
 
-/**
- * Discount a promo takes off a subtotal, in whole kip.
- * Never more than the subtotal itself — a fixed-value promo on a cheap stay
- * must not make the total negative.
- */
-export function promoDiscount(
-  type: string,
-  value: number,
-  subtotalKip: number,
-): number {
-  const raw = type === PROMO_TYPE.PERCENT ? percentOf(subtotalKip, value) : Math.round(value);
-  return Math.min(Math.max(raw, 0), subtotalKip);
+/** Nights between two calendar days. The check-out day is not charged. */
+export function nightsBetween(checkIn: Date, checkOut: Date): number {
+  const a = Date.UTC(checkIn.getUTCFullYear(), checkIn.getUTCMonth(), checkIn.getUTCDate());
+  const b = Date.UTC(checkOut.getUTCFullYear(), checkOut.getUTCMonth(), checkOut.getUTCDate());
+  return Math.max(1, Math.round((b - a) / 86_400_000));
 }
 
 /**
- * Apply a percentage rate to a kip amount, rounding to the nearest whole kip.
- *
- * Multiplying before dividing keeps the intermediate value exact for the rates
- * we use (5, 2.5, 30), so `percentOf(1_000_001, 2.5)` is 25000 rather than
- * something ending in .025.
+ * Percentage change between two periods, for the KPI deltas on a dashboard.
+ * Null when there is no previous figure to compare against, so the UI can say
+ * "—" instead of a meaningless +100%.
  */
-export function percentOf(amountKip: number, ratePercent: number): number {
-  return Math.round((amountKip * ratePercent) / 100);
+export function percentChange(current: bigint, previous: bigint): number | null {
+  if (previous === 0n) return current === 0n ? 0 : null;
+  const delta = Number(current - previous);
+  return Math.round((delta / Number(previous)) * 100);
 }
 
-/**
- * Split a booking total into what the platform keeps and what the partner gets.
- * `net` is derived by subtraction so the two halves always sum back to `total`.
- */
-export function splitCommission(
-  totalKip: number,
-  ratePercent: number,
-): { commission: number; net: number } {
-  const commission = percentOf(totalKip, ratePercent);
-  return { commission, net: totalKip - commission };
-}
-
-/** Commission rate for a booking, picked from its source. */
-export function rateForSource(
-  source: string | null | undefined,
-  appRate: number,
-  walkInRate: number,
-): number {
-  return source === BOOKING_SOURCE.WALK_IN ? walkInRate : appRate;
-}
-
-/**
- * Cancellation maths: the platform keeps `feeRate`% and refunds the rest.
- * Refund is derived by subtraction so fee + refund === paid amount exactly.
- */
-export function cancellationSplit(
-  paidKip: number,
-  feeRatePercent: number,
-): { fee: number; refund: number } {
-  const fee = percentOf(paidKip, feeRatePercent);
-  return { fee, refund: paidKip - fee };
-}
-
-/** Nights between two dates. Check-out day is not charged. */
-export function nightsBetween(checkIn: Date | string, checkOut: Date | string): number {
-  const a = new Date(checkIn);
-  const b = new Date(checkOut);
-  const ms = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) -
-    Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
-  return Math.max(1, Math.round(ms / 86_400_000));
-}
-
-/** `₭1,350,000` — the format used across all three apps. */
-export function formatKip(amountKip: number): string {
-  return '₭' + Math.round(amountKip).toLocaleString('en-US');
-}
-
-/**
- * Percentage change between two periods, for the KPI deltas on the dashboard.
- * Returns null when there is no previous figure to compare against, so the UI
- * can say "—" instead of showing a meaningless +100%.
- */
-export function percentChange(current: number, previous: number): number | null {
-  if (previous === 0) return current === 0 ? 0 : null;
-  return Math.round(((current - previous) / previous) * 100);
+/** `Decimal(5,2)` → a plain number, for rates in responses. */
+export function rateOf(value: Prisma.Decimal | null | undefined): number {
+  return value === null || value === undefined ? 0 : Number(value.toString());
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
 import type { Paged, ReviewRow } from '../lib/types';
-import { c, f, radius, avatarFor } from '../theme';
+import { c, f, radius, avatarFor, pillFor, REVIEW_STATUS_PILL } from '../theme';
 import { laoDate, stars, initials } from '../lib/format';
 import {
   Card,
@@ -17,7 +17,17 @@ import {
 } from '../components/ui';
 import { useDebounced } from '../lib/useDebounced';
 
-type Filter = 'all' | 'flagged' | 'hidden';
+/** `all` plus every `review_status`. */
+type Filter = 'all' | 'published' | 'flagged' | 'hidden' | 'pending';
+
+interface ReviewCounts {
+  total: number;
+  published: number;
+  hidden: number;
+  flagged: number;
+  pending: number;
+  averageStars: number | null;
+}
 
 export function Reviews() {
   const qc = useQueryClient();
@@ -29,10 +39,7 @@ export function Reviews() {
 
   const counts = useQuery({
     queryKey: ['reviews', 'counts'],
-    queryFn: () =>
-      api.get<{ total: number; flagged: number; hidden: number; averageStars: number | null }>(
-        '/admin/reviews/counts',
-      ),
+    queryFn: () => api.get<ReviewCounts>('/admin/reviews/counts'),
   });
 
   const list = useQuery({
@@ -40,19 +47,18 @@ export function Reviews() {
     queryFn: () =>
       api.get<Paged<ReviewRow>>(
         '/admin/reviews' +
-          qs({
-            flagged: filter === 'flagged' ? true : undefined,
-            hidden: filter === 'hidden' ? true : undefined,
-            q,
-            page,
-            limit: 12,
-          }),
+          qs({ status: filter === 'all' ? undefined : filter, q, page, limit: 12 }),
       ),
   });
 
+  /**
+   * Hiding a review takes it out of the property's score — the database trigger
+   * recomputes `rating_avg` from published rows — so the partner list is
+   * invalidated alongside it.
+   */
   const toggle = useMutation({
     mutationFn: (vars: { id: string; hide: boolean }) =>
-      api.patch(`/admin/reviews/${vars.id}/${vars.hide ? 'hide' : 'unhide'}`),
+      api.patch(`/admin/reviews/${vars.id}/${vars.hide ? 'hide' : 'publish'}`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['reviews'] });
       void qc.invalidateQueries({ queryKey: ['partners'] });
@@ -95,8 +101,10 @@ export function Reviews() {
           }}
           options={[
             { value: 'all', label: 'ທັງໝົດ', count: counts.data?.total },
+            { value: 'published', label: 'ສະແດງຢູ່', count: counts.data?.published },
             { value: 'flagged', label: 'ຖືກລາຍງານ', count: counts.data?.flagged },
             { value: 'hidden', label: 'ຖືກເຊື່ອງ', count: counts.data?.hidden },
+            { value: 'pending', label: 'ລໍກວດ', count: counts.data?.pending },
           ]}
         />
         <SearchInput
@@ -105,7 +113,7 @@ export function Reviews() {
             setSearch(v);
             setPage(1);
           }}
-          placeholder="ຄົ້ນຫາ ຂໍ້ຄວາມ / ທີ່ພັກ / ແຂກ..."
+          placeholder="ຄົ້ນຫາ ຂໍ້ຄວາມ / ຫົວຂໍ້ / ທີ່ພັກ..."
           width={300}
         />
       </div>
@@ -121,7 +129,7 @@ export function Reviews() {
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
           {rows.map((r) => (
-            <Card key={r.id} padding={18} style={{ opacity: r.isHidden ? 0.62 : 1 }}>
+            <Card key={r.id} padding={18} style={{ opacity: r.status === 'hidden' ? 0.62 : 1 }}>
               <div style={{ display: 'flex', gap: 14 }}>
                 <Avatar gradient={avatarFor(r.guest)} size={42} label={initials(r.guest)} />
 
@@ -138,12 +146,19 @@ export function Reviews() {
                     <span style={{ font: f(700, 14), color: c.text }}>{r.guest}</span>
                     <span style={{ font: f(400, 12), color: c.muted }}>· {r.property}</span>
                     <span style={{ font: f(400, 11), color: c.faint }}>
-                      · {laoDate(r.stayedAt)}
+                      · {laoDate(r.createdAt)}
                     </span>
-                    {r.isFlagged && (
-                      <Pill bg={c.dangerBg} fg={c.dangerFg}>ຖືກລາຍງານ</Pill>
+                    {(() => {
+                      const p = pillFor(REVIEW_STATUS_PILL, r.status);
+                      return (
+                        <Pill bg={p.bg} fg={p.fg}>
+                          {p.label}
+                        </Pill>
+                      );
+                    })()}
+                    {r.reports > 0 && (
+                      <Pill bg={c.dangerBg} fg={c.dangerFg}>{r.reports} ລາຍງານ</Pill>
                     )}
-                    {r.isHidden && <Pill bg={c.neutralBg} fg={c.neutralFg}>ເຊື່ອງຢູ່</Pill>}
                   </div>
 
                   <div
@@ -166,18 +181,23 @@ export function Reviews() {
                       padding: '11px 14px',
                     }}
                   >
-                    {r.text || <span style={{ color: c.faint }}>(ບໍ່ມີຂໍ້ຄວາມ)</span>}
+                    {r.title && (
+                      <div style={{ font: f(700, 13), color: c.text, marginBottom: 4 }}>
+                        {r.title}
+                      </div>
+                    )}
+                    {r.comment || <span style={{ color: c.faint }}>(ບໍ່ມີຂໍ້ຄວາມ)</span>}
                   </div>
                 </div>
 
                 <div style={{ flex: 'none' }}>
                   <Button
                     size="sm"
-                    variant={r.isHidden ? 'success' : 'ghost'}
+                    variant={r.status === 'published' ? 'ghost' : 'success'}
                     disabled={toggle.isPending}
-                    onClick={() => toggle.mutate({ id: r.id, hide: !r.isHidden })}
+                    onClick={() => toggle.mutate({ id: r.id, hide: r.status === 'published' })}
                   >
-                    {r.isHidden ? 'ກູ້ຄືນ' : 'ເຊື່ອງ'}
+                    {r.status === 'published' ? 'ເຊື່ອງ' : 'ສະແດງ'}
                   </Button>
                 </div>
               </div>

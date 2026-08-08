@@ -1,35 +1,54 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ROLES_KEY } from '../decorators';
-import type { Role } from '../roles';
-import { ACTOR } from '../actors';
+import { user_role, type admin_role } from '@prisma/client';
+import { ADMIN_ROLES_KEY, ROLES_KEY, type AuthedUser } from '../decorators';
+import { ADMIN_ROLE_LABEL } from '../enums';
 
+/**
+ * Authorises what JwtAuthGuard authenticated.
+ *
+ * Two levels, because v2 has two: `role` says which kind of account this is,
+ * and `admin_role` says what an admin may do. The money routes carry both —
+ * `@Roles(ADMIN)` and `@AdminRoles(super_admin, finance)` — so a staff account
+ * is refused at the payout endpoints rather than merely hidden from them.
+ */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const required = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
+    const requiredRoles = this.reflector.getAllAndOverride<user_role[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    // No @Roles() on the route means any authenticated caller may call it.
-    if (!required?.length) return true;
+    const requiredAdminRoles = this.reflector.getAllAndOverride<admin_role[]>(ADMIN_ROLES_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
-    const { user } = context.switchToHttp().getRequest();
+    // Neither decorator means any authenticated caller may proceed.
+    if (!requiredRoles?.length && !requiredAdminRoles?.length) return true;
 
-    // Roles are an admin concept. A partner or customer token reaching a
-    // @Roles() route means the route is mis-decorated — refuse rather than fall
-    // through to the role comparison, where `undefined` would simply not match.
-    if (user?.actorType !== ACTOR.ADMIN) {
-      throw new ForbiddenException('ສິດບໍ່ພຽງພໍ · Admin access required');
-    }
+    const user: AuthedUser | undefined = context.switchToHttp().getRequest().user;
+    if (!user) throw new ForbiddenException('ຕ້ອງເຂົ້າສູ່ລະບົບກ່ອນ · Authentication required');
 
-    if (!user?.role || !required.includes(user.role)) {
+    if (requiredRoles?.length && !requiredRoles.includes(user.role)) {
       throw new ForbiddenException(
-        `ສິດບໍ່ພຽງພໍ · requires one of: ${required.join(', ')}`,
+        `ສິດບໍ່ພຽງພໍ · requires one of: ${requiredRoles.join(', ')}`,
       );
     }
+
+    if (requiredAdminRoles?.length) {
+      // An admin-role requirement implies an admin, even if @Roles was omitted.
+      if (user.role !== user_role.ADMIN || user.adminRole === null) {
+        throw new ForbiddenException('ສິດບໍ່ພຽງພໍ · Admin access required');
+      }
+      if (!requiredAdminRoles.includes(user.adminRole)) {
+        const labels = requiredAdminRoles.map((r) => ADMIN_ROLE_LABEL[r]).join(', ');
+        throw new ForbiddenException(`ສິດບໍ່ພຽງພໍ · requires: ${labels}`);
+      }
+    }
+
     return true;
   }
 }

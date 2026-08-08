@@ -70,35 +70,63 @@ export function avatarFor(key: string | number): string {
 
 type Pill = { bg: string; fg: string; label: string };
 
+/**
+ * One entry per member of the matching Postgres enum.
+ *
+ * `pillFor` falls back to showing the raw status, so a missing entry is not a
+ * crash — but it does put an untranslated English word in a Lao interface,
+ * which is why these are kept complete.
+ */
+
+/** `booking_status` */
 export const BOOKING_STATUS_PILL: Record<string, Pill> = {
+  pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍຊຳລະ' },
   confirmed: { bg: c.successBg, fg: c.successFg, label: 'ຢືນຢັນ' },
-  pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍຖ້າ' },
   staying: { bg: c.accentSoft, fg: c.accentDark, label: 'ກຳລັງພັກ' },
-  done: { bg: c.infoBg, fg: c.infoFg, label: 'ສຳເລັດ' },
+  completed: { bg: c.infoBg, fg: c.infoFg, label: 'ສຳເລັດ' },
   cancelled: { bg: c.dangerBg, fg: c.dangerFg, label: 'ຍົກເລີກ' },
+  no_show: { bg: c.neutralBg, fg: c.neutralFg, label: 'ບໍ່ມາ' },
 };
 
+/** `partner_status` */
 export const PARTNER_STATUS_PILL: Record<string, Pill> = {
-  verified: { bg: c.successBg, fg: c.successFg, label: 'ຢືນຢັນແລ້ວ' },
   pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍອະນຸມັດ' },
+  verified: { bg: c.successBg, fg: c.successFg, label: 'ຢືນຢັນແລ້ວ' },
   rejected: { bg: c.dangerBg, fg: c.dangerFg, label: 'ບໍ່ຜ່ານ' },
+  suspended: { bg: c.neutralBg, fg: c.neutralFg, label: 'ລະງັບ' },
 };
 
+/** `user_status` */
 export const USER_STATUS_PILL: Record<string, Pill> = {
   active: { bg: c.successBg, fg: c.successFg, label: 'ປົກກະຕິ' },
   suspended: { bg: c.dangerBg, fg: c.dangerFg, label: 'ລະງັບ' },
+  deleted: { bg: c.neutralBg, fg: c.neutralFg, label: 'ລຶບແລ້ວ' },
 };
 
+/** `payout_status` */
 export const PAYOUT_STATUS_PILL: Record<string, Pill> = {
   pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍໂອນ' },
+  processing: { bg: c.infoBg, fg: c.infoFg, label: 'ກຳລັງໂອນ' },
   paid: { bg: c.successBg, fg: c.successFg, label: 'ໂອນແລ້ວ' },
+  failed: { bg: c.dangerBg, fg: c.dangerFg, label: 'ລົ້ມເຫຼວ' },
 };
 
+/** `payment_status` */
 export const PAYMENT_STATUS_PILL: Record<string, Pill> = {
-  paid: { bg: c.successBg, fg: c.successFg, label: 'ຈ່າຍແລ້ວ' },
   pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍຈ່າຍ' },
-  refunded: { bg: c.neutralBg, fg: c.neutralFg, label: 'ຄືນເງິນ' },
-  expired: { bg: c.dangerBg, fg: c.dangerFg, label: 'ໝົດອາຍຸ' },
+  paid: { bg: c.successBg, fg: c.successFg, label: 'ຈ່າຍແລ້ວ' },
+  expired: { bg: c.neutralBg, fg: c.neutralFg, label: 'ໝົດອາຍຸ' },
+  failed: { bg: c.dangerBg, fg: c.dangerFg, label: 'ລົ້ມເຫຼວ' },
+  refunded: { bg: c.infoBg, fg: c.infoFg, label: 'ຄືນເງິນແລ້ວ' },
+  partially_refunded: { bg: c.infoBg, fg: c.infoFg, label: 'ຄືນເງິນບາງສ່ວນ' },
+};
+
+/** `review_status` */
+export const REVIEW_STATUS_PILL: Record<string, Pill> = {
+  published: { bg: c.successBg, fg: c.successFg, label: 'ສະແດງຢູ່' },
+  hidden: { bg: c.neutralBg, fg: c.neutralFg, label: 'ເຊື່ອງແລ້ວ' },
+  flagged: { bg: c.dangerBg, fg: c.dangerFg, label: 'ຖືກລາຍງານ' },
+  pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍກວດ' },
 };
 
 export const FALLBACK_PILL: Pill = { bg: c.neutralBg, fg: c.neutralFg, label: '—' };

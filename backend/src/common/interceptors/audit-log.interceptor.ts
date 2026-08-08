@@ -2,12 +2,12 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } fr
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
-import { AUDIT_KEY, AuditMeta } from '../decorators';
+import { AUDIT_KEY, type AuditMeta, type AuthedUser } from '../decorators';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
  * Writes an `audit_logs` row for any route carrying @Audit(...), after the
- * handler succeeds. Failed calls are not logged as actions — a 403 is not an
+ * handler succeeds. A failed call is not logged as an action — a 403 is not an
  * approval.
  *
  * Writing is fire-and-forget: an audit failure must never turn a successful
@@ -33,17 +33,22 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        const actor = req.user;
-        if (!actor?.id) return;
+        const user: AuthedUser | undefined = req.user;
 
         void this.prisma.audit_logs
           .create({
             data: {
-              actor_type: actor.actorType ?? 'admin',
-              actor_id: BigInt(actor.id),
+              // Null is meaningful: the hold sweeper and the payout generator
+              // act with no user behind them.
+              user_id: user?.userId ?? null,
               action: meta.action,
-              target: resolveTarget(meta.target, req.params),
+              module_name: meta.module ?? null,
+              table_name: meta.table ?? null,
+              record_id: recordId(req.params, meta.recordParam),
               ip_address: clientIp(req),
+              user_agent: typeof req.headers['user-agent'] === 'string'
+                ? req.headers['user-agent'].slice(0, 500)
+                : null,
             },
           })
           .catch((err: Error) =>
@@ -54,13 +59,22 @@ export class AuditLogInterceptor implements NestInterceptor {
   }
 }
 
-/** Fills `:param` placeholders, e.g. "partners:id" + {id:"7"} -> "partners:7". */
-function resolveTarget(template: string | undefined, params: Record<string, string>): string | null {
-  if (!template) return null;
-  return template.replace(/:(\w+)/g, (_, name: string) => params?.[name] ?? `:${name}`);
+/** Route params are strings; the column is bigint. Anything unparseable is null. */
+function recordId(params: Record<string, string> | undefined, key: string | undefined): bigint | null {
+  const raw = key ? params?.[key] : undefined;
+  if (!raw || !/^\d+$/.test(raw)) return null;
+  try {
+    return BigInt(raw);
+  } catch {
+    return null;
+  }
 }
 
-function clientIp(req: { headers: Record<string, unknown>; ip?: string; socket?: { remoteAddress?: string } }): string {
+function clientIp(req: {
+  headers: Record<string, unknown>;
+  ip?: string;
+  socket?: { remoteAddress?: string };
+}): string {
   const fwd = req.headers['x-forwarded-for'];
   if (typeof fwd === 'string' && fwd.length) return fwd.split(',')[0].trim();
   return req.ip ?? req.socket?.remoteAddress ?? 'unknown';

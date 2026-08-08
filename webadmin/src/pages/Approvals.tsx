@@ -13,6 +13,12 @@ const TYPE_LABEL: Record<string, string> = {
   guesthouse: 'ເຮືອນພັກ',
 };
 
+const DOC_LABEL: Record<string, string> = {
+  id_card: 'ບັດປະຈຳຕົວ',
+  business_license: 'ໃບທະບຽນວິສາຫະກິດ',
+  bank_book: 'ປຶ້ມບັນຊີທະນາຄານ',
+};
+
 export function Approvals() {
   const qc = useQueryClient();
   const [rejecting, setRejecting] = useState<ApprovalRow | null>(null);
@@ -22,9 +28,11 @@ export function Approvals() {
     queryFn: () => api.get<ApprovalRow[]>('/admin/approvals'),
   });
 
+  // Keyed by partner_status, and a status with no partners is simply absent —
+  // so read every count through `?? 0` rather than assuming the key is there.
   const counts = useQuery({
     queryKey: ['approvals', 'counts'],
-    queryFn: () => api.get<{ pending: number; verified: number; rejected: number }>('/admin/approvals/counts'),
+    queryFn: () => api.get<Partial<Record<string, number>>>('/admin/approvals/counts'),
   });
 
   const invalidate = () => {
@@ -54,9 +62,13 @@ export function Approvals() {
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 22 }}>
-        <StatBox label="ລໍອະນຸມັດ" value={counts.data?.pending} color={c.accent} />
-        <StatBox label="ອະນຸມັດແລ້ວ" value={counts.data?.verified} color={c.successFg} />
-        <StatBox label="ບໍ່ຜ່ານ" value={counts.data?.rejected} color={c.muted} />
+        <StatBox label="ລໍອະນຸມັດ" value={counts.data && (counts.data.pending ?? 0)} color={c.accent} />
+        <StatBox
+          label="ອະນຸມັດແລ້ວ"
+          value={counts.data && (counts.data.verified ?? 0)}
+          color={c.successFg}
+        />
+        <StatBox label="ບໍ່ຜ່ານ" value={counts.data && (counts.data.rejected ?? 0)} color={c.muted} />
       </div>
 
       {list.isLoading ? (
@@ -87,10 +99,8 @@ export function Approvals() {
 
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                      <span style={{ font: f(800, 16), color: c.text }}>
-                        {r.property?.name ?? r.ownerName}
-                      </span>
-                      {r.property && (
+                      <span style={{ font: f(800, 16), color: c.text }}>{r.businessName}</span>
+                      {r.properties.length > 1 && (
                         <span
                           style={{
                             font: f(600, 11),
@@ -100,20 +110,59 @@ export function Approvals() {
                             borderRadius: 7,
                           }}
                         >
-                          {TYPE_LABEL[r.property.type] ?? r.property.type}
+                          {r.properties.length} ທີ່ພັກ
                         </span>
                       )}
                     </div>
-                    <div style={{ font: f(400, 13), color: c.soft, marginBottom: 3 }}>
-                      {r.ownerName} · {r.phone}
+                    <div style={{ font: f(400, 13), color: c.soft, marginBottom: 6 }}>
+                      {r.ownerName ?? '—'} · {r.phone ?? '—'}
                     </div>
-                    <div style={{ font: f(400, 12), color: c.faint }}>
-                      {r.property ? `${r.property.province} · ${r.property.address}` : 'ຍັງບໍ່ໄດ້ເພີ່ມທີ່ພັກ'}
-                    </div>
+
+                    {/* An applicant may bring more than one property, and each is
+                        part of what is being approved — so all of them are shown. */}
+                    {r.properties.length === 0 ? (
+                      <div style={{ font: f(400, 12), color: c.faint }}>ຍັງບໍ່ໄດ້ເພີ່ມທີ່ພັກ</div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 3 }}>
+                        {r.properties.map((p) => (
+                          <div key={p.id} style={{ font: f(400, 12), color: c.faint }}>
+                            <span style={{ color: c.soft, fontWeight: 600 }}>{p.name}</span>
+                            {' · '}
+                            {TYPE_LABEL[p.type] ?? p.type}
+                            {p.province ? ` · ${p.province}` : ''}
+                            {p.address ? ` · ${p.address}` : ''}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     <div style={{ font: f(400, 11), color: c.faint, marginTop: 6 }}>
                       ສະໝັກເມື່ອ {laoDate(r.appliedAt)} · {laoAgo(r.appliedAt)} · {r.email}
-                      {r.bankName ? ` · ${r.bankName}` : ''}
+                      {r.documents.length ? ` · ${r.documents.length} ເອກະສານ` : ' · ບໍ່ມີເອກະສານ'}
                     </div>
+
+                    {r.documents.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                        {r.documents.map((d) => (
+                          <a
+                            key={d.id}
+                            href={d.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              font: f(600, 11),
+                              color: c.infoFg,
+                              background: c.infoBg,
+                              padding: '3px 9px',
+                              borderRadius: 7,
+                              textDecoration: 'none',
+                            }}
+                          >
+                            📄 {DOC_LABEL[d.type] ?? d.type}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', gap: 10, flex: 'none' }}>
@@ -184,7 +233,7 @@ function RejectDialog({
 
   return (
     <Modal
-      title={`ປະຕິເສດ ${row.property?.name ?? row.ownerName}`}
+      title={`ປະຕິເສດ ${row.businessName}`}
       onClose={onClose}
       footer={
         <>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
-import type { Paged, CustomerRow } from '../lib/types';
+import type { Paged, CustomerRow, CustomerSummary } from '../lib/types';
 import { c, f, pillFor, USER_STATUS_PILL, avatarFor } from '../theme';
 import { kip, laoDate, initials } from '../lib/format';
 import {
@@ -31,7 +31,7 @@ export function Customers() {
 
   const summary = useQuery({
     queryKey: ['customers', 'summary'],
-    queryFn: () => api.get<{ total: number; active: number; suspended: number }>('/admin/customers/summary'),
+    queryFn: () => api.get<CustomerSummary>('/admin/customers/summary'),
   });
 
   const list = useQuery({
@@ -100,15 +100,15 @@ export function Customers() {
               header: 'ລູກຄ້າ',
               render: (r) => (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                  <Avatar gradient={avatarFor(r.email)} label={initials(r.full_name)} />
+                  <Avatar gradient={avatarFor(r.email)} label={initials(r.fullName ?? r.email)} />
                   <div>
-                    <div style={{ font: f(700, 13), color: c.text }}>{r.full_name}</div>
+                    <div style={{ font: f(700, 13), color: c.text }}>{r.fullName ?? '—'}</div>
                     <div style={{ font: f(400, 11), color: c.faint }}>{r.email}</div>
                   </div>
                 </div>
               ),
             },
-            { key: 'phone', header: 'ເບີໂທ', render: (r) => r.phone },
+            { key: 'phone', header: 'ເບີໂທ', render: (r) => r.phone ?? '—' },
             {
               key: 'tier',
               header: 'ຊັ້ນ',
@@ -119,14 +119,14 @@ export function Customers() {
                   <Pill bg="#E4E2DC" fg="#5C5348">Silver</Pill>
                 ),
             },
-            { key: 'trips', header: 'ຈຳນວນທຮິບ', align: 'right', render: (r) => r.trips },
+            { key: 'trips', header: 'ຈຳນວນທຮິບ', align: 'right', render: (r) => r.bookings },
             {
               key: 'spent',
               header: 'ໃຊ້ຈ່າຍລວມ',
               align: 'right',
               render: (r) => <b style={{ color: c.accent }}>{kip(r.spent)}</b>,
             },
-            { key: 'joined', header: 'ສະໝັກເມື່ອ', render: (r) => laoDate(r.created_at) },
+            { key: 'joined', header: 'ສະໝັກເມື່ອ', render: (r) => laoDate(r.createdAt) },
             {
               key: 'status',
               header: 'ສະຖານະ',
@@ -188,12 +188,12 @@ export function Customers() {
           <div style={{ font: f(400, 13, 21), color: c.soft }}>
             {confirm.status === 'active' ? (
               <>
-                <b>{confirm.full_name}</b> ຈະບໍ່ສາມາດຈອງທີ່ພັກໄດ້ອີກຈົນກວ່າຈະກູ້ຄືນ.
-                ການຈອງທີ່ມີຢູ່ແລ້ວຈະບໍ່ຖືກຍົກເລີກ.
+                <b>{confirm.fullName ?? confirm.email}</b> ຈະຖືກອອກຈາກລະບົບທັນທີ ແລະ
+                ຈະບໍ່ສາມາດຈອງທີ່ພັກໄດ້ອີກຈົນກວ່າຈະກູ້ຄືນ. ການຈອງທີ່ມີຢູ່ແລ້ວຈະບໍ່ຖືກຍົກເລີກ.
               </>
             ) : (
               <>
-                <b>{confirm.full_name}</b> ຈະກັບມາໃຊ້ງານໄດ້ຕາມປົກກະຕິ.
+                <b>{confirm.fullName ?? confirm.email}</b> ຈະກັບມາໃຊ້ງານໄດ້ຕາມປົກກະຕິ.
               </>
             )}
           </div>

@@ -10,27 +10,27 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
+import { user_role } from '@prisma/client';
 import type { Request, Response } from 'express';
 import { PaymentsService } from './payments.service';
 import { SimulatedPaymentProvider } from './simulated.provider';
-import { Actor, CurrentUser, Public, type AuthedUser } from '../common/decorators';
-import { ACTOR } from '../common/actors';
+import { CurrentUser, Public, Roles, type AuthedUser } from '../common/decorators';
 
 @Controller('customer')
-@Actor(ACTOR.USER)
+@Roles(user_role.CUSTOMER)
 export class CustomerPaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
-  /** Issues (or returns) the QR for a booking. */
+  /** Issues, or returns, the QR for a booking. */
   @Post('bookings/:id/pay')
   pay(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
-    return this.payments.createForBooking(user.id, BigInt(id));
+    return this.payments.createForBooking(user.userId, BigInt(id));
   }
 
   /** Polled by the "waiting for payment" screen. */
   @Get('payments/:id')
   findOne(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
-    return this.payments.findOne(user.id, BigInt(id));
+    return this.payments.findOne(user.userId, BigInt(id));
   }
 }
 
@@ -80,9 +80,9 @@ export class PaymentsWebhookController {
     const payment = await this.payments.requirePayment(BigInt(paymentId));
     const body = Buffer.from(
       JSON.stringify({
-        reference: `STL-${payment.booking_id.toString(16).toUpperCase().padStart(4, '0')}`,
-        txnRef: payment.txn_ref ?? `SIM-${payment.id}`,
-        amount: payment.amount,
+        reference: payment.bookings.booking_code,
+        txnRef: payment.txn_ref ?? `SIM-${payment.payment_id}`,
+        amount: Number(payment.amount),
         status: 'paid',
       }),
       'utf8',

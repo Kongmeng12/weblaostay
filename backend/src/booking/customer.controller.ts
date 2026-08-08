@@ -1,0 +1,352 @@
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { booking_status, user_role } from '@prisma/client';
+import { BookingService } from './booking.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { CurrentUser, Roles, type AuthedUser } from '../common/decorators';
+import { paged } from '../common/dto/pagination.dto';
+import { kipOf, rateOf } from '../common/money';
+import {
+  CancelBookingDto,
+  CreateBookingDto,
+  CreateReviewDto,
+  ListBookingsDto,
+} from './booking.dto';
+
+class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(255)
+  fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  @MaxLength(50)
+  phone?: string;
+}
+
+@Controller('customer')
+@Roles(user_role.CUSTOMER)
+export class CustomerController {
+  constructor(
+    private readonly bookings: BookingService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  // ── bookings ──────────────────────────────────────────────────────────────
+
+  /** Prices a stay before committing to it. Writes nothing. */
+  @HttpCode(200)
+  @Post('bookings/quote')
+  quote(@Body() dto: CreateBookingDto) {
+    return this.bookings.quote(dto);
+  }
+
+  @Post('bookings')
+  create(@CurrentUser() user: AuthedUser, @Body() dto: CreateBookingDto) {
+    return this.bookings.create(user.userId, dto);
+  }
+
+  @Get('bookings')
+  async list(@CurrentUser() user: AuthedUser, @Query() query: ListBookingsDto) {
+    const where = {
+      customer_id: user.userId,
+      deleted_at: null,
+      ...(query.status ? { status: query.status } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.bookings.findMany({
+        where,
+        skip: query.skip,
+        take: query.limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          properties: {
+            select: {
+              property_id: true,
+              property_name: true,
+              provinces: { select: { province_name_lo: true } },
+              property_images: {
+                select: { image_url: true },
+                orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }],
+                take: 1,
+              },
+            },
+          },
+          booking_items: { include: { room_types: { select: { type_name: true } } } },
+          payments: { select: { payment_id: true, status: true }, orderBy: { created_at: 'desc' } },
+          reviews: { select: { review_id: true } },
+        },
+      }),
+      this.prisma.bookings.count({ where }),
+    ]);
+
+    return paged(
+      rows.map((b) => ({
+        id: b.booking_id.toString(),
+        code: b.booking_code,
+        propertyId: b.properties.property_id.toString(),
+        property: b.properties.property_name,
+        province: b.properties.provinces?.province_name_lo ?? null,
+        photo: b.properties.property_images[0]?.image_url ?? null,
+        roomType: b.booking_items[0]?.room_types.type_name ?? null,
+        checkIn: b.check_in,
+        checkOut: b.check_out,
+        nights: b.nights,
+        guests: b.total_guests,
+        total: kipOf(b.total_amount),
+        status: b.status,
+        holdExpiresAt: b.hold_expires_at,
+        paymentId: b.payments[0]?.payment_id.toString() ?? null,
+        paymentStatus: b.payments[0]?.status ?? null,
+        reviewed: b.reviews !== null,
+      })),
+      total,
+      query,
+    );
+  }
+
+  @Get('bookings/:id')
+  findOne(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
+    return this.bookings.findOne(BigInt(id), user.userId);
+  }
+
+  @Post('bookings/:id/cancel')
+  @HttpCode(200)
+  async cancel(
+    @CurrentUser() user: AuthedUser,
+    @Param('id') id: string,
+    @Body() dto: CancelBookingDto,
+  ) {
+    const bookingId = BigInt(id);
+    // Ownership check first: findOne is scoped to this user and 404s otherwise.
+    await this.bookings.findOne(bookingId, user.userId);
+    return this.bookings.cancel(bookingId, dto.reason, { id: user.userId, role: user.role });
+  }
+
+  // ── reviews ───────────────────────────────────────────────────────────────
+
+  /**
+   * One review per completed stay. The property's score is **not** recalculated
+   * here — the `t_reviews_recalc_rating` trigger does it, so a review written
+   * by any path keeps `rating_avg` honest.
+   */
+  @Post('bookings/:id/review')
+  async review(
+    @CurrentUser() user: AuthedUser,
+    @Param('id') id: string,
+    @Body() dto: CreateReviewDto,
+  ) {
+    const bookingId = BigInt(id);
+
+    const booking = await this.prisma.bookings.findFirst({
+      where: { booking_id: bookingId, customer_id: user.userId },
+      include: { reviews: { select: { review_id: true } } },
+    });
+
+    if (!booking) throw new NotFoundException(`ບໍ່ພົບການຈອງ #${bookingId} · Booking not found`);
+    if (booking.status !== booking_status.completed) {
+      throw new BadRequestException(
+        'ຂຽນຮີວິວໄດ້ຫຼັງພັກຈົບແລ້ວ · You can review a stay once it is complete',
+      );
+    }
+    if (booking.reviews) {
+      throw new ConflictException('ຮີວິວການຈອງນີ້ແລ້ວ · You have already reviewed this stay');
+    }
+
+    const review = await this.prisma.reviews.create({
+      data: {
+        booking_id: bookingId,
+        customer_id: user.userId,
+        property_id: booking.property_id,
+        overall_rating: dto.stars,
+        cleanliness_rating: dto.cleanliness ?? null,
+        service_rating: dto.service ?? null,
+        value_rating: dto.value ?? null,
+        title: dto.title ?? null,
+        comment: dto.comment ?? null,
+      },
+    });
+
+    const property = await this.prisma.properties.findUniqueOrThrow({
+      where: { property_id: booking.property_id },
+      select: { rating_avg: true, review_count: true },
+    });
+
+    return {
+      id: review.review_id.toString(),
+      stars: rateOf(review.overall_rating),
+      propertyRating: rateOf(property.rating_avg),
+      propertyReviewCount: property.review_count,
+    };
+  }
+
+  // ── profile and wishlist ──────────────────────────────────────────────────
+
+  @Get('me')
+  async me(@CurrentUser() user: AuthedUser) {
+    const row = await this.prisma.users.findUniqueOrThrow({
+      where: { user_id: user.userId },
+      include: { user_profiles: true },
+    });
+
+    const counts = await this.prisma.bookings.groupBy({
+      by: ['status'],
+      where: { customer_id: user.userId, deleted_at: null },
+      _count: true,
+    });
+    const byStatus = Object.fromEntries(counts.map((c) => [c.status, c._count]));
+
+    return {
+      id: row.user_id.toString(),
+      email: row.email,
+      phone: row.phone,
+      fullName: row.user_profiles?.full_name ?? null,
+      avatarUrl: row.user_profiles?.avatar_url ?? null,
+      tier: row.user_profiles?.tier ?? 'silver',
+      points: row.user_profiles?.points ?? 0,
+      isVerified: row.is_verified,
+      bookings: {
+        total: counts.reduce((sum, c) => sum + c._count, 0),
+        upcoming: (byStatus[booking_status.pending] ?? 0) + (byStatus[booking_status.confirmed] ?? 0),
+        completed: byStatus[booking_status.completed] ?? 0,
+      },
+    };
+  }
+
+  @Patch('me')
+  async updateMe(@CurrentUser() user: AuthedUser, @Body() dto: UpdateProfileDto) {
+    if (dto.phone !== undefined) {
+      await this.prisma.users.update({
+        where: { user_id: user.userId },
+        data: { phone: dto.phone },
+      });
+    }
+    if (dto.fullName !== undefined) {
+      await this.prisma.user_profiles.upsert({
+        where: { user_id: user.userId },
+        create: { user_id: user.userId, full_name: dto.fullName },
+        update: { full_name: dto.fullName },
+      });
+    }
+    return this.me(user);
+  }
+
+  @Get('wishlist')
+  async wishlist(@CurrentUser() user: AuthedUser) {
+    const rows = await this.prisma.wishlist_items.findMany({
+      where: { user_id: user.userId },
+      orderBy: { created_at: 'desc' },
+      include: {
+        properties: {
+          select: {
+            property_id: true,
+            property_name: true,
+            property_type: true,
+            rating_avg: true,
+            review_count: true,
+            provinces: { select: { province_name_lo: true } },
+            property_images: {
+              select: { image_url: true },
+              orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }],
+              take: 1,
+            },
+            room_types: {
+              where: { status: 'active', deleted_at: null },
+              orderBy: { base_price: 'asc' },
+              take: 1,
+              select: { base_price: true },
+            },
+          },
+        },
+      },
+    });
+
+    return rows.map((w) => ({
+      propertyId: w.properties.property_id.toString(),
+      name: w.properties.property_name,
+      type: w.properties.property_type,
+      province: w.properties.provinces?.province_name_lo ?? null,
+      rating: rateOf(w.properties.rating_avg),
+      reviewCount: w.properties.review_count,
+      photo: w.properties.property_images[0]?.image_url ?? null,
+      fromPricePerNight: w.properties.room_types[0]
+        ? kipOf(w.properties.room_types[0].base_price)
+        : null,
+    }));
+  }
+
+  @Post('wishlist/:propertyId')
+  @HttpCode(201)
+  async addToWishlist(@CurrentUser() user: AuthedUser, @Param('propertyId') propertyId: string) {
+    const id = BigInt(propertyId);
+
+    const property = await this.prisma.properties.findFirst({
+      where: { property_id: id, deleted_at: null, partners: { status: 'verified' } },
+      select: { property_id: true },
+    });
+    if (!property) throw new NotFoundException(`ບໍ່ພົບທີ່ພັກ #${id} · Property not found`);
+
+    const existing = await this.prisma.wishlist_items.findFirst({
+      where: { user_id: user.userId, property_id: id },
+    });
+    if (existing) throw new ConflictException('ຢູ່ໃນລາຍການທີ່ມັກແລ້ວ · Already in your wishlist');
+
+    const created = await this.prisma.wishlist_items.create({
+      data: { user_id: user.userId, property_id: id },
+    });
+    return { id: created.wishlist_item_id.toString(), propertyId: propertyId };
+  }
+
+  @Post('wishlist/:propertyId/remove')
+  @HttpCode(200)
+  async removeFromWishlist(
+    @CurrentUser() user: AuthedUser,
+    @Param('propertyId') propertyId: string,
+  ) {
+    const { count } = await this.prisma.wishlist_items.deleteMany({
+      where: { user_id: user.userId, property_id: BigInt(propertyId) },
+    });
+    return { removed: count };
+  }
+
+  // ── notifications ─────────────────────────────────────────────────────────
+
+  @Get('notifications')
+  async notifications(@CurrentUser() user: AuthedUser) {
+    const [items, unread] = await Promise.all([
+      this.prisma.notifications.findMany({
+        where: { user_id: user.userId },
+        orderBy: { created_at: 'desc' },
+        take: 50,
+      }),
+      this.prisma.notifications.count({ where: { user_id: user.userId, is_read: false } }),
+    ]);
+
+    return {
+      items: items.map((n) => ({
+        id: n.notification_id.toString(),
+        title: n.title,
+        message: n.message,
+        type: n.notification_type,
+        isRead: n.is_read,
+        createdAt: n.created_at,
+      })),
+      unread,
+    };
+  }
+
+  @Post('notifications/read-all')
+  @HttpCode(200)
+  async readAll(@CurrentUser() user: AuthedUser) {
+    const { count } = await this.prisma.notifications.updateMany({
+      where: { user_id: user.userId, is_read: false },
+      data: { is_read: true, read_at: new Date() },
+    });
+    return { updated: count };
+  }
+}

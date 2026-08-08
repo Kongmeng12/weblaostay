@@ -4,14 +4,16 @@ import { c, f, radius } from '../theme';
 import { Button, inputStyle } from '../components/ui';
 
 /**
- * Login and first-run registration, laid out as the two-panel card from the
- * design: dark brand side on the left, form on the right.
+ * Sign-in, laid out as the two-panel card from the design: dark brand side on
+ * the left, form on the right.
+ *
+ * There is no sign-up here on purpose. The API offers no public route to an
+ * administrator account — staff are added from Settings by an existing
+ * super_admin, so an open registration form would be a door onto nothing.
  */
 export function LoginPage() {
-  const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -21,8 +23,7 @@ export function LoginPage() {
     setError(null);
     setBusy(true);
     try {
-      if (mode === 'login') await signIn(email.trim(), password);
-      else await signUp(email.trim(), name.trim(), password);
+      await signIn(email.trim(), password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ເຂົ້າສູ່ລະບົບບໍ່ໄດ້');
     } finally {
@@ -115,34 +116,12 @@ export function LoginPage() {
             justifyContent: 'center',
           }}
         >
-          <div style={{ font: f(800, 26), color: c.text, marginBottom: 6 }}>
-            {mode === 'login' ? 'ເຂົ້າສູ່ລະບົບ' : 'ສ້າງບັນຊີຜູ້ດູແລ'}
-          </div>
+          <div style={{ font: f(800, 26), color: c.text, marginBottom: 6 }}>ເຂົ້າສູ່ລະບົບ</div>
           <div style={{ font: f(400, 13), color: c.muted, marginBottom: 28 }}>
-            {mode === 'login'
-              ? 'ໃສ່ອີເມວ ແລະ ລະຫັດຜ່ານຂອງທ່ານ'
-              : 'ບັນຊີ super_admin ທຳອິດຂອງລະບົບ'}
+            ໃສ່ອີເມວ ແລະ ລະຫັດຜ່ານຂອງທ່ານ
           </div>
 
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {mode === 'register' && (
-              <label>
-                <span
-                  style={{ font: f(600, 13), color: c.text, display: 'block', marginBottom: 8 }}
-                >
-                  ຊື່ ແລະ ນາມສະກຸນ
-                </span>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  minLength={2}
-                  style={inputStyle}
-                  placeholder="ອຳນວຍ ຈັນດາ"
-                />
-              </label>
-            )}
-
             <label>
               <span style={{ font: f(600, 13), color: c.text, display: 'block', marginBottom: 8 }}>
                 ອີເມວ
@@ -168,7 +147,7 @@ export function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                autoComplete="current-password"
                 style={inputStyle}
                 placeholder="••••••••"
               />
@@ -190,50 +169,15 @@ export function LoginPage() {
             )}
 
             <Button type="submit" size="lg" disabled={busy} style={{ marginTop: 4 }}>
-              {busy ? 'ກຳລັງດຳເນີນການ...' : mode === 'login' ? 'ເຂົ້າສູ່ລະບົບ' : 'ສ້າງບັນຊີ'}
+              {busy ? 'ກຳລັງດຳເນີນການ...' : 'ເຂົ້າສູ່ລະບົບ'}
             </Button>
           </form>
 
-          <div style={{ marginTop: 22, font: f(400, 12), color: c.muted, textAlign: 'center' }}>
-            {mode === 'login' ? (
-              <>
-                ຍັງບໍ່ມີບັນຊີຜູ້ດູແລ?{' '}
-                <button
-                  onClick={() => {
-                    setMode('register');
-                    setError(null);
-                  }}
-                  style={linkButton}
-                >
-                  ສ້າງບັນຊີທຳອິດ
-                </button>
-              </>
-            ) : (
-              <>
-                ມີບັນຊີແລ້ວ?{' '}
-                <button
-                  onClick={() => {
-                    setMode('login');
-                    setError(null);
-                  }}
-                  style={linkButton}
-                >
-                  ເຂົ້າສູ່ລະບົບ
-                </button>
-              </>
-            )}
+          <div style={{ marginTop: 22, font: f(400, 12, 20), color: c.muted, textAlign: 'center' }}>
+            ຍັງບໍ່ມີບັນຊີ? ຕິດຕໍ່ super_admin ໃຫ້ເພີ່ມໃຫ້ຢູ່ໜ້າ ຕັ້ງຄ່າ → ຜູ້ດູແລ
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-const linkButton = {
-  background: 'none',
-  border: 'none',
-  color: c.accent,
-  font: f(700, 12),
-  cursor: 'pointer',
-  padding: 0,
-} as const;

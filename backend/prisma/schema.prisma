@@ -8,328 +8,1486 @@ datasource db {
   schemas  = ["public"]
 }
 
-model admins {
-  id             BigInt           @id @default(autoincrement())
-  email          String           @unique @db.VarChar(255)
-  name           String           @db.VarChar(255)
-  password_hash  String           @db.VarChar(255)
-  role           String           @db.VarChar(50)
-  last_login_at  DateTime?        @db.Timestamptz(6)
-  app_settings   app_settings[]
-  refresh_tokens refresh_tokens[]
-
-  @@schema("public")
-}
-
 model app_settings {
-  key        String   @id @db.VarChar(100)
-  value      Json
-  updated_at DateTime @default(now()) @db.Timestamptz(6)
-  updated_by BigInt?
-  admins     admins?  @relation(fields: [updated_by], references: [id], onUpdate: NoAction)
+  setting_id    BigInt   @id @default(autoincrement())
+  setting_key   String   @unique @db.VarChar(120)
+  setting_value String?
+  description   String?  @db.VarChar(255)
+  updated_by    BigInt?
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+  admins        users?   @relation(fields: [updated_by], references: [user_id], onUpdate: NoAction)
 
+  @@index([updated_by], map: "idx_app_settings_updater")
   @@schema("public")
 }
 
 model audit_logs {
-  id         BigInt    @id @default(autoincrement())
-  actor_type String    @db.VarChar(20)
-  actor_id   BigInt
-  action     String    @db.VarChar(100)
-  target     String?   @db.VarChar(100)
-  ip_address String?   @db.VarChar(50)
-  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  audit_log_id BigInt   @id @default(autoincrement())
+  user_id      BigInt?
+  action       String   @db.VarChar(120)
+  module_name  String?  @db.VarChar(80)
+  table_name   String?  @db.VarChar(80)
+  record_id    BigInt?
+  old_values   Json?
+  new_values   Json?
+  ip_address   String?  @db.VarChar(64)
+  user_agent   String?  @db.VarChar(500)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  users        users?   @relation(fields: [user_id], references: [user_id], onUpdate: NoAction)
 
-  @@index([actor_type, actor_id, created_at(sort: Desc)], map: "idx_audit_logs_actor")
   @@index([created_at(sort: Desc)], map: "idx_audit_logs_created")
+  @@index([table_name, record_id], map: "idx_audit_logs_record")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_audit_logs_user")
   @@schema("public")
 }
 
 model booking_items {
-  id              BigInt   @id @default(autoincrement())
+  booking_item_id BigInt     @id @default(autoincrement())
   booking_id      BigInt
-  room_id         BigInt
+  room_type_id    BigInt
+  quantity        Int        @default(1)
   nights          Int
-  price_per_night Int
-  bookings        bookings @relation(fields: [booking_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  rooms           rooms    @relation(fields: [room_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  price_per_night BigInt
+  subtotal        BigInt
+  created_at      DateTime   @default(now()) @db.Timestamptz(6)
+  bookings        bookings   @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade, onUpdate: NoAction)
+  room_types      room_types @relation(fields: [room_type_id], references: [room_type_id], onUpdate: NoAction)
 
   @@index([booking_id], map: "idx_booking_items_booking")
-  @@index([room_id], map: "idx_booking_items_room")
+  @@index([room_type_id], map: "idx_booking_items_room_type")
   @@schema("public")
 }
 
 model bookings {
-  id            BigInt          @id @default(autoincrement())
-  user_id       BigInt
-  property_id   BigInt
-  promo_id      BigInt?
-  room_id       BigInt
-  source        String?         @default("app") @db.VarChar(20)
-  check_in      DateTime        @db.Date
-  check_out     DateTime        @db.Date
-  guests        Int
-  subtotal      Int
-  fee           Int
-  total         Int
-  status        String?         @default("confirmed") @db.VarChar(20)
-  created_at    DateTime?       @default(now()) @db.Timestamptz(6)
-  discount      Int             @default(0)
-  booking_items booking_items[]
-  promos        promos?         @relation(fields: [promo_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  properties    properties      @relation(fields: [property_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  rooms         rooms           @relation(fields: [room_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users         users           @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  cancellations cancellations[]
-  chat_messages chat_messages[]
-  payments      payments[]
-  reviews       reviews[]
+  booking_id             BigInt                 @id @default(autoincrement())
+  booking_code           String                 @unique @db.VarChar(32)
+  customer_id            BigInt
+  property_id            BigInt
+  cancellation_policy_id BigInt?
+  source                 booking_source         @default(app)
+  check_in               DateTime               @db.Date
+  check_out              DateTime               @db.Date
+  nights                 Int
+  total_guests           Int                    @default(1)
+  subtotal_amount        BigInt                 @default(0)
+  discount_amount        BigInt                 @default(0)
+  tax_amount             BigInt                 @default(0)
+  service_fee            BigInt                 @default(0)
+  cleaning_fee           BigInt                 @default(0)
+  commission_rate        Decimal                @default(0) @db.Decimal(5, 2)
+  commission_amount      BigInt                 @default(0)
+  total_amount           BigInt                 @default(0)
+  payout_amount          BigInt                 @default(0)
+  currency               String                 @default("LAK") @db.Char(3)
+  status                 booking_status         @default(pending)
+  hold_expires_at        DateTime?              @db.Timestamptz(6)
+  special_request        String?
+  idempotency_key        String?                @unique @db.VarChar(255)
+  deleted_at             DateTime?              @db.Timestamptz(6)
+  created_at             DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime               @default(now()) @db.Timestamptz(6)
+  booking_cancellations  booking_cancellations?
+  booking_guests         booking_guests[]
+  booking_items          booking_items[]
+  booking_status_logs    booking_status_logs[]
+  cancellation_policies  cancellation_policies? @relation(fields: [cancellation_policy_id], references: [cancellation_policy_id], onUpdate: NoAction)
+  users                  users                  @relation(fields: [customer_id], references: [user_id], onUpdate: NoAction)
+  properties             properties             @relation(fields: [property_id], references: [property_id], onUpdate: NoAction)
+  conversations          conversations[]
+  coupon_usages          coupon_usages[]
+  ledger_entries         ledger_entries[]
+  payments               payments[]
+  payout_items           payout_items[]
+  refunds                refunds[]
+  reviews                reviews?
 
-  @@index([check_in], map: "idx_bookings_checkin")
-  @@index([created_at(sort: Desc)], map: "idx_bookings_created")
-  @@index([promo_id], map: "idx_bookings_promo")
-  @@index([property_id], map: "idx_bookings_property")
-  @@index([room_id], map: "idx_bookings_room")
   @@index([status, created_at(sort: Desc)], map: "idx_bookings_status_created")
-  @@index([user_id], map: "idx_bookings_user")
-  @@index([status, check_out], map: "idx_bookings_status_checkout")
-  @@index([user_id, created_at(sort: Desc)], map: "idx_bookings_user_created")
-  @@schema("public")
-}
-
-model cancellations {
-  id            BigInt    @id @default(autoincrement())
-  booking_id    BigInt
-  reason        String?   @db.VarChar(255)
-  fee           Int
-  refund_amount Int
-  created_at    DateTime? @default(now()) @db.Timestamptz(6)
-  bookings      bookings  @relation(fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([booking_id], map: "idx_cancellations_booking")
-  @@schema("public")
-}
-
-model chat_messages {
-  id          BigInt    @id @default(autoincrement())
-  booking_id  BigInt
-  sender_type String    @db.VarChar(20)
-  body        String
-  sent_at     DateTime? @default(now()) @db.Timestamptz(6)
-  read_at     DateTime? @db.Timestamptz(6)
-  bookings    bookings  @relation(fields: [booking_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([booking_id, sent_at], map: "idx_chat_messages_booking")
+  @@index([check_out], map: "idx_bookings_checkout")
+  @@index([customer_id, status], map: "idx_bookings_customer_status")
+  @@index([cancellation_policy_id], map: "idx_bookings_policy")
+  @@index([property_id, check_in], map: "idx_bookings_property_checkin")
   @@schema("public")
 }
 
 model notifications {
-  id             BigInt    @id @default(autoincrement())
-  recipient_type String    @db.VarChar(20)
-  recipient_id   BigInt
-  title          String    @db.VarChar(255)
-  body           String
-  type           String    @db.VarChar(50)
-  is_read        Boolean?  @default(false)
-  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  notification_id   BigInt            @id @default(autoincrement())
+  user_id           BigInt
+  title             String            @db.VarChar(255)
+  message           String?
+  notification_type notification_type @default(system)
+  reference_type    String?           @db.VarChar(60)
+  reference_id      BigInt?
+  is_read           Boolean           @default(false)
+  read_at           DateTime?         @db.Timestamptz(6)
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  users             users             @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@index([recipient_type, recipient_id, is_read, created_at(sort: Desc)], map: "idx_notifications_recipient")
+  @@index([user_id, is_read, created_at(sort: Desc)], map: "idx_notifications_user")
   @@schema("public")
 }
 
 model partners {
-  id              BigInt           @id @default(autoincrement())
-  email           String           @unique @db.VarChar(255)
-  password_hash   String           @db.VarChar(255)
-  owner_name      String           @db.VarChar(255)
-  phone           String           @db.VarChar(50)
-  status          String?          @default("pending") @db.VarChar(20)
-  bank_name       String?          @db.VarChar(100)
-  bank_account    String?          @db.VarChar(100)
-  commission_rate Decimal?         @default(5.00) @db.Decimal(5, 2)
-  created_at      DateTime?        @default(now()) @db.Timestamptz(6)
-  payouts         payouts[]
-  properties      properties[]
-  refresh_tokens  refresh_tokens[]
+  partner_id              BigInt                  @id @default(autoincrement())
+  user_id                 BigInt                  @unique
+  business_name           String                  @db.VarChar(255)
+  business_type           business_type           @default(individual)
+  tax_id                  String?                 @db.VarChar(100)
+  contact_phone           String?                 @db.VarChar(50)
+  default_commission_rate Decimal                 @default(5.00) @db.Decimal(5, 2)
+  walkin_commission_rate  Decimal                 @default(2.50) @db.Decimal(5, 2)
+  status                  partner_status          @default(pending)
+  verified_at             DateTime?               @db.Timestamptz(6)
+  deleted_at              DateTime?               @db.Timestamptz(6)
+  created_at              DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                @default(now()) @db.Timestamptz(6)
+  ledger_entries          ledger_entries[]
+  partner_bank_accounts   partner_bank_accounts[]
+  partner_documents       partner_documents[]
+  users                   users                   @relation(fields: [user_id], references: [user_id], onUpdate: NoAction)
+  payouts                 payouts[]
+  promotion_partners      promotion_partners[]
+  properties              properties[]
 
   @@index([status], map: "idx_partners_status")
   @@schema("public")
 }
 
 model payments {
-  id              BigInt    @id @default(autoincrement())
+  payment_id      BigInt           @id @default(autoincrement())
   booking_id      BigInt
-  method          String?   @default("phajay_qr") @db.VarChar(50)
-  idempotency_key String    @unique @db.VarChar(255)
+  payment_method  payment_method   @default(phajay_qr)
+  idempotency_key String           @unique @db.VarChar(255)
   qr_payload      String?
-  amount          Int
-  status          String?   @default("pending") @db.VarChar(20)
-  paid_at         DateTime? @db.Timestamptz(6)
-  txn_ref         String?   @db.VarChar(100)
-  expires_at      DateTime? @db.Timestamptz(6)
-  raw_callback    Json?
-  bookings        bookings  @relation(fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  amount          BigInt
+  status          payment_status   @default(pending)
+  txn_ref         String?          @db.VarChar(120)
+  paid_at         DateTime?        @db.Timestamptz(6)
+  expired_at      DateTime?        @db.Timestamptz(6)
+  created_at      DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime         @default(now()) @db.Timestamptz(6)
+  payment_events  payment_events[]
+  bookings        bookings         @relation(fields: [booking_id], references: [booking_id], onUpdate: NoAction)
+  refunds         refunds[]
 
-  @@index([booking_id], map: "idx_payments_booking")
-  @@index([status], map: "idx_payments_status")
   @@index([txn_ref], map: "idx_payments_txn_ref")
+  @@index([booking_id, status], map: "idx_payments_booking_status")
   @@schema("public")
 }
 
 model payouts {
-  id           BigInt    @id @default(autoincrement())
-  partner_id   BigInt
-  period_start DateTime  @db.Date
-  period_end   DateTime  @db.Date
-  gmv          Int
-  commission   Int
-  net_amount   Int
-  status       String?   @default("pending") @db.VarChar(20)
-  paid_at      DateTime? @db.Timestamptz(6)
-  partners     partners  @relation(fields: [partner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payout_id             BigInt                 @id @default(autoincrement())
+  partner_id            BigInt
+  bank_account_id       BigInt?
+  period_start          DateTime               @db.Date
+  period_end            DateTime               @db.Date
+  gross_amount          BigInt                 @default(0)
+  commission_amount     BigInt                 @default(0)
+  net_amount            BigInt                 @default(0)
+  status                payout_status          @default(pending)
+  confirmed_by          BigInt?
+  paid_at               DateTime?              @db.Timestamptz(6)
+  created_at            DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime               @default(now()) @db.Timestamptz(6)
+  payout_items          payout_items[]
+  partner_bank_accounts partner_bank_accounts? @relation(fields: [bank_account_id], references: [bank_account_id], onUpdate: NoAction)
+  users                 users?                 @relation(fields: [confirmed_by], references: [user_id], onUpdate: NoAction)
+  partners              partners               @relation(fields: [partner_id], references: [partner_id], onUpdate: NoAction)
 
   @@index([partner_id, status], map: "idx_payouts_partner_status")
   @@index([period_start, period_end], map: "idx_payouts_period")
-  @@schema("public")
-}
-
-model promos {
-  id         BigInt     @id @default(autoincrement())
-  code       String     @unique @db.VarChar(50)
-  type       String     @db.VarChar(20)
-  value      Int
-  used_count Int?       @default(0)
-  expires_at DateTime   @db.Date
-  is_active  Boolean?   @default(true)
-  bookings   bookings[]
-
+  @@index([bank_account_id], map: "idx_payouts_bank_account")
+  @@index([confirmed_by], map: "idx_payouts_confirmer")
   @@schema("public")
 }
 
 model properties {
-  id           BigInt      @id @default(autoincrement())
-  partner_id   BigInt
-  name         String      @db.VarChar(255)
-  type         String      @db.VarChar(50)
-  province     String      @db.VarChar(100)
-  address      String
-  lat          Decimal?    @db.Decimal(10, 8)
-  lng          Decimal?    @db.Decimal(11, 8)
-  rating       Decimal?    @default(0.00) @db.Decimal(3, 2)
-  review_count Int?        @default(0)
-  amenities    Json?
-  photos       Json?
-  bookings     bookings[]
-  partners     partners    @relation(fields: [partner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  reviews      reviews[]
-  rooms        rooms[]
-  wishlists    wishlists[]
+  property_id            BigInt                    @id @default(autoincrement())
+  partner_id             BigInt
+  cancellation_policy_id BigInt?
+  property_name          String                    @db.VarChar(255)
+  property_type          property_type
+  description            String?
+  phone                  String?                   @db.VarChar(50)
+  email                  String?                   @db.VarChar(255)
+  website                String?                   @db.VarChar(255)
+  province_id            BigInt?
+  district_id            BigInt?
+  village_id             BigInt?
+  address_detail         String?
+  latitude               Decimal?                  @db.Decimal(10, 7)
+  longitude              Decimal?                  @db.Decimal(11, 7)
+  geog                   Unsupported("geography")? @default(dbgenerated("\nCASE\n    WHEN ((latitude IS NULL) OR (longitude IS NULL)) THEN NULL::geography\n    ELSE (st_setsrid(st_makepoint((longitude)::double precision, (latitude)::double precision), 4326))::geography\nEND"))
+  search_vector          Unsupported("tsvector")?  @default(dbgenerated("to_tsvector('simple'::regconfig, (((COALESCE(property_name, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text)))"))
+  rating_avg             Decimal                   @default(0) @db.Decimal(3, 2)
+  review_count           Int                       @default(0)
+  status                 property_status           @default(draft)
+  deleted_at             DateTime?                 @db.Timestamptz(6)
+  created_at             DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime                  @default(now()) @db.Timestamptz(6)
+  bookings               bookings[]
+  conversations          conversations[]
+  promotion_properties   promotion_properties[]
+  cancellation_policies  cancellation_policies?    @relation(fields: [cancellation_policy_id], references: [cancellation_policy_id], onUpdate: NoAction)
+  districts              districts?                @relation(fields: [district_id], references: [district_id], onUpdate: NoAction)
+  partners               partners                  @relation(fields: [partner_id], references: [partner_id], onUpdate: NoAction)
+  provinces              provinces?                @relation(fields: [province_id], references: [province_id], onUpdate: NoAction)
+  villages               villages?                 @relation(fields: [village_id], references: [village_id], onUpdate: NoAction)
+  property_amenities     property_amenities[]
+  property_images        property_images[]
+  property_rules         property_rules?
+  reviews                reviews[]
+  room_types             room_types[]
+  wishlist_items         wishlist_items[]
 
   @@index([partner_id], map: "idx_properties_partner")
-  @@index([province], map: "idx_properties_province")
-  @@index([type], map: "idx_properties_type")
-  @@schema("public")
-}
-
-model refresh_tokens {
-  id         BigInt    @id @default(autoincrement())
-  admin_id   BigInt?
-  token_hash String    @unique @db.VarChar(255)
-  expires_at DateTime  @db.Timestamptz(6)
-  revoked_at DateTime? @db.Timestamptz(6)
-  ip_address String?   @db.VarChar(50)
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  partner_id BigInt?
-  user_id    BigInt?
-  admins     admins?   @relation(fields: [admin_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  partners   partners? @relation(fields: [partner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users      users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([admin_id], map: "idx_refresh_tokens_admin")
-  @@index([expires_at], map: "idx_refresh_tokens_expires")
-  @@index([partner_id], map: "idx_refresh_tokens_partner")
-  @@index([user_id], map: "idx_refresh_tokens_user")
+  @@index([province_id], map: "idx_properties_province")
+  @@index([district_id], map: "idx_properties_district")
+  @@index([geog], map: "idx_properties_geog", type: Gist)
+  @@index([cancellation_policy_id], map: "idx_properties_policy")
+  @@index([search_vector], map: "idx_properties_search", type: Gin)
+  @@index([property_type, status], map: "idx_properties_type_status")
+  @@index([village_id], map: "idx_properties_village")
   @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model reviews {
-  id          BigInt     @id @default(autoincrement())
-  booking_id  BigInt
-  property_id BigInt
-  stars       Int
-  text        String?
-  is_hidden   Boolean?   @default(false)
-  is_flagged  Boolean?   @default(false)
-  bookings    bookings   @relation(fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  properties  properties @relation(fields: [property_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  review_id          BigInt           @id @default(autoincrement())
+  booking_id         BigInt           @unique
+  customer_id        BigInt
+  property_id        BigInt
+  overall_rating     Decimal          @db.Decimal(2, 1)
+  cleanliness_rating Int?
+  service_rating     Int?
+  value_rating       Int?
+  title              String?          @db.VarChar(255)
+  comment            String?
+  status             review_status    @default(published)
+  created_at         DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime         @default(now()) @db.Timestamptz(6)
+  review_images      review_images[]
+  review_replies     review_replies[]
+  review_reports     review_reports[]
+  bookings           bookings         @relation(fields: [booking_id], references: [booking_id], onUpdate: NoAction)
+  users              users            @relation(fields: [customer_id], references: [user_id], onUpdate: NoAction)
+  properties         properties       @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@index([booking_id], map: "idx_reviews_booking")
-  @@index([property_id], map: "idx_reviews_property")
-  @@schema("public")
-}
-
-model room_availability {
-  id      BigInt   @id @default(autoincrement())
-  room_id BigInt
-  date    DateTime @db.Date
-  price   Int
-  status  String?  @default("available") @db.VarChar(20)
-  rooms   rooms    @relation(fields: [room_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([room_id, date], map: "unique_room_date")
-  @@index([date], map: "idx_room_availability_date")
-  @@schema("public")
-}
-
-model rooms {
-  id                BigInt              @id @default(autoincrement())
-  property_id       BigInt
-  name              String              @db.VarChar(255)
-  room_no           String?             @db.VarChar(50)
-  has_ac            Boolean?            @default(true)
-  bed_type          String              @db.VarChar(20)
-  base_price        Int
-  capacity          Int
-  qty               Int
-  is_active         Boolean?            @default(true)
-  photos            Json?
-  booking_items     booking_items[]
-  bookings          bookings[]
-  room_availability room_availability[]
-  properties        properties          @relation(fields: [property_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([property_id], map: "idx_rooms_property")
+  @@index([customer_id], map: "idx_reviews_customer")
+  @@index([property_id, status], map: "idx_reviews_property_status")
   @@schema("public")
 }
 
 model users {
-  id             BigInt           @id @default(autoincrement())
-  email          String           @unique @db.VarChar(255)
-  phone          String           @db.VarChar(50)
-  full_name      String           @db.VarChar(255)
-  password_hash  String           @db.VarChar(255)
-  is_verified    Boolean?         @default(false)
-  tier           String?          @default("silver") @db.VarChar(20)
-  points         Int?             @default(0)
-  status         String?          @default("active") @db.VarChar(20)
-  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
-  bookings       bookings[]
-  refresh_tokens refresh_tokens[]
-  wishlists      wishlists[]
+  user_id                                          BigInt                  @id @default(autoincrement())
+  role                                             user_role               @default(CUSTOMER)
+  admin_role                                       admin_role?
+  email                                            String                  @unique @db.VarChar(255)
+  phone                                            String?                 @db.VarChar(50)
+  password_hash                                    String                  @db.VarChar(255)
+  status                                           user_status             @default(active)
+  is_verified                                      Boolean                 @default(false)
+  last_login_at                                    DateTime?               @db.Timestamptz(6)
+  deleted_at                                       DateTime?               @db.Timestamptz(6)
+  created_at                                       DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at                                       DateTime                @default(now()) @db.Timestamptz(6)
+  announcements                                    announcements[]
+  app_pages                                        app_pages[]
+  app_settings                                     app_settings[]
+  audit_logs                                       audit_logs[]
+  banners                                          banners[]
+  booking_cancellations                            booking_cancellations[]
+  booking_status_logs                              booking_status_logs[]
+  bookings                                         bookings[]
+  conversation_reads                               conversation_reads[]
+  conversations                                    conversations[]
+  coupon_usages                                    coupon_usages[]
+  coupons                                          coupons[]
+  faqs                                             faqs[]
+  messages                                         messages[]
+  notifications                                    notifications[]
+  otp_verifications                                otp_verifications[]
+  partner_documents                                partner_documents[]
+  partners                                         partners?
+  password_reset_tokens                            password_reset_tokens[]
+  payouts                                          payouts[]
+  promotions                                       promotions[]
+  refunds                                          refunds[]
+  review_replies                                   review_replies[]
+  review_reports_review_reports_handled_byTousers  review_reports[]        @relation("review_reports_handled_byTousers")
+  review_reports_review_reports_reported_byTousers review_reports[]        @relation("review_reports_reported_byTousers")
+  reviews                                          reviews[]
+  system_settings                                  system_settings[]
+  user_agreements                                  user_agreements[]
+  user_device_tokens                               user_device_tokens[]
+  user_profiles                                    user_profiles?
+  user_sessions                                    user_sessions[]
+  wishlist_items                                   wishlist_items[]
 
-  @@index([status], map: "idx_users_status")
+  @@index([phone], map: "idx_users_phone")
+  @@index([role, status], map: "idx_users_role_status")
   @@schema("public")
 }
 
-model wishlists {
-  id          BigInt     @id @default(autoincrement())
-  user_id     BigInt
-  property_id BigInt
-  properties  properties @relation(fields: [property_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users       users      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+model amenities {
+  amenity_id         BigInt               @id @default(autoincrement())
+  amenity_name_lo    String               @db.VarChar(120)
+  amenity_name_en    String               @db.VarChar(120)
+  icon               String?              @db.VarChar(80)
+  category           String?              @db.VarChar(60)
+  status             active_status        @default(active)
+  created_at         DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime             @default(now()) @db.Timestamptz(6)
+  property_amenities property_amenities[]
 
-  @@index([property_id], map: "idx_wishlists_property")
-  @@index([user_id], map: "idx_wishlists_user")
+  @@schema("public")
+}
+
+model announcements {
+  announcement_id  BigInt           @id @default(autoincrement())
+  title            String           @db.VarChar(255)
+  content          String?
+  start_date       DateTime?        @db.Date
+  end_date         DateTime?        @db.Date
+  target_user_type target_user_type @default(ALL)
+  is_active        Boolean          @default(true)
+  created_by       BigInt?
+  created_at       DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime         @default(now()) @db.Timestamptz(6)
+  users            users?           @relation(fields: [created_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([is_active, start_date, end_date], map: "idx_announcements_active")
+  @@index([created_by], map: "idx_announcements_creator")
+  @@schema("public")
+}
+
+model app_pages {
+  page_id    BigInt   @id @default(autoincrement())
+  page_slug  String   @unique @db.VarChar(120)
+  title      String   @db.VarChar(255)
+  content    String?
+  is_active  Boolean  @default(true)
+  updated_by BigInt?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  users      users?   @relation(fields: [updated_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([updated_by], map: "idx_app_pages_updater")
+  @@schema("public")
+}
+
+model banners {
+  banner_id     BigInt              @id @default(autoincrement())
+  title         String              @db.VarChar(255)
+  description   String?
+  image_url     String?             @db.VarChar(500)
+  target_type   banner_target_type?
+  target_id     BigInt?
+  display_order Int                 @default(0)
+  start_date    DateTime?           @db.Date
+  end_date      DateTime?           @db.Date
+  is_active     Boolean             @default(true)
+  created_by    BigInt?
+  created_at    DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime            @default(now()) @db.Timestamptz(6)
+  users         users?              @relation(fields: [created_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([is_active, display_order], map: "idx_banners_active")
+  @@index([created_by], map: "idx_banners_creator")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model booking_cancellations {
+  cancellation_id BigInt   @id @default(autoincrement())
+  booking_id      BigInt   @unique
+  cancelled_by    BigInt?
+  reason          String?  @db.VarChar(255)
+  policy_snapshot Json?
+  penalty_amount  BigInt   @default(0)
+  refund_amount   BigInt   @default(0)
+  refund_id       BigInt?
+  cancelled_at    DateTime @default(now()) @db.Timestamptz(6)
+  bookings        bookings @relation(fields: [booking_id], references: [booking_id], onUpdate: NoAction)
+  users           users?   @relation(fields: [cancelled_by], references: [user_id], onUpdate: NoAction)
+  refunds         refunds? @relation(fields: [refund_id], references: [refund_id], onUpdate: NoAction)
+
+  @@index([cancelled_by], map: "idx_booking_cancellations_actor")
+  @@index([refund_id], map: "idx_booking_cancellations_refund")
+  @@schema("public")
+}
+
+model booking_guests {
+  guest_id   BigInt     @id @default(autoincrement())
+  booking_id BigInt
+  full_name  String     @db.VarChar(255)
+  guest_type guest_type @default(adult)
+  id_number  String?    @db.VarChar(255)
+  is_primary Boolean    @default(false)
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+  bookings   bookings   @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([booking_id], map: "idx_booking_guests_booking")
+  @@schema("public")
+}
+
+model booking_status_logs {
+  status_log_id BigInt          @id @default(autoincrement())
+  booking_id    BigInt
+  from_status   booking_status?
+  to_status     booking_status
+  changed_by    BigInt?
+  note          String?         @db.VarChar(500)
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  bookings      bookings        @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade, onUpdate: NoAction)
+  users         users?          @relation(fields: [changed_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([changed_by], map: "idx_booking_status_logs_actor")
+  @@index([booking_id, created_at(sort: Desc)], map: "idx_booking_status_logs_booking")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model cancellation_policies {
+  cancellation_policy_id BigInt        @id @default(autoincrement())
+  policy_name            String        @db.VarChar(120)
+  days_before_checkin    Int           @default(0)
+  penalty_percent        Decimal       @default(0) @db.Decimal(5, 2)
+  is_refundable          Boolean       @default(true)
+  description            String?
+  status                 active_status @default(active)
+  created_at             DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime      @default(now()) @db.Timestamptz(6)
+  bookings               bookings[]
+  properties             properties[]
+
+  @@schema("public")
+}
+
+model conversation_reads {
+  conversation_read_id BigInt        @id @default(autoincrement())
+  conversation_id      BigInt
+  user_id              BigInt
+  last_read_message_id BigInt?
+  read_at              DateTime?     @db.Timestamptz(6)
+  updated_at           DateTime      @default(now()) @db.Timestamptz(6)
+  conversations        conversations @relation(fields: [conversation_id], references: [conversation_id], onDelete: Cascade, onUpdate: NoAction)
+  messages             messages?     @relation(fields: [last_read_message_id], references: [message_id], onUpdate: NoAction)
+  users                users         @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([conversation_id, user_id])
+  @@index([last_read_message_id], map: "idx_conversation_reads_msg")
+  @@index([user_id], map: "idx_conversation_reads_user")
+  @@schema("public")
+}
+
+model conversations {
+  conversation_id                                  BigInt               @id @default(autoincrement())
+  customer_id                                      BigInt
+  property_id                                      BigInt
+  booking_id                                       BigInt?
+  last_message_id                                  BigInt?
+  last_message_at                                  DateTime?            @db.Timestamptz(6)
+  status                                           conversation_status  @default(open)
+  created_at                                       DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                                       DateTime             @default(now()) @db.Timestamptz(6)
+  conversation_reads                               conversation_reads[]
+  bookings                                         bookings?            @relation(fields: [booking_id], references: [booking_id], onUpdate: NoAction)
+  users                                            users                @relation(fields: [customer_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  messages_conversations_last_message_idTomessages messages?            @relation("conversations_last_message_idTomessages", fields: [last_message_id], references: [message_id], onUpdate: NoAction, map: "conversations_last_message_fkey")
+  properties                                       properties           @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction)
+  messages_messages_conversation_idToconversations messages[]           @relation("messages_conversation_idToconversations")
+
+  @@index([booking_id], map: "idx_conversations_booking")
+  @@index([customer_id, last_message_at(sort: Desc)], map: "idx_conversations_customer")
+  @@index([last_message_id], map: "idx_conversations_last_msg")
+  @@index([property_id, last_message_at(sort: Desc)], map: "idx_conversations_property")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model coupon_usages {
+  usage_id        BigInt   @id @default(autoincrement())
+  coupon_id       BigInt
+  booking_id      BigInt
+  customer_id     BigInt
+  discount_amount BigInt   @default(0)
+  used_at         DateTime @default(now()) @db.Timestamptz(6)
+  bookings        bookings @relation(fields: [booking_id], references: [booking_id], onUpdate: NoAction)
+  coupons         coupons  @relation(fields: [coupon_id], references: [coupon_id], onUpdate: NoAction)
+  users           users    @relation(fields: [customer_id], references: [user_id], onUpdate: NoAction)
+
+  @@unique([coupon_id, booking_id])
+  @@index([booking_id], map: "idx_coupon_usages_booking")
+  @@index([coupon_id, customer_id], map: "idx_coupon_usages_coupon_customer")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model coupons {
+  coupon_id      BigInt          @id @default(autoincrement())
+  promotion_id   BigInt
+  coupon_code    String          @unique @db.VarChar(60)
+  usage_limit    Int?
+  usage_per_user Int?
+  used_count     Int             @default(0)
+  start_date     DateTime?       @db.Date
+  end_date       DateTime?       @db.Date
+  status         coupon_status   @default(ACTIVE)
+  created_by     BigInt?
+  created_at     DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime        @default(now()) @db.Timestamptz(6)
+  coupon_usages  coupon_usages[]
+  users          users?          @relation(fields: [created_by], references: [user_id], onUpdate: NoAction)
+  promotions     promotions      @relation(fields: [promotion_id], references: [promotion_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([created_by], map: "idx_coupons_creator")
+  @@index([promotion_id], map: "idx_coupons_promotion")
+  @@index([status], map: "idx_coupons_status")
+  @@schema("public")
+}
+
+model districts {
+  district_id      BigInt       @id @default(autoincrement())
+  province_id      BigInt
+  district_code    String       @db.VarChar(20)
+  district_name_lo String       @db.VarChar(120)
+  district_name_en String       @db.VarChar(120)
+  created_at       DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime     @default(now()) @db.Timestamptz(6)
+  provinces        provinces    @relation(fields: [province_id], references: [province_id], onUpdate: NoAction)
+  properties       properties[]
+  villages         villages[]
+
+  @@unique([province_id, district_code])
+  @@index([province_id], map: "idx_districts_province")
+  @@schema("public")
+}
+
+model faqs {
+  faq_id        BigInt   @id @default(autoincrement())
+  category      String?  @db.VarChar(80)
+  question      String
+  answer        String
+  display_order Int      @default(0)
+  is_active     Boolean  @default(true)
+  created_by    BigInt?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+  users         users?   @relation(fields: [created_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([is_active, display_order], map: "idx_faqs_active")
+  @@index([created_by], map: "idx_faqs_creator")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ledger_entries {
+  ledger_id      BigInt            @id @default(autoincrement())
+  entry_type     ledger_entry_type
+  booking_id     BigInt?
+  partner_id     BigInt?
+  reference_type String?           @db.VarChar(60)
+  reference_id   BigInt?
+  direction      ledger_direction
+  amount         BigInt
+  balance_after  BigInt?
+  note           String?           @db.VarChar(255)
+  created_at     DateTime          @default(now()) @db.Timestamptz(6)
+  bookings       bookings?         @relation(fields: [booking_id], references: [booking_id], onDelete: Restrict, onUpdate: NoAction)
+  partners       partners?         @relation(fields: [partner_id], references: [partner_id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([booking_id], map: "idx_ledger_booking")
+  @@index([partner_id, created_at(sort: Desc)], map: "idx_ledger_partner_created")
+  @@index([reference_type, reference_id], map: "idx_ledger_reference")
+  @@index([entry_type, created_at(sort: Desc)], map: "idx_ledger_type")
+  @@schema("public")
+}
+
+model login_attempts {
+  attempt_id BigInt   @id @default(autoincrement())
+  identifier String   @db.VarChar(255)
+  ip_address String?  @db.VarChar(64)
+  success    Boolean
+  user_agent String?  @db.VarChar(500)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([ip_address, created_at(sort: Desc)], map: "idx_login_attempts_ip")
+  @@index([identifier, created_at(sort: Desc)], map: "idx_login_attempts_lookup")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model message_attachments {
+  attachment_id BigInt   @id @default(autoincrement())
+  message_id    BigInt
+  file_url      String   @db.VarChar(500)
+  file_name     String?  @db.VarChar(255)
+  mime_type     String?  @db.VarChar(120)
+  file_size     Int?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  messages      messages @relation(fields: [message_id], references: [message_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([message_id], map: "idx_message_attachments_msg")
+  @@schema("public")
+}
+
+model messages {
+  message_id                                            BigInt                @id @default(autoincrement())
+  conversation_id                                       BigInt
+  sender_id                                             BigInt
+  reply_to_message_id                                   BigInt?
+  message_type                                          message_type          @default(text)
+  message_text                                          String?
+  is_edited                                             Boolean               @default(false)
+  edited_at                                             DateTime?             @db.Timestamptz(6)
+  is_deleted                                            Boolean               @default(false)
+  deleted_at                                            DateTime?             @db.Timestamptz(6)
+  created_at                                            DateTime              @default(now()) @db.Timestamptz(6)
+  conversation_reads                                    conversation_reads[]
+  conversations_conversations_last_message_idTomessages conversations[]       @relation("conversations_last_message_idTomessages")
+  message_attachments                                   message_attachments[]
+  conversations_messages_conversation_idToconversations conversations         @relation("messages_conversation_idToconversations", fields: [conversation_id], references: [conversation_id], onDelete: Cascade, onUpdate: NoAction)
+  messages                                              messages?             @relation("messagesTomessages", fields: [reply_to_message_id], references: [message_id], onUpdate: NoAction)
+  other_messages                                        messages[]            @relation("messagesTomessages")
+  users                                                 users                 @relation(fields: [sender_id], references: [user_id], onUpdate: NoAction)
+
+  @@index([conversation_id, created_at(sort: Desc)], map: "idx_messages_conversation")
+  @@index([reply_to_message_id], map: "idx_messages_reply_to")
+  @@index([sender_id], map: "idx_messages_sender")
+  @@schema("public")
+}
+
+model notification_templates {
+  template_id       BigInt            @id @default(autoincrement())
+  template_code     String            @unique @db.VarChar(80)
+  title_template    String            @db.VarChar(255)
+  message_template  String
+  notification_type notification_type @default(system)
+  is_active         Boolean           @default(true)
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime          @default(now()) @db.Timestamptz(6)
+
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model otp_verifications {
+  otp_id       BigInt      @id @default(autoincrement())
+  user_id      BigInt?
+  target       String      @db.VarChar(255)
+  purpose      otp_purpose
+  code_hash    String      @db.VarChar(255)
+  attempts     Int         @default(0)
+  max_attempts Int         @default(5)
+  expires_at   DateTime    @db.Timestamptz(6)
+  verified_at  DateTime?   @db.Timestamptz(6)
+  created_at   DateTime    @default(now()) @db.Timestamptz(6)
+  users        users?      @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([target, purpose, created_at(sort: Desc)], map: "idx_otp_target_purpose")
+  @@index([user_id], map: "idx_otp_user")
+  @@schema("public")
+}
+
+model partner_bank_accounts {
+  bank_account_id BigInt        @id @default(autoincrement())
+  partner_id      BigInt
+  bank_name       String        @db.VarChar(120)
+  account_name    String        @db.VarChar(255)
+  account_number  String        @db.VarChar(255)
+  is_default      Boolean       @default(false)
+  status          active_status @default(active)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+  partners        partners      @relation(fields: [partner_id], references: [partner_id], onDelete: Cascade, onUpdate: NoAction)
+  payouts         payouts[]
+
+  @@index([partner_id], map: "idx_partner_bank_partner")
+  @@schema("public")
+}
+
+model partner_documents {
+  document_id   BigInt          @id @default(autoincrement())
+  partner_id    BigInt
+  document_type document_type
+  file_url      String          @db.VarChar(500)
+  status        document_status @default(pending)
+  reviewed_by   BigInt?
+  reviewed_at   DateTime?       @db.Timestamptz(6)
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  partners      partners        @relation(fields: [partner_id], references: [partner_id], onDelete: Cascade, onUpdate: NoAction)
+  users         users?          @relation(fields: [reviewed_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([partner_id], map: "idx_partner_documents_partner")
+  @@index([reviewed_by], map: "idx_partner_documents_review")
+  @@schema("public")
+}
+
+model password_reset_tokens {
+  token_id   BigInt    @id @default(autoincrement())
+  user_id    BigInt
+  token_hash String    @unique @db.VarChar(255)
+  expires_at DateTime  @db.Timestamptz(6)
+  used_at    DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  users      users     @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_password_reset_user")
+  @@schema("public")
+}
+
+model payment_events {
+  event_id     BigInt   @id @default(autoincrement())
+  payment_id   BigInt
+  event_type   String   @db.VarChar(60)
+  provider_ref String?  @db.VarChar(120)
+  raw_payload  Json
+  signature    String?  @db.VarChar(255)
+  received_at  DateTime @default(now()) @db.Timestamptz(6)
+  payments     payments @relation(fields: [payment_id], references: [payment_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([payment_id, received_at(sort: Desc)], map: "idx_payment_events_payment")
+  @@index([provider_ref], map: "idx_payment_events_provider")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payout_items {
+  payout_item_id    BigInt   @id @default(autoincrement())
+  payout_id         BigInt
+  booking_id        BigInt
+  gross_amount      BigInt   @default(0)
+  commission_amount BigInt   @default(0)
+  net_amount        BigInt   @default(0)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  bookings          bookings @relation(fields: [booking_id], references: [booking_id], onUpdate: NoAction)
+  payouts           payouts  @relation(fields: [payout_id], references: [payout_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([payout_id, booking_id])
+  @@index([booking_id], map: "idx_payout_items_booking")
+  @@index([payout_id], map: "idx_payout_items_payout")
+  @@schema("public")
+}
+
+model promotion_partners {
+  promotion_partner_id BigInt     @id @default(autoincrement())
+  promotion_id         BigInt
+  partner_id           BigInt
+  created_at           DateTime   @default(now()) @db.Timestamptz(6)
+  partners             partners   @relation(fields: [partner_id], references: [partner_id], onDelete: Cascade, onUpdate: NoAction)
+  promotions           promotions @relation(fields: [promotion_id], references: [promotion_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([promotion_id, partner_id])
+  @@index([partner_id], map: "idx_promotion_partners_partner")
+  @@schema("public")
+}
+
+model promotion_properties {
+  promotion_property_id BigInt     @id @default(autoincrement())
+  promotion_id          BigInt
+  property_id           BigInt
+  created_at            DateTime   @default(now()) @db.Timestamptz(6)
+  promotions            promotions @relation(fields: [promotion_id], references: [promotion_id], onDelete: Cascade, onUpdate: NoAction)
+  properties            properties @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([promotion_id, property_id])
+  @@index([property_id], map: "idx_promotion_properties_property")
+  @@schema("public")
+}
+
+model promotion_room_types {
+  promotion_room_type_id BigInt     @id @default(autoincrement())
+  promotion_id           BigInt
+  room_type_id           BigInt
+  created_at             DateTime   @default(now()) @db.Timestamptz(6)
+  promotions             promotions @relation(fields: [promotion_id], references: [promotion_id], onDelete: Cascade, onUpdate: NoAction)
+  room_types             room_types @relation(fields: [room_type_id], references: [room_type_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([promotion_id, room_type_id])
+  @@index([room_type_id], map: "idx_promotion_room_types_room")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model promotions {
+  promotion_id         BigInt                 @id @default(autoincrement())
+  promotion_name       String                 @db.VarChar(255)
+  description          String?
+  promotion_type       promotion_type         @default(GLOBAL)
+  discount_type        discount_type
+  discount_value       BigInt                 @default(0)
+  max_discount         BigInt?
+  minimum_spending     BigInt                 @default(0)
+  allow_stack          Boolean                @default(false)
+  start_date           DateTime               @db.Date
+  end_date             DateTime               @db.Date
+  status               promotion_status       @default(ACTIVE)
+  created_by           BigInt?
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  coupons              coupons[]
+  promotion_partners   promotion_partners[]
+  promotion_properties promotion_properties[]
+  promotion_room_types promotion_room_types[]
+  users                users?                 @relation(fields: [created_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([created_by], map: "idx_promotions_creator")
+  @@index([status, start_date, end_date], map: "idx_promotions_status_dates")
+  @@schema("public")
+}
+
+model property_amenities {
+  property_amenity_id BigInt     @id @default(autoincrement())
+  property_id         BigInt
+  amenity_id          BigInt
+  created_at          DateTime   @default(now()) @db.Timestamptz(6)
+  amenities           amenities  @relation(fields: [amenity_id], references: [amenity_id], onDelete: Cascade, onUpdate: NoAction)
+  properties          properties @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([property_id, amenity_id])
+  @@index([amenity_id], map: "idx_property_amenities_amenity")
+  @@schema("public")
+}
+
+model property_images {
+  property_image_id BigInt     @id @default(autoincrement())
+  property_id       BigInt
+  image_url         String     @db.VarChar(500)
+  caption           String?    @db.VarChar(255)
+  display_order     Int        @default(0)
+  is_cover          Boolean    @default(false)
+  created_at        DateTime   @default(now()) @db.Timestamptz(6)
+  properties        properties @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([property_id, display_order], map: "idx_property_images_property")
+  @@schema("public")
+}
+
+model property_rules {
+  property_rule_id  BigInt     @id @default(autoincrement())
+  property_id       BigInt     @unique
+  check_in_from     DateTime?  @db.Time(6)
+  check_out_until   DateTime?  @db.Time(6)
+  smoking_allowed   Boolean    @default(false)
+  pet_allowed       Boolean    @default(false)
+  child_allowed     Boolean    @default(true)
+  party_allowed     Boolean    @default(false)
+  quiet_hours_start DateTime?  @db.Time(6)
+  quiet_hours_end   DateTime?  @db.Time(6)
+  additional_note   String?
+  created_at        DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime   @default(now()) @db.Timestamptz(6)
+  properties        properties @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("public")
+}
+
+model provinces {
+  province_id      BigInt       @id @default(autoincrement())
+  province_code    String       @unique @db.VarChar(20)
+  province_name_lo String       @db.VarChar(120)
+  province_name_en String       @db.VarChar(120)
+  created_at       DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime     @default(now()) @db.Timestamptz(6)
+  districts        districts[]
+  properties       properties[]
+
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model refunds {
+  refund_id             BigInt                  @id @default(autoincrement())
+  payment_id            BigInt
+  booking_id            BigInt
+  amount                BigInt
+  reason                String?                 @db.VarChar(255)
+  status                refund_status           @default(pending)
+  txn_ref               String?                 @db.VarChar(120)
+  processed_by          BigInt?
+  refunded_at           DateTime?               @db.Timestamptz(6)
+  created_at            DateTime                @default(now()) @db.Timestamptz(6)
+  booking_cancellations booking_cancellations[]
+  bookings              bookings                @relation(fields: [booking_id], references: [booking_id], onUpdate: NoAction)
+  payments              payments                @relation(fields: [payment_id], references: [payment_id], onUpdate: NoAction)
+  users                 users?                  @relation(fields: [processed_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([booking_id], map: "idx_refunds_booking")
+  @@index([payment_id], map: "idx_refunds_payment")
+  @@index([processed_by], map: "idx_refunds_processor")
+  @@index([status], map: "idx_refunds_status")
+  @@schema("public")
+}
+
+model review_images {
+  review_image_id BigInt   @id @default(autoincrement())
+  review_id       BigInt
+  image_url       String   @db.VarChar(500)
+  display_order   Int      @default(0)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  reviews         reviews  @relation(fields: [review_id], references: [review_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([review_id, display_order], map: "idx_review_images_review")
+  @@schema("public")
+}
+
+model review_replies {
+  reply_id             BigInt           @id @default(autoincrement())
+  review_id            BigInt
+  user_id              BigInt
+  reply_text           String
+  parent_reply_id      BigInt?
+  created_at           DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime         @default(now()) @db.Timestamptz(6)
+  review_replies       review_replies?  @relation("review_repliesToreview_replies", fields: [parent_reply_id], references: [reply_id], onDelete: Cascade, onUpdate: NoAction)
+  other_review_replies review_replies[] @relation("review_repliesToreview_replies")
+  reviews              reviews          @relation(fields: [review_id], references: [review_id], onDelete: Cascade, onUpdate: NoAction)
+  users                users            @relation(fields: [user_id], references: [user_id], onUpdate: NoAction)
+
+  @@index([parent_reply_id], map: "idx_review_replies_parent")
+  @@index([review_id], map: "idx_review_replies_review")
+  @@index([user_id], map: "idx_review_replies_user")
+  @@schema("public")
+}
+
+model review_reports {
+  report_id                               BigInt        @id @default(autoincrement())
+  review_id                               BigInt
+  reported_by                             BigInt
+  reason                                  report_reason
+  detail                                  String?
+  status                                  report_status @default(pending)
+  handled_by                              BigInt?
+  created_at                              DateTime      @default(now()) @db.Timestamptz(6)
+  users_review_reports_handled_byTousers  users?        @relation("review_reports_handled_byTousers", fields: [handled_by], references: [user_id], onUpdate: NoAction)
+  users_review_reports_reported_byTousers users         @relation("review_reports_reported_byTousers", fields: [reported_by], references: [user_id], onUpdate: NoAction)
+  reviews                                 reviews       @relation(fields: [review_id], references: [review_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([handled_by], map: "idx_review_reports_handler")
+  @@index([reported_by], map: "idx_review_reports_reporter")
+  @@index([review_id], map: "idx_review_reports_review")
+  @@index([status], map: "idx_review_reports_status")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model room_inventory {
+  inventory_id    BigInt           @id @default(autoincrement())
+  room_type_id    BigInt
+  date            DateTime         @db.Date
+  total_count     Int              @default(0)
+  held_count      Int              @default(0)
+  booked_count    Int              @default(0)
+  available_count Int?             @default(dbgenerated("((total_count - held_count) - booked_count)"))
+  status          inventory_status @default(open)
+  created_at      DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime         @default(now()) @db.Timestamptz(6)
+  room_types      room_types       @relation(fields: [room_type_id], references: [room_type_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([room_type_id, date])
+  @@index([date], map: "idx_room_inventory_date")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model room_prices {
+  price_id     BigInt     @id @default(autoincrement())
+  room_type_id BigInt
+  date         DateTime   @db.Date
+  price        BigInt
+  price_type   price_type @default(weekday)
+  created_at   DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime   @default(now()) @db.Timestamptz(6)
+  room_types   room_types @relation(fields: [room_type_id], references: [room_type_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([room_type_id, date])
+  @@index([date], map: "idx_room_prices_date")
+  @@schema("public")
+}
+
+model room_type_images {
+  room_image_id BigInt     @id @default(autoincrement())
+  room_type_id  BigInt
+  image_url     String     @db.VarChar(500)
+  caption       String?    @db.VarChar(255)
+  display_order Int        @default(0)
+  is_cover      Boolean    @default(false)
+  created_at    DateTime   @default(now()) @db.Timestamptz(6)
+  room_types    room_types @relation(fields: [room_type_id], references: [room_type_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([room_type_id, display_order], map: "idx_room_type_images_room")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model room_types {
+  room_type_id         BigInt                 @id @default(autoincrement())
+  property_id          BigInt
+  type_name            String                 @db.VarChar(255)
+  description          String?
+  bed_type             bed_type               @default(double)
+  has_ac               Boolean                @default(true)
+  max_occupancy        Int                    @default(2)
+  extra_guest_fee      BigInt                 @default(0)
+  size_sqm             Int?
+  base_price           BigInt
+  total_rooms          Int                    @default(1)
+  min_nights           Int                    @default(1)
+  status               active_status          @default(active)
+  deleted_at           DateTime?              @db.Timestamptz(6)
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  booking_items        booking_items[]
+  promotion_room_types promotion_room_types[]
+  room_inventory       room_inventory[]
+  room_prices          room_prices[]
+  room_type_images     room_type_images[]
+  properties           properties             @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([property_id], map: "idx_room_types_property")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+
+  @@schema("public")
+}
+
+model system_settings {
+  setting_id    BigInt            @id @default(autoincrement())
+  setting_group String?           @db.VarChar(60)
+  setting_key   String            @unique @db.VarChar(120)
+  setting_value String?
+  data_type     setting_data_type @default(string)
+  description   String?           @db.VarChar(255)
+  updated_by    BigInt?
+  updated_at    DateTime          @default(now()) @db.Timestamptz(6)
+  users         users?            @relation(fields: [updated_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([setting_group], map: "idx_system_settings_group")
+  @@index([updated_by], map: "idx_system_settings_updater")
+  @@schema("public")
+}
+
+model user_agreements {
+  agreement_id  BigInt             @id @default(autoincrement())
+  user_id       BigInt
+  document_type agreement_doc_type
+  version       String             @db.VarChar(40)
+  accepted_at   DateTime           @default(now()) @db.Timestamptz(6)
+  ip_address    String?            @db.VarChar(64)
+  users         users              @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, document_type], map: "idx_user_agreements_user")
+  @@schema("public")
+}
+
+model user_device_tokens {
+  device_token_id BigInt          @id @default(autoincrement())
+  user_id         BigInt
+  device_token    String          @unique @db.VarChar(500)
+  platform        device_platform
+  device_name     String?         @db.VarChar(255)
+  is_active       Boolean         @default(true)
+  last_used_at    DateTime?       @db.Timestamptz(6)
+  created_at      DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime        @default(now()) @db.Timestamptz(6)
+  users           users           @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model user_profiles {
+  profile_id    BigInt       @id @default(autoincrement())
+  user_id       BigInt       @unique
+  full_name     String       @db.VarChar(255)
+  avatar_url    String?      @db.VarChar(500)
+  gender        gender_type?
+  date_of_birth DateTime?    @db.Date
+  nationality   String?      @db.VarChar(100)
+  id_number     String?      @db.VarChar(255)
+  village_id    BigInt?
+  tier          String       @default("silver") @db.VarChar(20)
+  points        Int          @default(0)
+  created_at    DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime     @default(now()) @db.Timestamptz(6)
+  users         users        @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  villages      villages?    @relation(fields: [village_id], references: [village_id], onUpdate: NoAction)
+
+  @@index([village_id], map: "idx_user_profiles_village")
+  @@schema("public")
+}
+
+model user_sessions {
+  session_id         BigInt    @id @default(autoincrement())
+  user_id            BigInt
+  refresh_token_hash String    @unique @db.VarChar(255)
+  ip_address         String?   @db.VarChar(64)
+  user_agent         String?   @db.VarChar(500)
+  expires_at         DateTime  @db.Timestamptz(6)
+  revoked_at         DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  users              users     @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([expires_at], map: "idx_user_sessions_expires")
+  @@index([user_id], map: "idx_user_sessions_user")
+  @@schema("public")
+}
+
+model villages {
+  village_id      BigInt          @id @default(autoincrement())
+  district_id     BigInt
+  village_code    String          @db.VarChar(20)
+  village_name_lo String          @db.VarChar(120)
+  village_name_en String          @db.VarChar(120)
+  created_at      DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime        @default(now()) @db.Timestamptz(6)
+  properties      properties[]
+  user_profiles   user_profiles[]
+  districts       districts       @relation(fields: [district_id], references: [district_id], onUpdate: NoAction)
+
+  @@unique([district_id, village_code])
+  @@index([district_id], map: "idx_villages_district")
+  @@schema("public")
+}
+
+model wishlist_items {
+  wishlist_item_id BigInt     @id @default(autoincrement())
+  user_id          BigInt
+  property_id      BigInt
+  created_at       DateTime   @default(now()) @db.Timestamptz(6)
+  properties       properties @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction)
+  users            users      @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, property_id])
+  @@index([property_id], map: "idx_wishlist_property")
+  @@schema("public")
+}
+
+enum active_status {
+  active
+  inactive
+
+  @@schema("public")
+}
+
+enum admin_role {
+  super_admin
+  finance
+  staff
+
+  @@schema("public")
+}
+
+enum agreement_doc_type {
+  terms
+  privacy
+  partner_agreement
+
+  @@schema("public")
+}
+
+enum banner_target_type {
+  property
+  promotion
+  url
+
+  @@schema("public")
+}
+
+enum bed_type {
+  single
+  double
+  twin
+
+  @@schema("public")
+}
+
+enum booking_source {
+  app
+  walk_in
+
+  @@schema("public")
+}
+
+enum booking_status {
+  pending
+  confirmed
+  staying
+  completed
+  cancelled
+  no_show
+
+  @@schema("public")
+}
+
+enum business_type {
+  individual
+  company
+
+  @@schema("public")
+}
+
+enum conversation_status {
+  open
+  closed
+
+  @@schema("public")
+}
+
+enum coupon_status {
+  ACTIVE
+  EXPIRED
+
+  @@schema("public")
+}
+
+enum device_platform {
+  ios
+  android
+  web
+
+  @@schema("public")
+}
+
+enum discount_type {
+  PERCENTAGE
+  FIXED
+  FREE_NIGHT
+
+  @@schema("public")
+}
+
+enum document_status {
+  pending
+  approved
+  rejected
+
+  @@schema("public")
+}
+
+enum document_type {
+  id_card
+  business_license
+  bank_book
+
+  @@schema("public")
+}
+
+enum gender_type {
+  male
+  female
+  other
+
+  @@schema("public")
+}
+
+enum guest_type {
+  adult
+  child
+
+  @@schema("public")
+}
+
+enum inventory_status {
+  open
+  closed
+
+  @@schema("public")
+}
+
+enum ledger_direction {
+  debit
+  credit
+
+  @@schema("public")
+}
+
+enum ledger_entry_type {
+  charge
+  commission
+  refund
+  payout
+  adjustment
+
+  @@schema("public")
+}
+
+enum message_type {
+  text
+  image
+  file
+
+  @@schema("public")
+}
+
+enum notification_type {
+  booking
+  payment
+  promo
+  review
+  system
+
+  @@schema("public")
+}
+
+enum otp_purpose {
+  register
+  login
+  reset_password
+  verify
+
+  @@schema("public")
+}
+
+enum partner_status {
+  pending
+  verified
+  rejected
+  suspended
+
+  @@schema("public")
+}
+
+enum payment_method {
+  phajay_qr
+
+  @@schema("public")
+}
+
+enum payment_status {
+  pending
+  paid
+  expired
+  failed
+  refunded
+  partially_refunded
+
+  @@schema("public")
+}
+
+enum payout_status {
+  pending
+  processing
+  paid
+  failed
+
+  @@schema("public")
+}
+
+enum price_type {
+  weekday
+  weekend
+  seasonal
+  holiday
+
+  @@schema("public")
+}
+
+enum promotion_status {
+  ACTIVE
+  INACTIVE
+
+  @@schema("public")
+}
+
+enum promotion_type {
+  GLOBAL
+  PROPERTY
+  ROOM_TYPE
+  PARTNER
+
+  @@schema("public")
+}
+
+enum property_status {
+  draft
+  active
+  suspended
+
+  @@schema("public")
+}
+
+enum property_type {
+  homestay
+  villa
+  resort
+  guesthouse
+
+  @@schema("public")
+}
+
+enum refund_status {
+  pending
+  processing
+  completed
+  failed
+
+  @@schema("public")
+}
+
+enum report_reason {
+  spam
+  offensive
+  fake
+  other
+
+  @@schema("public")
+}
+
+enum report_status {
+  pending
+  reviewed
+  dismissed
+
+  @@schema("public")
+}
+
+enum review_status {
+  published
+  hidden
+  flagged
+  pending
+
+  @@schema("public")
+}
+
+enum setting_data_type {
+  string
+  int
+  boolean
+  json
+
+  @@schema("public")
+}
+
+enum target_user_type {
+  ALL
+  CUSTOMER
+  PARTNER
+
+  @@schema("public")
+}
+
+enum user_role {
+  CUSTOMER
+  PARTNER
+  ADMIN
+
+  @@schema("public")
+}
+
+enum user_status {
+  active
+  suspended
+  deleted
+
   @@schema("public")
 }

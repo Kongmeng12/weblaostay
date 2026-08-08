@@ -1,19 +1,20 @@
-import { Module, Logger } from '@nestjs/common';
+import { Module, Logger, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PaymentsService } from './payments.service';
 import { CustomerPaymentsController, PaymentsWebhookController } from './payments.controller';
 import { SimulatedPaymentProvider } from './simulated.provider';
 import { PhaJayPaymentProvider } from './phajay.provider';
 import { PAYMENT_PROVIDER } from './payment-provider.interface';
+import { BookingModule } from '../booking/booking.module';
 
 /**
- * `PAYMENT_PROVIDER=phajay` in `.env` switches to the real rails; anything else
- * (including an unset value) uses the simulator. Defaulting to the simulator
- * means a fresh clone runs end to end with no credentials, and going live is a
- * one-line change — but it also means production must set the variable, so the
- * choice is logged at boot.
+ * `PAYMENT_PROVIDER=phajay` switches to the real rails; anything else uses the
+ * simulator. Defaulting to the simulator means a fresh clone runs end to end
+ * with no credentials — but it also means production must set the variable, so
+ * the choice is logged at boot and shouted about if it is wrong.
  */
 @Module({
+  imports: [forwardRef(() => BookingModule)],
   controllers: [CustomerPaymentsController, PaymentsWebhookController],
   providers: [
     PaymentsService,

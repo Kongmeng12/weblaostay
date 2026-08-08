@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { PlatformSettings, AdminRow, AuditRow } from '../lib/types';
+import type { Paged, SettingsResponse, EditableSettings, AdminRow, AuditRow } from '../lib/types';
 import { c, f, radius, avatarFor } from '../theme';
 import { laoDateTime, laoAgo, initials } from '../lib/format';
 import {
@@ -18,44 +18,81 @@ import {
 } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
 
+/**
+ * Exactly what `PATCH /admin/settings` accepts: the editable slice of
+ * `system_settings`, plus the free-form `app_settings` strings under `app`.
+ */
+type EditForm = EditableSettings & { app: Record<string, string> };
+
+const ADMIN_ROLE_LABEL: Record<string, string> = {
+  super_admin: 'ຜູ້ດູແລສູງສຸດ',
+  finance: 'ຝ່າຍການເງິນ',
+  staff: 'ພະນັກງານ',
+};
+
+interface NewAdmin {
+  email: string;
+  fullName: string;
+  password: string;
+  adminRole: string;
+}
+
+function toForm(s: SettingsResponse): EditForm {
+  return {
+    commission_rate_app: s.system.commission_rate_app,
+    commission_rate_walkin: s.system.commission_rate_walkin,
+    service_fee_rate: s.system.service_fee_rate,
+    tax_rate: s.system.tax_rate,
+    hold_ttl_minutes: s.system.hold_ttl_minutes,
+    max_nights_per_booking: s.system.max_nights_per_booking,
+    qr_ttl_minutes: s.system.qr_ttl_minutes,
+    payout_period_days: s.system.payout_period_days,
+    login_max_attempts: s.system.login_max_attempts,
+    login_lockout_minutes: s.system.login_lockout_minutes,
+    app: { ...s.app },
+  };
+}
+
 export function Settings() {
   const { admin, can } = useAuth();
   const qc = useQueryClient();
 
   const settings = useQuery({
     queryKey: ['settings'],
-    queryFn: () => api.get<PlatformSettings>('/admin/settings'),
+    queryFn: () => api.get<SettingsResponse>('/admin/settings'),
   });
+  // Listing and managing staff is super_admin-only, so for anyone else the
+  // request would just be a 403 in the console.
+  const isSuper = can('super_admin');
   const admins = useQuery({
     queryKey: ['settings', 'admins'],
-    queryFn: () => api.get<AdminRow[]>('/admin/settings/admins'),
+    queryFn: () => api.get<AdminRow[]>('/admin/admins'),
+    enabled: isSuper,
   });
   const audit = useQuery({
     queryKey: ['settings', 'audit'],
-    queryFn: () =>
-      api.get<{ items: AuditRow[]; total: number }>('/admin/settings/audit-logs?limit=15'),
+    queryFn: () => api.get<Paged<AuditRow>>('/admin/audit-logs?limit=15'),
   });
 
-  const [form, setForm] = useState<PlatformSettings | null>(null);
+  const [form, setForm] = useState<EditForm | null>(null);
   const [creating, setCreating] = useState(false);
 
   // Seed the form once the server values arrive, without clobbering edits.
   useEffect(() => {
-    if (settings.data && !form) setForm(settings.data);
+    if (settings.data && !form) setForm(toForm(settings.data));
   }, [settings.data, form]);
 
   const save = useMutation({
-    mutationFn: (body: PlatformSettings) => api.put<PlatformSettings>('/admin/settings', body),
+    mutationFn: (body: EditForm) => api.patch<SettingsResponse>('/admin/settings', body),
     onSuccess: (data) => {
-      setForm(data);
+      setForm(toForm(data));
       void qc.invalidateQueries({ queryKey: ['settings'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 
   const createAdmin = useMutation({
-    mutationFn: (body: { email: string; name: string; password: string; role: string }) =>
-      api.post('/admin/settings/admins', body),
+    mutationFn: (body: NewAdmin) => api.post('/admin/admins', body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['settings', 'admins'] });
       setCreating(false);
@@ -63,7 +100,7 @@ export function Settings() {
   });
 
   const removeAdmin = useMutation({
-    mutationFn: (id: string) => api.del(`/admin/settings/admins/${id}`),
+    mutationFn: (id: string) => api.del(`/admin/admins/${id}`),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['settings', 'admins'] }),
   });
 
@@ -72,8 +109,8 @@ export function Settings() {
   }
 
   const canEditMoney = can('super_admin', 'finance');
-  const isSuper = can('super_admin');
-  const dirty = !!form && !!settings.data && JSON.stringify(form) !== JSON.stringify(settings.data);
+  const saved = settings.data ? toForm(settings.data) : null;
+  const dirty = !!form && !!saved && JSON.stringify(form) !== JSON.stringify(saved);
 
   return (
     <div style={{ maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -83,18 +120,39 @@ export function Settings() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Field label="ຊື່ແພລດຟອມ">
             <input
-              value={form?.platform_name ?? ''}
+              value={form?.app.platform_name ?? ''}
               disabled={!canEditMoney}
-              onChange={(e) => form && setForm({ ...form, platform_name: e.target.value })}
+              onChange={(e) =>
+                form && setForm({ ...form, app: { ...form.app, platform_name: e.target.value } })
+              }
               style={inputStyle}
             />
           </Field>
           <Field label="ອີເມວຕິດຕໍ່">
             <input
               type="email"
-              value={form?.contact_email ?? ''}
+              value={form?.app.contact_email ?? ''}
               disabled={!canEditMoney}
-              onChange={(e) => form && setForm({ ...form, contact_email: e.target.value })}
+              onChange={(e) =>
+                form && setForm({ ...form, app: { ...form.app, contact_email: e.target.value } })
+              }
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="ເບີໂທຕິດຕໍ່">
+            <input
+              value={form?.app.contact_phone ?? ''}
+              disabled={!canEditMoney}
+              onChange={(e) =>
+                form && setForm({ ...form, app: { ...form.app, contact_phone: e.target.value } })
+              }
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="ຜູ້ໃຫ້ບໍລິການຊຳລະ" hint="ຕັ້ງຢູ່ .env — ບໍ່ແກ້ຈາກທີ່ນີ້">
+            <input
+              value={settings.data?.system.payment_provider ?? ''}
+              disabled
               style={inputStyle}
             />
           </Field>
@@ -108,23 +166,16 @@ export function Settings() {
         <RateRow
           title="ອັດຕາຄ່າຄອມມິຊຊັນ (App)"
           hint="ຫັກຈາກແຕ່ລະການຈອງຜ່ານແອັບ"
-          value={form?.commission_rate}
+          value={form?.commission_rate_app}
           disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, commission_rate: v })}
+          onChange={(v) => form && setForm({ ...form, commission_rate_app: v })}
         />
         <RateRow
           title="ອັດຕາຄ່າຄອມມິຊຊັນ (Walk-in)"
           hint="ຫັກຈາກການຈອງທີ່ Partner ບັນທຶກເອງ"
-          value={form?.walkin_commission_rate}
+          value={form?.commission_rate_walkin}
           disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, walkin_commission_rate: v })}
-        />
-        <RateRow
-          title="ຄ່າທຳນຽມຍົກເລີກ"
-          hint="ຫັກເມື່ອລູກຄ້າຍົກເລີກ — ສ່ວນທີ່ເຫຼືອຄືນໃຫ້ລູກຄ້າ"
-          value={form?.cancellation_fee_rate}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, cancellation_fee_rate: v })}
+          onChange={(v) => form && setForm({ ...form, commission_rate_walkin: v })}
         />
         <RateRow
           title="ຄ່າບໍລິການ (ລູກຄ້າຈ່າຍ)"
@@ -132,8 +183,21 @@ export function Settings() {
           value={form?.service_fee_rate}
           disabled={!canEditMoney}
           onChange={(v) => form && setForm({ ...form, service_fee_rate: v })}
+        />
+        <RateRow
+          title="ພາສີ"
+          hint="ບວກເທິງຄ່າຫ້ອງ + ຄ່າບໍລິການ"
+          value={form?.tax_rate}
+          disabled={!canEditMoney}
+          onChange={(v) => form && setForm({ ...form, tax_rate: v })}
           last
         />
+
+        {/* Cancellation is no longer one platform-wide rate: each property picks
+            a `cancellation_policies` row, and the penalty comes from there. */}
+        <div style={{ marginTop: 16, font: f(400, 12, 19), color: c.muted }}>
+          ຄ່າທຳນຽມຍົກເລີກຕັ້ງແຍກຕາມນະໂຍບາຍຂອງແຕ່ລະທີ່ພັກ (cancellation_policies) ບໍ່ແມ່ນອັດຕາລວມອີກຕໍ່ໄປ.
+        </div>
 
         {canEditMoney ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 20 }}>
@@ -144,7 +208,7 @@ export function Settings() {
               {save.isPending ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກການປ່ຽນແປງ'}
             </Button>
             {dirty && (
-              <Button variant="ghost" onClick={() => setForm(settings.data ?? null)}>
+              <Button variant="ghost" onClick={() => setForm(saved)}>
                 ຍົກເລີກ
               </Button>
             )}
@@ -162,6 +226,58 @@ export function Settings() {
         )}
       </Card>
 
+      {/* operations */}
+      <Card padding={24}>
+        <CardTitle>ການດຳເນີນງານ</CardTitle>
+
+        <CountRow
+          title="ເວລາຈອງຫ້ອງໄວ້ຊົ່ວຄາວ"
+          hint="ຫຼັງກົດຈອງແລ້ວ ຫ້ອງຖືກກັນໄວ້ດົນປານໃດກ່ອນຄືນສູ່ລະບົບ"
+          unit="ນາທີ"
+          value={form?.hold_ttl_minutes}
+          disabled={!canEditMoney}
+          onChange={(v) => form && setForm({ ...form, hold_ttl_minutes: v })}
+        />
+        <CountRow
+          title="ອາຍຸ QR ຊຳລະ"
+          unit="ນາທີ"
+          value={form?.qr_ttl_minutes}
+          disabled={!canEditMoney}
+          onChange={(v) => form && setForm({ ...form, qr_ttl_minutes: v })}
+        />
+        <CountRow
+          title="ຮອບໂອນເງິນ"
+          hint="ຄວາມຍາວຂອງແຕ່ລະຮອບທີ່ ‘ສ້າງຮອບໃໝ່’ ຈະສ້າງ"
+          unit="ວັນ"
+          value={form?.payout_period_days}
+          disabled={!canEditMoney}
+          onChange={(v) => form && setForm({ ...form, payout_period_days: v })}
+        />
+        <CountRow
+          title="ຈຳນວນຄືນສູງສຸດຕໍ່ການຈອງ"
+          unit="ຄືນ"
+          value={form?.max_nights_per_booking}
+          disabled={!canEditMoney}
+          onChange={(v) => form && setForm({ ...form, max_nights_per_booking: v })}
+        />
+        <CountRow
+          title="ລັອກອິນຜິດໄດ້ສູງສຸດ"
+          hint="ຜິດຄົບຈຳນວນນີ້ ບັນຊີຈະຖືກລັອກຊົ່ວຄາວ"
+          unit="ຄັ້ງ"
+          value={form?.login_max_attempts}
+          disabled={!canEditMoney}
+          onChange={(v) => form && setForm({ ...form, login_max_attempts: v })}
+        />
+        <CountRow
+          title="ໄລຍະລັອກບັນຊີ"
+          unit="ນາທີ"
+          value={form?.login_lockout_minutes}
+          disabled={!canEditMoney}
+          onChange={(v) => form && setForm({ ...form, login_lockout_minutes: v })}
+          last
+        />
+      </Card>
+
       {/* admins */}
       <Card padding={24}>
         <CardTitle
@@ -176,6 +292,12 @@ export function Settings() {
           ຜູ້ດູແລລະບົບ
         </CardTitle>
 
+        {!isSuper && (
+          <div style={{ font: f(400, 12), color: c.muted }}>
+            ສະເພາະ super_admin ຈຶ່ງເບິ່ງ ແລະ ຈັດການລາຍຊື່ຜູ້ດູແລໄດ້
+          </div>
+        )}
+
         {admins.data?.map((a, i) => (
           <div
             key={a.id}
@@ -187,24 +309,24 @@ export function Settings() {
               borderBottom: i === admins.data!.length - 1 ? 'none' : `1px solid ${c.divider}`,
             }}
           >
-            <Avatar gradient={avatarFor(a.email)} label={initials(a.name)} />
+            <Avatar gradient={avatarFor(a.email)} label={initials(a.fullName ?? a.email)} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ font: f(700, 13), color: c.text }}>
-                {a.name}
+                {a.fullName ?? a.email}
                 {a.id === admin?.id && (
                   <span style={{ font: f(400, 11), color: c.faint, marginLeft: 8 }}>(ທ່ານ)</span>
                 )}
               </div>
               <div style={{ font: f(400, 11), color: c.muted }}>
                 {a.email}
-                {a.last_login_at && ` · ເຂົ້າລ່າສຸດ ${laoAgo(a.last_login_at)}`}
+                {a.lastLoginAt && ` · ເຂົ້າລ່າສຸດ ${laoAgo(a.lastLoginAt)}`}
               </div>
             </div>
             <Pill
-              bg={a.role === 'super_admin' ? c.accentSoft : c.successBg}
-              fg={a.role === 'super_admin' ? c.accentDark : c.successFg}
+              bg={a.adminRole === 'super_admin' ? c.accentSoft : c.successBg}
+              fg={a.adminRole === 'super_admin' ? c.accentDark : c.successFg}
             >
-              {a.roleLabel}
+              {a.adminRole ? ADMIN_ROLE_LABEL[a.adminRole] ?? a.adminRole : '—'}
             </Pill>
             {isSuper && a.id !== admin?.id && (
               <Button
@@ -269,21 +391,25 @@ export function Settings() {
               header: 'ຜູ້ກະທຳ',
               render: (r) => (
                 <>
-                  <div style={{ color: c.text, fontWeight: 500 }}>{r.actorName}</div>
-                  <div style={{ font: f(400, 11), color: c.faint }}>{r.actorEmail ?? r.actor_type}</div>
+                  <div style={{ color: c.text, fontWeight: 500 }}>{r.actor}</div>
+                  <div style={{ font: f(400, 11), color: c.faint }}>{r.module ?? '—'}</div>
                 </>
               ),
             },
-            { key: 'target', header: 'ເປົ້າໝາຍ', render: (r) => r.target ?? '—' },
-            { key: 'ip', header: 'IP', render: (r) => r.ip_address ?? '—' },
+            {
+              key: 'target',
+              header: 'ເປົ້າໝາຍ',
+              render: (r) => (r.table ? `${r.table}${r.recordId ? ` #${r.recordId}` : ''}` : '—'),
+            },
+            { key: 'ip', header: 'IP', render: (r) => r.ip ?? '—' },
             {
               key: 'when',
               header: 'ເວລາ',
               align: 'right',
               render: (r) => (
                 <>
-                  <div>{laoAgo(r.created_at)}</div>
-                  <div style={{ font: f(400, 10), color: c.faint }}>{laoDateTime(r.created_at)}</div>
+                  <div>{laoAgo(r.createdAt)}</div>
+                  <div style={{ font: f(400, 10), color: c.faint }}>{laoDateTime(r.createdAt)}</div>
                 </>
               ),
             },
@@ -303,16 +429,23 @@ export function Settings() {
   );
 }
 
-function RateRow({
+/** A labelled numeric setting with its unit. */
+function SettingRow({
   title,
   hint,
+  unit,
+  step,
+  max,
   value,
   disabled,
   onChange,
   last,
 }: {
   title: string;
-  hint: string;
+  hint?: string;
+  unit: string;
+  step: string;
+  max?: number;
   value: number | undefined;
   disabled: boolean;
   onChange: (v: number) => void;
@@ -324,20 +457,21 @@ function RateRow({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: 16,
         padding: '16px 0',
         borderBottom: last ? 'none' : `1px solid ${c.divider}`,
       }}
     >
       <div>
         <div style={{ font: f(600, 14), color: c.text }}>{title}</div>
-        <div style={{ font: f(400, 12), color: c.muted }}>{hint}</div>
+        {hint && <div style={{ font: f(400, 12), color: c.muted }}>{hint}</div>}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>
         <input
           type="number"
-          step="0.5"
+          step={step}
           min={0}
-          max={100}
+          max={max}
           value={value ?? ''}
           disabled={disabled}
           onChange={(e) => onChange(Number(e.target.value))}
@@ -353,10 +487,18 @@ function RateRow({
             outline: 'none',
           }}
         />
-        <span style={{ font: f(700, 15), color: c.soft }}>%</span>
+        <span style={{ font: f(700, 13), color: c.soft, minWidth: 34 }}>{unit}</span>
       </div>
     </div>
   );
+}
+
+function RateRow(props: Omit<Parameters<typeof SettingRow>[0], 'unit' | 'step' | 'max'>) {
+  return <SettingRow {...props} unit="%" step="0.5" max={100} />;
+}
+
+function CountRow(props: Omit<Parameters<typeof SettingRow>[0], 'step'>) {
+  return <SettingRow {...props} step="1" />;
 }
 
 function CreateAdminDialog({
@@ -368,7 +510,7 @@ function CreateAdminDialog({
   busy: boolean;
   error: unknown;
   onClose: () => void;
-  onSubmit: (v: { email: string; name: string; password: string; role: string }) => void;
+  onSubmit: (v: NewAdmin) => void;
 }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -388,7 +530,14 @@ function CreateAdminDialog({
           </Button>
           <Button
             disabled={busy || !valid}
-            onClick={() => onSubmit({ email: email.trim(), name: name.trim(), password, role })}
+            onClick={() =>
+              onSubmit({
+                email: email.trim(),
+                fullName: name.trim(),
+                password,
+                adminRole: role,
+              })
+            }
           >
             {busy ? 'ກຳລັງສ້າງ...' : 'ສ້າງບັນຊີ'}
           </Button>

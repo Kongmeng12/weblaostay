@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
-import type { Paged, BookingRow } from '../lib/types';
+import type { Paged, BookingRow, BookingDetail as BookingDetailData } from '../lib/types';
 import { c, f, pillFor, BOOKING_STATUS_PILL, PAYMENT_STATUS_PILL } from '../theme';
 import { kip, laoDateRange, laoDateTime } from '../lib/format';
 import {
@@ -20,7 +20,15 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { useDebounced } from '../lib/useDebounced';
 
-type StatusFilter = 'all' | 'pending' | 'confirmed' | 'staying' | 'done' | 'cancelled';
+/** `all` plus every `booking_status` the API accepts as a `?status=` filter. */
+type StatusFilter =
+  | 'all'
+  | 'pending'
+  | 'confirmed'
+  | 'staying'
+  | 'completed'
+  | 'cancelled'
+  | 'no_show';
 
 export function Bookings() {
   const qc = useQueryClient();
@@ -48,7 +56,7 @@ export function Bookings() {
 
   const detail = useQuery({
     queryKey: ['bookings', 'detail', detailId],
-    queryFn: () => api.get<Record<string, unknown>>(`/admin/bookings/${detailId}`),
+    queryFn: () => api.get<BookingDetailData>(`/admin/bookings/${detailId}`),
     enabled: !!detailId,
   });
 
@@ -86,20 +94,23 @@ export function Bookings() {
           }}
           options={[
             { value: 'all', label: 'ທັງໝົດ', count: cnt.all },
-            { value: 'pending', label: 'ລໍຖ້າ', count: cnt.pending },
+            { value: 'pending', label: 'ລໍຊຳລະ', count: cnt.pending },
             { value: 'confirmed', label: 'ຢືນຢັນ', count: cnt.confirmed },
             { value: 'staying', label: 'ກຳລັງພັກ', count: cnt.staying },
-            { value: 'done', label: 'ສຳເລັດ', count: cnt.done },
+            { value: 'completed', label: 'ສຳເລັດ', count: cnt.completed },
             { value: 'cancelled', label: 'ຍົກເລີກ', count: cnt.cancelled },
+            { value: 'no_show', label: 'ບໍ່ມາ', count: cnt.no_show },
           ]}
         />
+        {/* The API matches `q` against booking_code only, so the placeholder
+            promises exactly that and no more. */}
         <SearchInput
           value={search}
           onChange={(v) => {
             setSearch(v);
             setPage(1);
           }}
-          placeholder="ຄົ້ນຫາ ລະຫັດ / ທີ່ພັກ / ແຂກ..."
+          placeholder="ຄົ້ນຫາລະຫັດການຈອງ ເຊັ່ນ STL-03E9..."
           width={300}
         />
       </div>
@@ -116,25 +127,9 @@ export function Bookings() {
             {
               key: 'property',
               header: 'ທີ່ພັກ',
-              render: (r) => (
-                <>
-                  <div style={{ color: c.text, fontWeight: 500 }}>{r.property}</div>
-                  <div style={{ font: f(400, 11), color: c.faint }}>
-                    {r.province} · {r.room}
-                  </div>
-                </>
-              ),
+              render: (r) => <span style={{ color: c.text, fontWeight: 500 }}>{r.property}</span>,
             },
-            {
-              key: 'guest',
-              header: 'ແຂກ',
-              render: (r) => (
-                <>
-                  <div style={{ color: c.text }}>{r.guest}</div>
-                  <div style={{ font: f(400, 11), color: c.faint }}>{r.guests} ຄົນ</div>
-                </>
-              ),
-            },
+            { key: 'guest', header: 'ແຂກ', render: (r) => r.guest },
             {
               key: 'dates',
               header: 'ວັນທີ່',
@@ -149,10 +144,18 @@ export function Bookings() {
               key: 'source',
               header: 'ຊ່ອງທາງ',
               render: (r) => (
-                <span style={{ font: f(600, 11), color: r.source === 'walk_in' ? '#8A6B1F' : c.soft }}>
-                  {r.source === 'walk_in' ? 'Walk-in · 2.5%' : 'App · 5%'}
+                <span
+                  style={{ font: f(600, 11), color: r.source === 'walk_in' ? '#8A6B1F' : c.soft }}
+                >
+                  {r.source === 'walk_in' ? 'Walk-in' : 'App'}
                 </span>
               ),
+            },
+            {
+              key: 'commission',
+              header: 'ຄອມ',
+              align: 'right',
+              render: (r) => <span style={{ color: c.soft }}>{kip(r.commission)}</span>,
             },
             {
               key: 'payment',
@@ -197,10 +200,11 @@ export function Bookings() {
           onClose={() => setDetailId(null)}
           footer={
             <>
+              {/* The API refuses to cancel a stay that is already over or
+                  already cancelled, so the button is not offered for those. */}
               {can('super_admin', 'finance') &&
                 detail.data &&
-                (detail.data as { status?: string }).status !== 'cancelled' &&
-                (detail.data as { status?: string }).status !== 'done' && (
+                !['cancelled', 'completed', 'no_show'].includes(detail.data.status) && (
                   <Button
                     variant="danger"
                     onClick={() => {
@@ -244,27 +248,7 @@ export function Bookings() {
   );
 }
 
-function BookingDetail({ data }: { data: Record<string, unknown> }) {
-  const d = data as {
-    code: string;
-    nights: number;
-    guests: number;
-    subtotal: number;
-    fee: number;
-    total: number;
-    status: string;
-    source: string;
-    check_in: string;
-    check_out: string;
-    created_at: string;
-    properties: { name: string; province: string; address: string; partners: { owner_name: string; phone: string } };
-    users: { full_name: string; email: string; phone: string; tier: string };
-    rooms: { name: string; room_no: string; bed_type: string; has_ac: boolean };
-    payments: { status: string; amount: number; txn_ref: string | null; paid_at: string | null }[];
-    cancellations: { reason: string | null; fee: number; refund_amount: number }[];
-    promos: { code: string; type: string; value: number } | null;
-  };
-
+function BookingDetail({ data: d }: { data: BookingDetailData }) {
   const pill = pillFor(BOOKING_STATUS_PILL, d.status);
 
   return (
@@ -275,41 +259,60 @@ function BookingDetail({ data }: { data: Record<string, unknown> }) {
       </div>
 
       <Section title="ທີ່ພັກ">
-        <Row label="ຊື່" value={d.properties.name} />
-        <Row label="ແຂວງ" value={d.properties.province} />
-        <Row label="ຫ້ອງ" value={`${d.rooms.room_no ?? d.rooms.name} · ${d.rooms.has_ac ? 'ມີແອ' : 'ບໍ່ມີແອ'} · ${d.rooms.bed_type === 'double' ? 'ຕຽງຄູ່' : 'ຕຽງດຽວ'}`} />
-        <Row label="Partner" value={`${d.properties.partners.owner_name} · ${d.properties.partners.phone}`} />
+        <Row label="ຊື່" value={d.property.name} />
+        <Row
+          label="ທີ່ຢູ່"
+          value={[d.property.district, d.property.province, d.property.address]
+            .filter(Boolean)
+            .join(' · ')}
+        />
+        {d.roomType && (
+          <Row
+            label="ຫ້ອງ"
+            value={`${d.roomType.name} × ${d.roomType.quantity} · ${kip(d.roomType.pricePerNight)}/ຄືນ`}
+          />
+        )}
+        <Row
+          label="Partner"
+          value={[d.property.host, d.property.phone].filter(Boolean).join(' · ')}
+        />
       </Section>
 
       <Section title="ແຂກ">
-        <Row label="ຊື່" value={d.users.full_name} />
-        <Row label="ຕິດຕໍ່" value={`${d.users.phone} · ${d.users.email}`} />
-        <Row label="ຊັ້ນສະມາຊິກ" value={d.users.tier === 'gold' ? 'Gold' : 'Silver'} />
+        <Row label="ຊື່" value={d.guest.name ?? '—'} />
+        <Row label="ຕິດຕໍ່" value={[d.guest.phone, d.guest.email].filter(Boolean).join(' · ')} />
       </Section>
 
       <Section title="ການເຂົ້າພັກ">
-        <Row label="ວັນທີ່" value={laoDateRange(d.check_in, d.check_out)} />
+        <Row label="ວັນທີ່" value={laoDateRange(d.checkIn, d.checkOut)} />
         <Row label="ຈຳນວນຄືນ" value={`${d.nights} ຄືນ · ${d.guests} ຄົນ`} />
-        <Row label="ຊ່ອງທາງ" value={d.source === 'walk_in' ? 'Walk-in (ຄອມ 2.5%)' : 'App (ຄອມ 5%)'} />
-        <Row label="ວັນຈອງ" value={laoDateTime(d.created_at)} />
+        <Row label="ຊ່ອງທາງ" value={d.source === 'walk_in' ? 'Walk-in' : 'App'} />
+        <Row label="ວັນຈອງ" value={laoDateTime(d.createdAt)} />
+        {d.specialRequest && <Row label="ຄຳຂໍພິເສດ" value={d.specialRequest} />}
       </Section>
 
       <Section title="ຍອດເງິນ">
         <Row label="ຄ່າທີ່ພັກ" value={kip(d.subtotal)} />
-        <Row label="ຄ່າບໍລິການ" value={kip(d.fee)} />
-        {d.promos && <Row label="ໂຄ້ດສ່ວນຫຼຸດ" value={d.promos.code} />}
+        {d.serviceFee > 0 && <Row label="ຄ່າບໍລິການ" value={kip(d.serviceFee)} />}
+        {d.tax > 0 && <Row label="ພາສີ" value={kip(d.tax)} />}
+        {d.cleaningFee > 0 && <Row label="ຄ່າທຳຄວາມສະອາດ" value={kip(d.cleaningFee)} />}
+        {d.discount > 0 && <Row label="ສ່ວນຫຼຸດ" value={`− ${kip(d.discount)}`} />}
         <Row label="ລວມ" value={kip(d.total)} strong />
-        {d.payments.map((p, i) => (
-          <Row
-            key={i}
-            label="ຊຳລະ"
-            value={`${pillFor(PAYMENT_STATUS_PILL, p.status).label} · ${kip(p.amount)}${p.txn_ref ? ' · ' + p.txn_ref : ''}`}
-          />
-        ))}
-        {d.cancellations.map((x, i) => (
-          <Row key={i} label="ຄືນເງິນ" value={`ຫັກ ${kip(x.fee)} · ຄືນ ${kip(x.refund_amount)}`} />
-        ))}
+        <Row label={`ຄອມມິຊຊັນ ${d.commissionRate}%`} value={kip(d.commission)} />
+        <Row label="ຍອດໃຫ້ Partner" value={kip(d.payout)} />
       </Section>
+
+      {d.payments.length > 0 && (
+        <Section title="ການຊຳລະ">
+          {d.payments.map((p) => (
+            <Row
+              key={p.id}
+              label={pillFor(PAYMENT_STATUS_PILL, p.status).label}
+              value={`${kip(p.amount)} · ${p.paidAt ? laoDateTime(p.paidAt) : 'ຍັງບໍ່ຈ່າຍ'}`}
+            />
+          ))}
+        </Section>
+      )}
     </div>
   );
 }

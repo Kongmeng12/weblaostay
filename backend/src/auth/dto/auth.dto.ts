@@ -1,6 +1,16 @@
-import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { ALL_ROLES, ROLE, type Role } from '../../common/roles';
-import { PROPERTY_TYPES } from '../../common/money';
+import {
+  IsEmail,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { otp_purpose, property_type } from '@prisma/client';
 
 export class LoginDto {
   @IsEmail({}, { message: 'ອີເມວບໍ່ຖືກຕ້ອງ · Invalid email' })
@@ -13,28 +23,31 @@ export class LoginDto {
   password!: string;
 }
 
-export class RegisterAdminDto {
+export class RegisterCustomerDto {
   @IsEmail({}, { message: 'ອີເມວບໍ່ຖືກຕ້ອງ · Invalid email' })
   @MaxLength(255)
   email!: string;
-
-  @IsString()
-  @MinLength(2)
-  @MaxLength(255)
-  name!: string;
 
   @IsString()
   @MinLength(8, { message: 'ລະຫັດຜ່ານຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ · Minimum 8 characters' })
   @MaxLength(128)
   password!: string;
 
-  @IsIn(ALL_ROLES, { message: `role ຕ້ອງເປັນ: ${ALL_ROLES.join(' | ')}` })
-  role: Role = ROLE.STAFF;
+  @IsString()
+  @MinLength(2)
+  @MaxLength(255)
+  fullName!: string;
+
+  @IsString()
+  @MinLength(6)
+  @MaxLength(50)
+  phone!: string;
 }
 
 /**
- * A partner signs up with their account details *and* their first property —
- * an application with no property is nothing for the Approvals screen to judge.
+ * A partner signs up with their account, their business, and their first
+ * property. An application with no property is nothing for the Approvals
+ * screen to review, so all three are created in one transaction.
  */
 export class RegisterPartnerDto {
   @IsEmail({}, { message: 'ອີເມວບໍ່ຖືກຕ້ອງ · Invalid email' })
@@ -59,55 +72,113 @@ export class RegisterPartnerDto {
   @IsString()
   @MinLength(2)
   @MaxLength(255)
-  propertyName!: string;
-
-  @IsIn(PROPERTY_TYPES, { message: `ປະເພດທີ່ພັກຕ້ອງເປັນ: ${PROPERTY_TYPES.join(' | ')}` })
-  propertyType!: string;
+  businessName!: string;
 
   @IsString()
   @MinLength(2)
-  @MaxLength(100)
-  province!: string;
+  @MaxLength(255)
+  propertyName!: string;
+
+  @IsEnum(property_type, {
+    message: `ປະເພດທີ່ພັກຕ້ອງເປັນ: ${Object.values(property_type).join(' | ')}`,
+  })
+  propertyType!: property_type;
+
+  @Type(() => Number)
+  @IsInt()
+  provinceId!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  districtId?: number;
 
   @IsString()
   @MinLength(4)
   @MaxLength(500)
   address!: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  bankName?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  bankAccount?: string;
-}
-
-export class RegisterCustomerDto {
-  @IsEmail({}, { message: 'ອີເມວບໍ່ຖືກຕ້ອງ · Invalid email' })
-  @MaxLength(255)
-  email!: string;
-
-  @IsString()
-  @MinLength(8, { message: 'ລະຫັດຜ່ານຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ · Minimum 8 characters' })
-  @MaxLength(128)
-  password!: string;
-
-  @IsString()
-  @MinLength(2)
-  @MaxLength(255)
-  fullName!: string;
-
-  @IsString()
-  @MinLength(6)
-  @MaxLength(50)
-  phone!: string;
 }
 
 export class RefreshDto {
   @IsString()
   @MaxLength(1024)
   refreshToken!: string;
+}
+
+export class RequestOtpDto {
+  /** Phone or email the code is sent to. */
+  @IsString()
+  @MinLength(6)
+  @MaxLength(255)
+  target!: string;
+
+  @IsEnum(otp_purpose)
+  purpose!: otp_purpose;
+}
+
+export class VerifyOtpDto {
+  @IsString()
+  @MinLength(6)
+  @MaxLength(255)
+  target!: string;
+
+  @IsEnum(otp_purpose)
+  purpose!: otp_purpose;
+
+  @IsString()
+  @MinLength(4)
+  @MaxLength(10)
+  code!: string;
+}
+
+export class RequestPasswordResetDto {
+  @IsEmail()
+  @MaxLength(255)
+  email!: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @MaxLength(255)
+  token!: string;
+
+  @IsString()
+  @MinLength(8, { message: 'ລະຫັດຜ່ານຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ · Minimum 8 characters' })
+  @MaxLength(128)
+  password!: string;
+}
+
+export class ChangePasswordDto {
+  @IsString()
+  @MaxLength(128)
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  newPassword!: string;
+}
+
+export class PaginationDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit: number = 20;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  q?: string;
+
+  get skip(): number {
+    return (this.page - 1) * this.limit;
+  }
 }

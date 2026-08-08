@@ -49,6 +49,37 @@ export function isoDayUtc(date: Date | string): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
+/**
+ * `2026-08-13` or a Date → UTC midnight of that calendar day.
+ *
+ * Every `date` column the API accepts goes through this. Building a Date from
+ * a bare "2026-08-13" already gives UTC midnight, but a value that arrived with
+ * a time or an offset would not, and Prisma writes a `date` column from the
+ * *UTC* day of whatever Date it is handed. Normalising here is what stops a
+ * stay booked from Vientiane landing a day early.
+ *
+ * Returns an Invalid Date for unparseable input; callers check `isNaN`.
+ */
+export function utcMidnight(value: Date | string): Date {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return d;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/** Whole nights between two calendar days. Check-out is not charged. */
+export function nightsBetweenUtc(checkIn: Date, checkOut: Date): number {
+  return Math.round((utcMidnight(checkOut).getTime() - utcMidnight(checkIn).getTime()) / 86_400_000);
+}
+
+/** Every calendar day in `[from, to)` — the nights a stay occupies. */
+export function eachNightUtc(from: Date, toExclusive: Date): Date[] {
+  const nights: Date[] = [];
+  for (let d = utcMidnight(from); d < toExclusive; d = addDaysUtc(d, 1)) {
+    nights.push(new Date(d));
+  }
+  return nights;
+}
+
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }

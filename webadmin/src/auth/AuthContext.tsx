@@ -2,27 +2,27 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import {
   login as apiLogin,
   logout as apiLogout,
-  registerFirstAdmin,
   me,
   tokens,
   setAuthLostHandler,
-  type AdminIdentity,
+  type AdminRole,
+  type Identity,
 } from '../lib/api';
 
 interface AuthState {
-  admin: AdminIdentity | null;
+  admin: Identity | null;
   /** True until the stored token has been checked against the server. */
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, name: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  can: (...roles: AdminIdentity['role'][]) => boolean;
+  /** True when the signed-in admin holds one of the given roles. */
+  can: (...roles: AdminRole[]) => boolean;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [admin, setAdmin] = useState<AdminIdentity | null>(null);
+  const [admin, setAdmin] = useState<Identity | null>(null);
   const [loading, setLoading] = useState(true);
 
   // A stored token may be expired or revoked, so it is validated against
@@ -42,7 +42,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     me()
       .then((identity) => {
-        if (!cancelled) setAdmin(identity);
+        if (cancelled) return;
+        // A token belonging to a customer or partner is not an error, but it is
+        // not a session here either.
+        if (identity.role !== 'ADMIN') {
+          tokens.clear();
+          setAdmin(null);
+          return;
+        }
+        setAdmin(identity);
       })
       .catch(() => {
         tokens.clear();
@@ -64,18 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signIn(email, password) {
         const res = await apiLogin(email, password);
         tokens.set(res.accessToken, res.refreshToken);
-        setAdmin(res.admin);
-      },
-      async signUp(email, name, password) {
-        const res = await registerFirstAdmin(email, name, password);
-        tokens.set(res.accessToken, res.refreshToken);
-        setAdmin(res.admin);
+        setAdmin(res.user);
       },
       async signOut() {
         await apiLogout();
         setAdmin(null);
       },
-      can: (...roles) => (admin ? roles.includes(admin.role) : false),
+      can: (...roles) => (admin?.adminRole ? roles.includes(admin.adminRole) : false),
     }),
     [admin, loading],
   );

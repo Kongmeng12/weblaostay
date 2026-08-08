@@ -1,26 +1,42 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
-import type { Kpis, GmvSeries, RecentBooking, PayoutSummary } from '../lib/types';
+import { api, qs } from '../lib/api';
+import type { BookingRow, Dashboard as DashboardData, GmvSeries, Paged } from '../lib/types';
 import { c, f, radius, pillFor, BOOKING_STATUS_PILL } from '../theme';
 import { kip, kipShort, laoDateRange, deltaLabel, laoDate } from '../lib/format';
 import { Card, CardTitle, DataTable, ErrorState, Pill, Button } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
 
+const GMV_DAYS = 14;
+
 export function Dashboard() {
   const navigate = useNavigate();
   const { can } = useAuth();
 
-  const kpis = useQuery({ queryKey: ['dashboard', 'kpis'], queryFn: () => api.get<Kpis>('/admin/dashboard/kpis') });
-  const gmv = useQuery({ queryKey: ['dashboard', 'gmv'], queryFn: () => api.get<GmvSeries>('/admin/dashboard/gmv?days=14') });
-  const recent = useQuery({ queryKey: ['dashboard', 'recent'], queryFn: () => api.get<RecentBooking[]>('/admin/dashboard/recent-bookings?limit=6') });
-  const payout = useQuery({ queryKey: ['dashboard', 'payout'], queryFn: () => api.get<PayoutSummary>('/admin/dashboard/payout-summary') });
+  const summary = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: () => api.get<DashboardData>('/admin/dashboard'),
+  });
+  const gmv = useQuery({
+    queryKey: ['dashboard', 'gmv', GMV_DAYS],
+    queryFn: () => api.get<GmvSeries>(`/admin/dashboard/gmv${qs({ days: GMV_DAYS })}`),
+  });
+  // The newest bookings are simply the first page of the bookings list, which is
+  // already sorted newest-first — no endpoint of its own needed.
+  const recent = useQuery({
+    queryKey: ['dashboard', 'recent'],
+    queryFn: () => api.get<Paged<BookingRow>>(`/admin/bookings${qs({ limit: 6 })}`),
+  });
 
-  if (kpis.isError) return <ErrorState error={kpis.error} onRetry={() => void kpis.refetch()} />;
+  if (summary.isError) {
+    return <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />;
+  }
 
-  const k = kpis.data;
-  const revenueDelta = deltaLabel(k?.revenue.deltaPercent);
-  const commissionDelta = deltaLabel(k?.commission.deltaPercent);
+  const k = summary.data;
+  const pendingBookings = k?.bookingsByStatus.pending ?? 0;
+  // The API reports lifetime totals, so the only honest trend is the one that
+  // can be read off the series itself: this week against the one before it.
+  const weekDelta = deltaLabel(weekOverWeek(gmv.data), 'vs ອາທິດກ່ອນ');
 
   return (
     <div>
@@ -36,39 +52,39 @@ export function Dashboard() {
         <KpiCard
           emoji="💰"
           emojiBg="#FFE3D6"
-          label="ລາຍໄດ້ລວມ (ເດືອນນີ້)"
-          value={k ? kipShort(k.revenue.value) : '—'}
-          note={revenueDelta.text}
-          noteColor={revenueDelta.color}
-          loading={kpis.isLoading}
+          label="ຍອດຂາຍລວມ · GMV"
+          value={k ? kipShort(k.gmv) : '—'}
+          note={weekDelta.text}
+          noteColor={weekDelta.color}
+          loading={summary.isLoading}
         />
         <KpiCard
           emoji="📈"
           emojiBg="#E7EAD7"
-          label="ຄ່າຄອມມິຊຊັນ"
-          value={k ? kipShort(k.commission.value) : '—'}
+          label="ຄ່າຄອມມິຊຊັນລວມ"
+          value={k ? kipShort(k.commission) : '—'}
           valueColor={c.accent}
-          note={commissionDelta.text}
-          noteColor={commissionDelta.color}
-          loading={kpis.isLoading}
+          note={gmv.data ? `${kipShort(gmv.data.total)} ໃນ ${GMV_DAYS} ວັນ` : ''}
+          noteColor={c.muted}
+          loading={summary.isLoading}
         />
         <KpiCard
           emoji="🧾"
           emojiBg="#F3E6D8"
-          label="ການຈອງ (ເດືອນນີ້)"
-          value={k ? String(k.bookings.value) : '—'}
-          note={k ? `▲ ${k.bookings.today} ມື້ນີ້` : ''}
-          noteColor="#6E7B4E"
-          loading={kpis.isLoading}
+          label="ການຈອງທັງໝົດ"
+          value={k ? String(k.bookings) : '—'}
+          note={pendingBookings ? `${pendingBookings} ລໍຊຳລະ` : 'ບໍ່ມີລາຍການຄ້າງຊຳລະ'}
+          noteColor={pendingBookings ? c.accent : c.muted}
+          loading={summary.isLoading}
         />
         <KpiCard
-          emoji="🤝"
+          emoji="🏨"
           emojiBg="#E6E1CD"
-          label="Partner ໃໝ່ (ເດືອນນີ້)"
-          value={k ? String(k.newPartners.value) : '—'}
-          note={k ? `${k.newPartners.pendingApprovals} ລໍອະນຸມັດ` : ''}
-          noteColor={c.accent}
-          loading={kpis.isLoading}
+          label="ທີ່ພັກເປີດຂາຍ"
+          value={k ? String(k.activeProperties) : '—'}
+          note={k?.pendingApprovals ? `${k.pendingApprovals} ລໍອະນຸມັດ` : 'ບໍ່ມີໃບສະໝັກຄ້າງ'}
+          noteColor={k?.pendingApprovals ? c.accent : c.muted}
+          loading={summary.isLoading}
         />
       </div>
 
@@ -78,7 +94,9 @@ export function Dashboard() {
           <CardTitle
             right={
               <span style={{ font: f(600, 12), color: c.muted }}>
-                {gmv.data ? `14 ວັນລ່າສຸດ · ສູງສຸດ ${kipShort(gmv.data.peak)}` : '14 ວັນລ່າສຸດ'}
+                {gmv.data
+                  ? `${GMV_DAYS} ວັນລ່າສຸດ · ສູງສຸດ ${kipShort(gmv.data.peak)}`
+                  : `${GMV_DAYS} ວັນລ່າສຸດ`}
               </span>
             }
           >
@@ -94,19 +112,19 @@ export function Dashboard() {
               gap: 6,
             }}
           >
-            {(gmv.data?.series ?? Array.from({ length: 14 }, () => null)).map((point, i) => (
+            {(gmv.data?.series ?? Array.from({ length: GMV_DAYS }, () => null)).map((point, i) => (
               <div
                 key={point?.date ?? i}
-                title={point ? `${laoDate(point.date)} · ${kip(point.total)}` : ''}
+                title={
+                  point
+                    ? `${laoDate(point.date)} · ${kip(point.total)} · ${point.bookings} ການຈອງ`
+                    : ''
+                }
                 style={{
                   flex: 1,
                   // A zero day still needs a visible sliver, or the chart looks broken.
                   height: point ? `${Math.max(point.heightPercent, 2)}%` : '30%',
-                  background: point
-                    ? i >= 12
-                      ? c.accent
-                      : '#D9C0A0'
-                    : c.divider,
+                  background: point ? (i >= GMV_DAYS - 2 ? c.accent : '#D9C0A0') : c.divider,
                   borderRadius: '5px 5px 0 0',
                   transition: 'height .3s',
                 }}
@@ -142,16 +160,14 @@ export function Dashboard() {
             ຍອດຕ້ອງໂອນໃຫ້ Partner
           </div>
           <div style={{ font: f(800, 30), color: '#fff', marginBottom: 6 }}>
-            {payout.data ? kipShort(payout.data.pendingTotal) : '—'}
+            {k ? kipShort(k.pendingPayouts.amount) : '—'}
           </div>
           <div style={{ font: f(400, 12), color: c.onDarkSoft, marginBottom: 'auto' }}>
-            {payout.data
-              ? `${payout.data.partnerCount} partner · ${
-                  payout.data.periodStart
-                    ? laoDateRange(payout.data.periodStart, payout.data.periodEnd)
-                    : 'ບໍ່ມີຮອບຄ້າງ'
-                }`
-              : 'ກຳລັງໂຫຼດ...'}
+            {!k
+              ? 'ກຳລັງໂຫຼດ...'
+              : k.pendingPayouts.count > 0
+                ? `${k.pendingPayouts.count} ຮອບລໍໂອນ`
+                : 'ບໍ່ມີຮອບຄ້າງ'}
           </div>
           {can('super_admin', 'finance') ? (
             <Button size="lg" onClick={() => navigate('/payout')} style={{ marginTop: 20 }}>
@@ -179,7 +195,7 @@ export function Dashboard() {
         </div>
         <DataTable
           loading={recent.isLoading}
-          rows={recent.data ?? []}
+          rows={recent.data?.items ?? []}
           keyOf={(r) => r.id}
           onRowClick={() => navigate('/bookings')}
           empty="ຍັງບໍ່ມີການຈອງ"
@@ -208,6 +224,26 @@ export function Dashboard() {
       </Card>
     </div>
   );
+}
+
+/**
+ * The last seven days against the seven before them, as a percentage.
+ *
+ * Null when there is nothing to compare against — a first week of trading, or a
+ * previous week with no takings at all. Showing "▲ ∞%" there would be worse
+ * than showing nothing.
+ */
+function weekOverWeek(gmv: GmvSeries | undefined): number | null {
+  if (!gmv || gmv.series.length < 14) return null;
+
+  const sum = (from: number, to: number) =>
+    gmv.series.slice(from, to).reduce((total, point) => total + point.total, 0);
+
+  const previous = sum(gmv.series.length - 14, gmv.series.length - 7);
+  const current = sum(gmv.series.length - 7, gmv.series.length);
+
+  if (previous === 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
 }
 
 function KpiCard({

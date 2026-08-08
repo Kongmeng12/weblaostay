@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
-import type { Paged, PartnerRow } from '../lib/types';
+import type { Paged, PartnerRow, ProvinceCount } from '../lib/types';
 import { c, f, pillFor, PARTNER_STATUS_PILL, avatarFor } from '../theme';
 import { kip, laoDate, stars } from '../lib/format';
 import {
@@ -16,7 +16,8 @@ import {
 } from '../components/ui';
 import { useDebounced } from '../lib/useDebounced';
 
-type Filter = 'all' | 'verified' | 'pending' | 'rejected';
+/** Mirrors `partner_status`. */
+type Filter = 'all' | 'verified' | 'pending' | 'rejected' | 'suspended';
 
 export function Partners() {
   const [filter, setFilter] = useState<Filter>('all');
@@ -28,7 +29,7 @@ export function Partners() {
 
   const provinces = useQuery({
     queryKey: ['partners', 'provinces'],
-    queryFn: () => api.get<{ province: string; count: number }[]>('/admin/partners/provinces'),
+    queryFn: () => api.get<ProvinceCount[]>('/admin/partners/provinces'),
   });
 
   const list = useQuery({
@@ -36,7 +37,13 @@ export function Partners() {
     queryFn: () =>
       api.get<Paged<PartnerRow>>(
         '/admin/partners' +
-          qs({ status: filter === 'all' ? undefined : filter, province, q, page, limit: 15 }),
+          qs({
+            status: filter === 'all' ? undefined : filter,
+            provinceId: province,
+            q,
+            page,
+            limit: 15,
+          }),
       ),
   });
 
@@ -65,6 +72,7 @@ export function Partners() {
             { value: 'verified', label: 'ຢືນຢັນແລ້ວ' },
             { value: 'pending', label: 'ລໍອະນຸມັດ' },
             { value: 'rejected', label: 'ບໍ່ຜ່ານ' },
+            { value: 'suspended', label: 'ລະງັບ' },
           ]}
         />
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -86,8 +94,10 @@ export function Partners() {
             }}
           >
             <option value="">ທຸກແຂວງ</option>
+            {/* A property with no province set groups under a null id, which
+                cannot be filtered on — so it is listed but not selectable. */}
             {provinces.data?.map((p) => (
-              <option key={p.province} value={p.province}>
+              <option key={p.province} value={p.id ?? ''} disabled={p.id === null}>
                 {p.province} ({p.count})
               </option>
             ))}
@@ -118,15 +128,19 @@ export function Partners() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                   <Avatar gradient={avatarFor(r.id)} size={40} />
                   <div>
-                    <div style={{ font: f(700, 13), color: c.text }}>{r.propertyName}</div>
+                    <div style={{ font: f(700, 13), color: c.text }}>{r.businessName}</div>
                     <div style={{ font: f(400, 11), color: c.faint }}>
-                      {r.ownerName} · {r.phone}
+                      {[r.ownerName, r.phone].filter(Boolean).join(' · ') || r.email}
                     </div>
                   </div>
                 </div>
               ),
             },
-            { key: 'province', header: 'ແຂວງ', render: (r) => r.province ?? '—' },
+            {
+              key: 'province',
+              header: 'ແຂວງ',
+              render: (r) => (r.provinces.length ? r.provinces.join(', ') : '—'),
+            },
             {
               key: 'rooms',
               header: 'ຫ້ອງ',
@@ -146,13 +160,13 @@ export function Partners() {
               key: 'rating',
               header: 'ຄະແນນ',
               render: (r) =>
-                r.reviewCount > 0 ? (
+                r.rating !== null ? (
                   <>
                     <div style={{ color: '#C89B4A', font: f(600, 12) }}>
-                      {stars(Math.round(Number(r.rating ?? 0)))}
+                      {stars(Math.round(r.rating))}
                     </div>
                     <div style={{ font: f(400, 11), color: c.faint }}>
-                      {Number(r.rating).toFixed(1)} · {r.reviewCount} ຮີວິວ
+                      {r.rating.toFixed(1)} · {r.reviewCount} ຮີວິວ
                     </div>
                   </>
                 ) : (
@@ -163,7 +177,7 @@ export function Partners() {
               key: 'commission',
               header: 'ຄ່າຄອມ',
               align: 'right',
-              render: (r) => `${Number(r.commissionRate ?? 5)}%`,
+              render: (r) => `${r.commissionRate}%`,
             },
             {
               key: 'revenue',

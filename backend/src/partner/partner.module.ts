@@ -1,29 +1,19 @@
 import { Module } from '@nestjs/common';
+import { PartnerController } from './partner.controller';
+import { PartnerService } from './partner.service';
 import { OwnershipService } from './ownership.service';
-import { PartnerProfileController } from './profile.controller';
-import { PartnerDashboardController } from './dashboard/dashboard.controller';
-import { PartnerPropertiesController } from './properties/properties.controller';
-import { PartnerPropertiesService } from './properties/properties.service';
-import { PartnerAvailabilityController } from './availability/availability.controller';
-import { PartnerBookingsController } from './bookings/bookings.controller';
-import { PartnerBookingsService } from './bookings/bookings.service';
+import { BookingModule } from '../booking/booking.module';
 
 /**
- * Everything the Flutter partner app talks to. PrismaModule and CommonModule
- * are global, so nothing needs importing here.
+ * Everything the Flutter partner app talks to.
  *
  * OwnershipService is exported because the uploads module also has to prove a
- * property belongs to the partner before writing photos onto it.
+ * property belongs to the caller before writing photos onto it.
  */
 @Module({
-  controllers: [
-    PartnerProfileController,
-    PartnerDashboardController,
-    PartnerPropertiesController,
-    PartnerAvailabilityController,
-    PartnerBookingsController,
-  ],
-  providers: [OwnershipService, PartnerPropertiesService, PartnerBookingsService],
+  imports: [BookingModule],
+  controllers: [PartnerController],
+  providers: [PartnerService, OwnershipService],
   exports: [OwnershipService],
 })
 export class PartnerModule {}
