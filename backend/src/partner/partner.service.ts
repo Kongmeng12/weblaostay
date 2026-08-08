@@ -3,6 +3,7 @@ import { Prisma, booking_status, payout_status } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../booking/inventory.service';
 import { OwnershipService } from './ownership.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { kipOf, rateOf, toKip } from '../common/money';
 import { addDaysUtc, todayUtc, utcMidnight } from '../common/dates';
 import { REVENUE_STATUSES } from '../common/enums';
@@ -20,6 +21,7 @@ export class PartnerService {
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
     private readonly own: OwnershipService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── properties ────────────────────────────────────────────────────────────
@@ -452,7 +454,7 @@ export class PartnerService {
 
   // ── dashboard ─────────────────────────────────────────────────────────────
 
-  async dashboard(partnerId: bigint) {
+  async dashboard(partnerId: bigint, userId: bigint) {
     const propertyIds = await this.own.propertyIds(partnerId);
     const today = todayUtc();
     const tomorrow = addDaysUtc(today, 1);
@@ -465,14 +467,23 @@ export class PartnerService {
         occupancy: { soldTonight: 0, capacity: 0, percent: 0 },
         week: { bookings: 0, gross: 0, commission: 0, net: 0 },
         payoutPending: { count: 0, amount: 0 },
-        unreadNotifications: 0,
+        unreadNotifications: await this.notifications.unreadCount(userId),
       };
     }
 
     const scope = { property_id: { in: propertyIds }, deleted_at: null };
 
-    const [arrivals, departures, staying, pending, weekRows, capacity, soldTonight, payoutAgg] =
-      await Promise.all([
+    const [
+      arrivals,
+      departures,
+      staying,
+      pending,
+      weekRows,
+      capacity,
+      soldTonight,
+      payoutAgg,
+      unread,
+    ] = await Promise.all([
         this.prisma.bookings.findMany({
           where: { ...scope, check_in: today, status: { not: booking_status.cancelled } },
           include: {
@@ -507,6 +518,7 @@ export class PartnerService {
           _sum: { net_amount: true },
           _count: true,
         }),
+        this.notifications.unreadCount(userId),
       ]);
 
     const totalRooms = capacity._sum.total_count ?? 0;
@@ -544,7 +556,7 @@ export class PartnerService {
         count: payoutAgg._count,
         amount: kipOf(payoutAgg._sum.net_amount ?? 0n),
       },
-      unreadNotifications: 0,
+      unreadNotifications: unread,
     };
   }
 

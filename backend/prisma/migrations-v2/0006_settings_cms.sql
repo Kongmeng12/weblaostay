@@ -5,7 +5,7 @@
 -- which silently truncates these too. Loading them after the demo data is what
 -- keeps them populated.
 --
--- Idempotent, keyed on setting_key / page_slug.
+-- Idempotent, keyed on setting_key / template_code / page_slug / question.
 
 BEGIN;
 
@@ -77,6 +77,10 @@ INSERT INTO notification_templates
    'ອີກ {{days}} ວັນ ຈະຮອດວັນເຂົ້າພັກ {{property}}', 'booking'),
   ('payment_received',  'ຊຳລະສຳເລັດ',
    '{{booking_code}} · {{amount}} · {{property}}', 'payment'),
+  -- The host's side of the same event. Same facts, opposite direction: the
+  -- guest paid, the host was paid.
+  ('payment_received_partner', 'ໄດ້ຮັບການຊຳລະ',
+   '{{booking_code}} · {{amount}} · {{property}}', 'payment'),
   ('payment_expired',   'QR ໝົດອາຍຸ',
    'QR ຂອງການຈອງ {{booking_code}} ໝົດອາຍຸແລ້ວ ກະລຸນາສ້າງໃໝ່', 'payment'),
   ('refund_completed',  'ຄືນເງິນສຳເລັດ',
@@ -86,11 +90,13 @@ INSERT INTO notification_templates
   ('partner_approved',  'ອະນຸມັດແລ້ວ! 🎉',
    'ໃບສະໝັກທີ່ພັກຂອງທ່ານຜ່ານການອະນຸມັດ — ເລີ່ມຮັບການຈອງໄດ້ເລີຍ', 'system'),
   ('partner_rejected',  'ໃບສະໝັກບໍ່ຜ່ານ',
-   'ໃບສະໝັກຂອງທ່ານຍັງບໍ່ຜ່ານ ກະລຸນາຕິດຕໍ່ຝ່າຍຊ່ວຍເຫຼືອ', 'system'),
+   'ໃບສະໝັກຂອງທ່ານຍັງບໍ່ຜ່ານ · {{reason}}', 'system'),
   ('review_received',   'ມີຮີວິວໃໝ່',
    '{{booking_code}} · {{stars}} ດາວ', 'review'),
   ('new_message',       'ມີຂໍ້ຄວາມໃໝ່',
-   '{{sender}}: {{preview}}', 'system')
+   '{{sender}}: {{preview}}', 'system'),
+  ('review_replied',    'ທີ່ພັກຕອບຮີວິວຂອງທ່ານ',
+   '{{property}} ຕອບຮີວິວຂອງທ່ານແລ້ວ', 'review')
 ON CONFLICT (template_code) DO NOTHING;
 
 -- ── CMS pages ───────────────────────────────────────────────────────────────
@@ -108,6 +114,12 @@ INSERT INTO app_pages (page_slug, title, content, is_active) VALUES
 ON CONFLICT (page_slug) DO NOTHING;
 
 -- ── FAQs ────────────────────────────────────────────────────────────────────
+-- `faqs` has no natural key beyond its bigserial, so a bare
+-- `ON CONFLICT DO NOTHING` can never fire and re-running this file used to
+-- duplicate every row. The question is what actually identifies an entry, so
+-- it gets the unique index and the conflict target.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_faqs_question ON faqs (question);
+
 INSERT INTO faqs (category, question, answer, display_order) VALUES
   ('ການຈອງ', 'ຈອງແລ້ວຈ່າຍເງິນແນວໃດ?',
    'ຫຼັງກົດຈອງ ລະບົບຈະສ້າງ QR PhaJay ໃຫ້ — ສະແກນຈ່າຍຜ່ານແອັບທະນາຄານ. QR ມີອາຍຸ 15 ນາທີ.', 1),
@@ -123,6 +135,6 @@ INSERT INTO faqs (category, question, answer, display_order) VALUES
    'ຈອງຜ່ານແອັບ 5% · walk-in ທີ່ບັນທຶກເອງ 2.5%.', 6),
   ('Partner', 'ໄດ້ຮັບເງິນເມື່ອໃດ?',
    'ໂອນເປັນຮອບທຸກອາທິດ ຫຼັງແຂກເຊັກເອົາແລ້ວ.', 7)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (question) DO NOTHING;
 
 COMMIT;

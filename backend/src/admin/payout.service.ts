@@ -3,7 +3,8 @@ import { booking_status, payout_status } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../common/settings.service';
 import { LedgerService } from '../booking/ledger.service';
-import { kipOf } from '../common/money';
+import { formatKip, kipOf } from '../common/money';
+import { NotificationsService } from '../notifications/notifications.service';
 import { addDaysUtc, startOfWeekUtc, todayUtc, utcMidnight } from '../common/dates';
 
 /**
@@ -22,6 +23,7 @@ export class PayoutService {
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
     private readonly ledger: LedgerService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(status?: payout_status) {
@@ -229,17 +231,15 @@ export class PayoutService {
         amount: payout.net_amount,
       });
 
-      await tx.notifications.create({
-        data: {
-          user_id: payout.partners.user_id,
-          title: 'ໂອນເງິນສຳເລັດ',
-          message: `ໂອນ ₭${kipOf(payout.net_amount).toLocaleString('en-US')} ເຂົ້າບັນຊີ ${
-            payout.partner_bank_accounts?.bank_name ?? ''
-          } ແລ້ວ`,
-          notification_type: 'payment',
-          reference_type: 'payout',
-          reference_id: payoutId,
+      await this.notifications.send(tx, {
+        userId: payout.partners.user_id,
+        templateCode: 'payout_paid',
+        vars: {
+          amount: formatKip(payout.net_amount),
+          bank: payout.partner_bank_accounts?.bank_name ?? 'ບັນຊີທີ່ລົງທະບຽນໄວ້',
         },
+        referenceType: 'payout',
+        referenceId: payoutId,
       });
 
       return {

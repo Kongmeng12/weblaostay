@@ -19,7 +19,8 @@ import { InventoryService } from './inventory.service';
 import { PricingService } from './pricing.service';
 import { LedgerService } from './ledger.service';
 import { BOOKING_TRANSITIONS } from '../common/enums';
-import { bookingCode, cancellationSplit, kipOf, rateOf } from '../common/money';
+import { bookingCode, cancellationSplit, formatKip, kipOf, rateOf } from '../common/money';
+import { NotificationsService } from '../notifications/notifications.service';
 import { utcMidnight } from '../common/dates';
 import type { CreateBookingDto, WalkInDto } from './booking.dto';
 
@@ -40,6 +41,7 @@ export class BookingService {
     private readonly inventory: InventoryService,
     private readonly pricing: PricingService,
     private readonly ledger: LedgerService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Prices a stay without touching anything — the checkout summary. */
@@ -167,26 +169,21 @@ export class BookingService {
       return created;
     });
 
-    // Outside the transaction on purpose: telling the host is a side effect of
-    // the booking, not part of it. A notification that fails must not undo a
-    // room the guest has already been told is theirs.
-    await this.prisma.notifications
-      .create({
-        data: {
-          user_id: hostUserId,
-          title: 'ມີການຈອງໃໝ່',
-          message: `${bookingCode(booking.booking_id)} · ${quote.nights} ຄືນ`,
-          notification_type: 'booking',
-          reference_type: 'booking',
-          reference_id: booking.booking_id,
-        },
-      })
-      .catch((err: unknown) => {
-        this.logger.error(
-          `Booking ${bookingCode(booking.booking_id)} was created but the host was not notified`,
-          err instanceof Error ? err.stack : String(err),
-        );
-      });
+    // No transaction on purpose: telling the host is a side effect of the
+    // booking, not part of it. A notification that fails must not undo a room
+    // the guest has already been told is theirs — `send(null, …)` swallows and
+    // logs rather than throwing.
+    await this.notifications.send(null, {
+      userId: hostUserId,
+      templateCode: 'booking_created',
+      vars: {
+        booking_code: bookingCode(booking.booking_id),
+        nights: quote.nights,
+        total: formatKip(quote.totalAmount),
+      },
+      referenceType: 'booking',
+      referenceId: booking.booking_id,
+    });
 
     return this.findOne(booking.booking_id, customerId);
   }
@@ -548,15 +545,14 @@ export class BookingService {
         },
       });
 
-      await tx.notifications.create({
-        data: {
-          user_id: booking.customer_id,
-          title: 'ການຈອງຖືກຍົກເລີກ',
-          message: `${booking.booking_code} ຖືກຍົກເລີກ · ຄືນເງິນ ₭${kipOf(refund).toLocaleString('en-US')}`,
-          notification_type: 'booking',
-          reference_type: 'booking',
-          reference_id: bookingId,
-        },
+      // Inside the transaction: a cancellation notice for a cancellation that
+      // rolled back would be worse than none.
+      await this.notifications.send(tx, {
+        userId: booking.customer_id,
+        templateCode: 'booking_cancelled',
+        vars: { booking_code: booking.booking_code, refund: formatKip(refund) },
+        referenceType: 'booking',
+        referenceId: bookingId,
       });
 
       return {

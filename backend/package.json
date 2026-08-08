@@ -1,14 +1,14 @@
 {
   "name": "laostay-backend",
   "version": "0.1.0",
-  "description": "LaoStay API — serves WebAdmin, Partner app and Customer app",
+  "description": "LaoStay API — serves WebAdmin, the guest web app and the Partner app",
   "private": true,
   "scripts": {
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
-    "db:reset": "node scripts/run-migration-v2.mjs --yes",
+    "db:reset": "node scripts/run-migration-v2.mjs",
     "db:pull": "prisma db pull",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",

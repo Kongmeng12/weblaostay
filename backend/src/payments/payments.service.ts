@@ -11,7 +11,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../common/settings.service';
 import { InventoryService } from '../booking/inventory.service';
 import { LedgerService } from '../booking/ledger.service';
-import { kipOf } from '../common/money';
+import { formatKip, kipOf } from '../common/money';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   PAYMENT_PROVIDER,
   type CallbackResult,
@@ -27,6 +28,7 @@ export class PaymentsService {
     private readonly settings: SettingsService,
     private readonly inventory: InventoryService,
     private readonly ledger: LedgerService,
+    private readonly notifications: NotificationsService,
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
   ) {}
 
@@ -240,26 +242,29 @@ export class PaymentsService {
         select: { user_id: true },
       });
 
-      await tx.notifications.createMany({
-        data: [
-          {
-            user_id: booking.customer_id,
-            title: 'ຊຳລະສຳເລັດ',
-            message: `${booking.booking_code} · ₭${kipOf(payment.amount).toLocaleString('en-US')}`,
-            notification_type: 'payment',
-            reference_type: 'booking',
-            reference_id: booking.booking_id,
-          },
-          {
-            user_id: partnerUser.user_id,
-            title: 'ໄດ້ຮັບການຊຳລະ',
-            message: `${booking.booking_code} · ₭${kipOf(payment.amount).toLocaleString('en-US')}`,
-            notification_type: 'payment',
-            reference_type: 'booking',
-            reference_id: booking.booking_id,
-          },
-        ],
-      });
+      // Both sides hear about it, with wording that fits each: the guest paid,
+      // the host was paid.
+      const vars = {
+        booking_code: booking.booking_code,
+        amount: formatKip(payment.amount),
+        property: booking.properties.property_name,
+      };
+      await this.notifications.sendMany(tx, [
+        {
+          userId: booking.customer_id,
+          templateCode: 'payment_received',
+          vars,
+          referenceType: 'booking',
+          referenceId: booking.booking_id,
+        },
+        {
+          userId: partnerUser.user_id,
+          templateCode: 'payment_received_partner',
+          vars,
+          referenceType: 'booking',
+          referenceId: booking.booking_id,
+        },
+      ]);
 
       this.logger.log(`Payment ${payment.payment_id} settled for booking ${booking.booking_id}`);
 

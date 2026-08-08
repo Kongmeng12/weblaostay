@@ -6,11 +6,15 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { BookingModule } from './booking/booking.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PartnerModule } from './partner/partner.module';
+import { ChatModule } from './chat/chat.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { CmsModule } from './cms/cms.module';
 import { AdminModule } from './admin/admin.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { HealthController } from './health.controller';
@@ -29,11 +33,15 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
     ScheduleModule.forRoot(),
     PrismaModule,
     CommonModule,
+    NotificationsModule,
     AuthModule,
     CatalogModule,
     BookingModule,
     PaymentsModule,
     PartnerModule,
+    ChatModule,
+    ReviewsModule,
+    CmsModule,
     AdminModule,
     UploadsModule,
   ],

@@ -1,0 +1,116 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Noto Sans Lao', system-ui, -apple-system, sans-serif;
+  /* The guest app is a plain white page, not the admin console's framed card:
+     it is read on a phone, mostly outdoors, mostly one-handed. */
+  background: #ffffff;
+  color: #2b2521;
+}
+
+a {
+  color: #fd4d1c;
+  text-decoration: none;
+}
+a:hover {
+  color: #d13a0e;
+}
+
+button {
+  font-family: inherit;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  /* iOS zooms the whole page when a focused input is under 16px. */
+  font-size: 16px;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #fd4d1c !important;
+  outline: none;
+}
+input:disabled,
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+img {
+  max-width: 100%;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d8cdbb transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #d8cdbb;
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Content beside a summary panel that sticks. Below 860px the panel stops
+   being a sidebar and simply follows the content, which is what a phone needs. */
+.laostay-split {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .laostay-split {
+    grid-template-columns: 1fr;
+  }
+  .laostay-split > .laostay-aside {
+    position: static !important;
+  }
+}
+
+/* A horizontal strip that scrolls without showing a bar — photo carousels. */
+.laostay-strip {
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+}
+.laostay-strip::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes laostayPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes laostaySpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

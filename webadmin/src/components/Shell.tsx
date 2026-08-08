@@ -38,6 +38,7 @@ export const NAV: NavItem[] = [
   { to: '/partners', name: 'ທີ່ພັກ & Partner', emoji: '🏡', title: 'ທີ່ພັກ & Partner', subtitle: 'Partner ໃນລະບົບ' },
   { to: '/reviews', name: 'ຮີວິວ & ຂໍ້ພິພາດ', emoji: '⭐', title: 'ຮີວິວ & ຂໍ້ພິພາດ', subtitle: 'ດູແລຮີວິວ ແລະ ຂໍ້ຮ້ອງເຮັຍນ' },
   { to: '/promos', name: 'ໂຄ້ດສ່ວນຫຼຸດ', emoji: '🎟️', title: 'ໂຄ້ດສ່ວນຫຼຸດ', subtitle: 'ຈັດການໂຄ້ດສ່ວນຫຼຸດ & ໂປຣໂມຊັນ' },
+  { to: '/content', name: 'ເນື້ອຫາ', emoji: '📝', title: 'ເນື້ອຫາ · CMS', subtitle: 'ແບນເນີ, ປະກາດ, ຄຳຖາມທີ່ພົບເລື້ອຍ ແລະ ໜ້າຄົງທີ່' },
   { to: '/settings', name: 'ຕັ້ງຄ່າ', emoji: '⚙️', title: 'ຕັ້ງຄ່າລະບົບ', subtitle: 'ຄ່າຄອມມິຊຊັນ, ຜູ້ດູແລ ແລະ ລະບົບ' },
 ];
 

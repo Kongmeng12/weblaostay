@@ -11,6 +11,7 @@ import { Approvals } from './pages/Approvals';
 import { Partners } from './pages/Partners';
 import { Reviews } from './pages/Reviews';
 import { Promos } from './pages/Promos';
+import { Content } from './pages/Content';
 import { Settings } from './pages/Settings';
 import { c, f } from './theme';
 
@@ -62,6 +63,7 @@ function Root() {
         <Route path="partners" element={<Partners />} />
         <Route path="reviews" element={<Reviews />} />
         <Route path="promos" element={<Promos />} />
+        <Route path="content" element={<Content />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

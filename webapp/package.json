@@ -1,0 +1,30 @@
+{
+  "name": "laostay-webapp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "LaoStay — the guest-facing web app: search, book, pay, and manage a stay.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "check:browse": "node scripts/browse-check.mjs",
+    "check:journey": "node scripts/journey-check.mjs",
+    "check:chat": "node scripts/chat-check.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.90.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.9.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "puppeteer-core": "^25.4.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5"
+  }
+}

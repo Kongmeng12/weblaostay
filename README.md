@@ -1,160 +1,191 @@
 # LaoStay
 
-ແພລດຟອມຈອງທີ່ພັກລາວ — Backend (NestJS) + WebAdmin (React) + Partner app (Flutter, ຮອບໜ້າ).
+ແພລດຟອມຈອງທີ່ພັກລາວ — Backend (NestJS) + WebAdmin (React) + ເວັບລູກຄ້າ (React) + Partner app (Flutter).
 
 ```
-kong/
-├─ .env          DATABASE_URL ຕົ້ນສະບັບ (Neon)
-├─ backend/      NestJS API      → http://localhost:3100/api
-│                  · /api/admin/*     ຜູ້ດູແລ (WebAdmin)
-│                  · /api/partner/*   ເຈົ້າຂອງທີ່ພັກ (Flutter app)
-│                  · /api/customer/*  ລູກຄ້າ  ·  /api/properties  ຄົ້ນຫາ (ບໍ່ຕ້ອງ login)
-├─ webadmin/     React + Vite    → http://localhost:5173
-└─ partner_app/  Flutter         (ຍັງບໍ່ໄດ້ສ້າງ)
+kong/                         ← repo ນີ້
+├─ backend/     NestJS API      → http://localhost:3100/api
+│                 · /api/properties     ຄົ້ນຫາ (ບໍ່ຕ້ອງ login)
+│                 · /api/customer/*     ແຂກ
+│                 · /api/partner/*      ເຈົ້າຂອງທີ່ພັກ
+│                 · /api/admin/*        ຜູ້ດູແລ
+├─ webadmin/    React + Vite    → http://localhost:5173   ຜູ້ດູແລ
+└─ webapp/      React + Vite    → http://localhost:5174   ແຂກ
+
+../partner_app/  Flutter        ຢູ່ນອກ repo ນີ້ ມີ repo ຂອງຕົນເອງ
 ```
 
 ## ເລີ່ມໃຊ້ງານ
 
-ຄັ້ງທຳອິດ (ຄັ້ງດຽວ):
+ຄັ້ງທຳອິດ:
 
 ```bash
 cd d:\kong\laostay\kong
-npm run setup      # ຕິດຕັ້ງ dependency ທັງ root + backend + webadmin
+cp backend/.env.example backend/.env    # ແລ້ວໃສ່ DATABASE_URL ແລະ JWT secret
+npm run setup                            # ຕິດຕັ້ງທັງ 4 ໂປຣເຈັກ + generate Prisma client
+npm run db:reset -- --yes                # ສ້າງ schema + ຂໍ້ມູນຕົວຢ່າງ (ລຶບຂອງເກົ່າໝົດ)
 ```
 
-ຈາກນັ້ນທຸກຄັ້ງ ພຽງຄຳສັ່ງດຽວ:
+ຈາກນັ້ນທຸກຄັ້ງ:
 
 ```bash
-npm run dev        # ແລ່ນ API :3100 + WebAdmin :5173 ພ້ອມກັນ
+npm run dev        # API :3100 + WebAdmin :5173 + ເວັບລູກຄ້າ :5174
 ```
 
-ເປີດ http://localhost:5173 ແລ້ວເຂົ້າສູ່ລະບົບ:
+ບັນຊີຕົວຢ່າງ — ທຸກຄົນເຂົ້າຜ່ານ `POST /api/auth/login` ອັນດຽວກັນ,
+ແອັບແຕ່ລະໂຕກວດ `role` ເອງ:
 
-| ອີເມວ | ສິດ | ລະຫັດຜ່ານ |
+| ອີເມວ | ເປັນໃຜ | ລະຫັດຜ່ານ |
 |---|---|---|
 | `amnuay@laostay.la` | super_admin | `LaoStay@2026` |
 | `bounmy@laostay.la` | finance | `LaoStay@2026` |
 | `phonsy@laostay.la` | staff | `LaoStay@2026` |
-
-ບັນຊີ Partner ແລະ ລູກຄ້າ (ໃຊ້ກັບ `/api/auth/partner/login` · `/api/auth/customer/login`):
-
-| ອີເມວ | ເປັນໃຜ | ລະຫັດຜ່ານ |
-|---|---|---|
 | `vintage@laostay.la` | partner (verified) | `Partner@2026` |
 | `homsabay@laostay.la` | partner (verified) | `Partner@2026` |
-| `souda.v@gmail.com` | ລູກຄ້າ | `Customer@2026` |
+| `newapplicant@laostay.la` | partner (ລໍອະນຸມັດ) | `Partner@2026` |
+| `souda.v@gmail.com` | ແຂກ | `Customer@2026` |
 
-> **ໝາຍເຫດ port**: ໃຊ້ **3100** ບໍ່ແມ່ນ 3000 ເພາະ 3000 ຖືກໃຊ້ໂດຍໂປຣເຈັກອື່ນໃນເຄື່ອງນີ້ (ODG ຂາຍ).
-> ປ່ຽນໄດ້ທີ່ `backend/.env` (`PORT`) ພ້ອມ `webadmin/vite.config.ts` (proxy target).
+> **ໝາຍເຫດ port**: ໃຊ້ **3100** ບໍ່ແມ່ນ 3000 ເພາະ 3000 ຖືກໃຊ້ໂດຍໂປຣເຈັກອື່ນໃນເຄື່ອງນີ້.
+> ປ່ຽນໄດ້ທີ່ `backend/.env` (`PORT`) ພ້ອມ proxy ໃນ `webadmin/vite.config.ts`
+> ແລະ `webapp/vite.config.ts`.
 
-### ຄຳສັ່ງທັງໝົດ (ແລ່ນຈາກ root)
+### ຄຳສັ່ງ (ແລ່ນຈາກ root)
 
 | ຄຳສັ່ງ | ເຮັດຫຍັງ |
 |---|---|
-| `npm run dev` | ແລ່ນ API + WebAdmin ພ້ອມກັນ |
+| `npm run dev` | ແລ່ນ API + WebAdmin + ເວັບລູກຄ້າ ພ້ອມກັນ |
 | `npm run setup` | ຕິດຕັ້ງ dependency ທັງໝົດ + generate Prisma client |
-| `npm run seed` | ຣີເຊັດຂໍ້ມູນຕົວຢ່າງ |
-| `npm run smoke` | ທົດສອບ API 135 ຂໍ້ (ຕ້ອງແລ່ນ `npm run dev` + `npm run seed` ຢູ່ກ່ອນ) |
+| `npm run typecheck` | ກວດ type ທັງ 3 ໂປຣເຈັກ |
+| `npm run build` | build ທັງ 3 ໂປຣເຈັກ |
+| `npm run smoke` | ທົດສອບ API 112 ຂໍ້ (ຕ້ອງມີ API ແລ່ນຢູ່) |
 | `npm run studio` | ເປີດ Prisma Studio |
-| `npm run build` | build ທັງສອງໂປຣເຈັກ |
-
-ກົດ `Ctrl+C` ຄັ້ງດຽວ ຢຸດທັງສອງ.
 
 ## ຖານຂໍ້ມູນ
 
-Neon PostgreSQL 18.4 — ຕາຕະລາງ 17 ອັນຕາມ `Database.dc.html` ມີຢູ່ກ່ອນແລ້ວ.
+PostgreSQL (Neon) + PostGIS — **schema v2: 59 ຕາຕະລາງ · 205 index · 39 enum · 33 trigger**.
 
 ```bash
 cd backend
-npm run db:migrate   # ໃສ່ app_settings, refresh_tokens, index (idempotent)
-npm run db:pull      # introspect → prisma/schema.prisma
-npm run db:generate  # ສ້າງ Prisma client
-npm run db:studio    # ເປີດ Prisma Studio
+npm run db:reset -- --yes   # DROP SCHEMA public CASCADE ແລ້ວສ້າງໃໝ່ທັງໝົດ
+npm run db:pull             # introspect → prisma/schema.prisma
+npm run db:generate         # ສ້າງ Prisma client
 ```
 
-`npm run seed` ຈະ **ລຶບຂໍ້ມູນ transactional ແລ້ວສ້າງໃໝ່** (ການຈອງ, ການຊຳລະ, payout, ຮີວິວ...)
-ແຕ່ **upsert** ບັນຊີ (admin, partner, ລູກຄ້າ, promo) — id ຈຶ່ງບໍ່ປ່ຽນ. ໃຊ້ PRNG seed ຄົງທີ່
-ຈຶ່ງໄດ້ຂໍ້ມູນຄືເກົ່າທຸກຄັ້ງ.
+> `db:reset` **ລຶບທຸກຢ່າງ** ແລະ ບໍ່ມີທາງກັບຄືນ. ຕ້ອງໃສ່ `-- --yes` ເອງ
+> ແລະ ມັນຈະປະຕິເສດເມື່ອ `NODE_ENV=production`.
 
-### ສິ່ງທີ່ migration ເພີ່ມ
+SQL ຢູ່ `backend/prisma/migrations-v2/` ແລ່ນຕາມລຳດັບຊື່ໄຟລ໌:
 
-`backend/prisma/migrations/0001_admin_additions.sql` — additive ລ້ວນ, ບໍ່ລຶບຫຍັງ:
+| ໄຟລ໌ | ເນື້ອໃນ |
+|---|---|
+| `0001_schema_v2.sql` | 59 ຕາຕະລາງ · enum · CHECK ທັງໝົດ |
+| `0002_indexes.sql` | 205 index — ລວມ GiST (geo) ແລະ GIN (full-text) |
+| `0003_triggers.sql` | `updated_at` ອັດຕະໂນມັດ · ຄິດຄະແນນທີ່ພັກຄືນ · ອັບເດດ preview ຂອງແຊັດ |
+| `0004_master_data.sql` | 18 ແຂວງ · 56 ເມືອງ · 30 ສິ່ງອຳນວຍ · 4 ນະໂຍບາຍຍົກເລີກ |
+| `0005_demo_data.sql` | ບັນຊີ · ທີ່ພັກ · ຄັງຫ້ອງ 90 ວັນ · 60 ການຈອງ · ledger |
+| `0006_settings_cms.sql` | `system_settings` · notification template · ໜ້າ CMS · FAQ |
 
-1. **`app_settings`** — ໜ້າຕັ້ງຄ່າຕ້ອງການ (ຄ່າຄອມ 5%, walk-in 2.5%, ຄ່າຍົກເລີກ 30%)
-2. **`refresh_tokens`** — ເກັບ hash ເພື່ອໃຫ້ logout/revoke ໃຊ້ໄດ້ຈິງ
-3. **Index ~30 ອັນ** — ເດີມ DB **ບໍ່ມີ index ໃດເລີຍ ນອກຈາກ PK/UNIQUE** (23 → 57)
-4. **`partners.commission_rate` default 17.00 → 5.00** — ຄ່າເດີມຂັດກັບກົດຄ່າຄອມຂອງ product
+> `0006` ແຍກອອກມາຈາກ `0004` ໂດຍເຈດຕະນາ: ທຸກຕາຕະລາງໃນນັ້ນມີ FK ຫາ `users`
+> ແລະ `0005` ໃຊ້ `TRUNCATE users CASCADE` ເຊິ່ງລາມໄປລຶບພວກມັນຫາຍງຽບໆ.
 
-`backend/prisma/migrations/0002_multi_actor.sql` — ເປີດ DB ໃຫ້ partner ແລະ ລູກຄ້າ:
+### ສາມຢ່າງທີ່ຖືເປັນຫົວໃຈ
 
-1. **`refresh_tokens.partner_id` / `.user_id`** — `admin_id` ກາຍເປັນ nullable ພ້ອມ CHECK
-   ວ່າມີເຈົ້າຂອງແຖວລະ **ໜຶ່ງດຽວ**. ໃຊ້ FK ຈິງ (ບໍ່ແມ່ນ `actor_type/actor_id`) ຈຶ່ງຍັງ cascade ໄດ້
-2. **`bookings.discount`** — promo ຫຼຸດລາຄາຈິງ; ຖ້າບໍ່ມີຖັນນີ້ `subtotal + fee - discount = total` ຈະບໍ່ຈິງ
-3. **`payments.expires_at` · `.raw_callback`** — QR ໝົດອາຍຸ ແລະ ເກັບ callback ດິບໄວ້ສືບຫາເຫດ
-4. **`chat_messages.read_at`** — ນັບຂໍ້ຄວາມທີ່ຍັງບໍ່ອ່ານ
-5. **`rooms.photos`** — `properties.photos` ມີແລ້ວ ຫ້ອງຍັງບໍ່ມີ
-6. **`app_settings.service_fee_rate` = 5** — ຄ່າບໍລິການ 5% ເຄີຍ hardcode ຢູ່ seed
+1. **ຄັງຫ້ອງກັນການຂາຍເກີນ** — `room_inventory` ມີ `total_count` / `held_count` /
+   `booked_count`, `available_count` ເປັນ **generated column**, ພ້ອມ CHECK
+   `held + booked <= total`. ການຈອງລັອກແຖວດ້ວຍ `FOR UPDATE` ໃນ statement ດຽວ.
+2. **Hold ໝົດອາຍຸເອງ** — ຈອງແລ້ວບໍ່ຈ່າຍ ຫ້ອງກັນໄວ້ 15 ນາທີ ແລ້ວ cron
+   (`hold-sweeper.service.ts`) ຄືນໃຫ້. ບໍ່ມີອັນນີ້ ຫ້ອງຈະຄ້າງຕະຫຼອດໄປ.
+3. **Ledger ສອງດ້ານ** — `ledger_entries` ບັນທຶກ charge / commission / refund / payout.
+   `balance_after` ເປັນຄວາມສະດວກເທົ່ານັ້ນ — **`SUM(amount)` ຄືຄວາມຈິງ**.
 
 ## ການທົດສອບ
 
 ```bash
-cd backend && npm run smoke    # 135 ການກວດ (ຕ້ອງແລ່ນ API + seed ຢູ່ກ່ອນ)
+# Backend — ຕ້ອງມີ API ແລ່ນຢູ່, ຂຽນລົງ DB ຈິງ
+cd backend && npm run smoke              # 112 ຂໍ້
+
+# ເວັບລູກຄ້າ — ຂັບ browser ຈິງ
+cd webapp
+npm run check:browse                     # 21 ຂໍ້, ອ່ານຢ່າງດຽວ (ລວມ FAQ + ໜ້າຄົງທີ່)
+npm run check:chat                       # 19 ຂໍ້ ແຊັດ + ຕອບຮີວິວ, ຂຽນລົງ DB
+npm run check:journey                    # ຈອງຈົນຈົບ, ຂຽນລົງ DB
+
+# WebAdmin — admin ເຜີຍແຜ່ ແລ້ວແຂກເຫັນ
+cd ../webadmin
+npm run check:cms                        # 14 ຂໍ້, ຂຽນລົງ DB ແລ້ວລຶບຄືນ
+
+# Partner app
+cd ../../partner_app
+flutter test                             # 31 ຂໍ້ offline
+flutter test --tags live --run-skipped   # 12 ຂໍ້ ຕໍ່ API ຈິງ
 ```
 
-ກວດ: ທຸກ endpoint ຂອງທັງສາມ API, refresh-token rotation + reuse detection,
-RBAC (staff ຕ້ອງໄດ້ 403 ຢູ່ payout/cancel), **ການແຍກຂໍ້ມູນລະຫວ່າງ partner**
-(partner B ຕ້ອງໄດ້ 404 ຢູ່ທຸກຢ່າງຂອງ partner A), **token ຜິດປະເພດຕ້ອງໄດ້ 401**
-(partner token ຢູ່ route admin ແລະ ກັບກັນ), ຈອງຊ້ອນຄືນຕ້ອງໄດ້ 409, ຈ່າຍສອງເທື່ອຕ້ອງໄດ້ QR ດຽວ,
-webhook ທີ່ບໍ່ມີລາຍເຊັນຕ້ອງໄດ້ 401, settle ຊ້ຳຕ້ອງບໍ່ຈ່າຍສອງເທື່ອ, ອັບໂຫຼດໄຟລ໌ບໍ່ແມ່ນຮູບຕ້ອງໄດ້ 415,
-audit log ຂຽນຈິງ, `gmv === commission + net` ແລະ `fee + refund === paid` ທຸກແຖວ.
+`smoke` ກວດສິ່ງທີ່ສຳຄັນທີ່ສຸດ: **ຈອງພ້ອມກັນຈົນເຕັມ → ອັນຖັດໄປໄດ້ 409** ແລະ
+`held + booked ≤ total` ຍັງຈິງ · hold ໝົດອາຍຸແລ້ວ sweeper ຄືນຫ້ອງ · ຈ່າຍແລ້ວ ledger ໄດ້ 2 ແຖວ ·
+ຍົກເລີກແລ້ວ `penalty + refund = ຈ່າຍມາ` · payout = ຜົນລວມ `payout_items` ·
+partner B ໄດ້ 404 ຢູ່ທຸກຢ່າງຂອງ partner A · bcrypt ຂອງ seed login ໄດ້ແລ້ວ hash ກາຍເປັນ argon2.
 
-```bash
-cd webadmin && npm run build   # tsc + vite build
+ຈົບແລ້ວກວດ 8 invariant ໃນ DB ໂດຍກົງ (ບໍ່ຄວນມີແຖວໃດ), ເຊັ່ນ:
+
+```sql
+SELECT count(*) FROM room_inventory WHERE held_count + booked_count > total_count;
 ```
 
 ## ສະຖາປັດຕະຍະກຳ
 
 ### Backend
 
-- **Prisma** ຈາກ `db pull` (ບໍ່ໃຊ້ `migrate dev` — ມັນຢາກ reset DB ທີ່ສ້າງນອກ Prisma)
-- **argon2id** hash ລະຫັດຜ່ານ · access token 15 ນາທີ · refresh 7 ວັນ (rotate + revoke)
-- **ສາມ actor** `admin` / `partner` / `user` — ຕາຕະລາງແຍກ, strategy ແຍກ, `@Actor()` ເລືອກໃຫ້
-- **RBAC** `super_admin` / `finance` / `staff` — guard ເປັນ global, route ຕ້ອງ `@Public()` ຈຶ່ງເປີດ
-- **`@Audit()`** interceptor ຂຽນ `audit_logs` ພ້ອມ IP ຫຼັງ handler ສຳເລັດ
-- **ເງິນເປັນ integer ກີບລ້ວນ** (`src/common/money.ts`) — net ຄິດຈາກການລົບ ຈຶ່ງບໍ່ມີເສດຫາຍ
-- **ວັນທີ່ເປັນ UTC** (`src/common/dates.ts`) — ອ່ານກ່ອນແກ້ໂຄດທີ່ແຕະ `date` column
-- **ລາຄາຄິດບ່ອນດຽວ** (`src/common/booking-pricing.ts`) — customer ແລະ walk-in ໃຊ້ `quoteStay()`
-  ອັນດຽວກັນ; ການຍົກເລີກຢູ່ `src/common/cancellation.service.ts` ໃຊ້ຮ່ວມກັນທັງສາມ actor
+- **Prisma ຈາກ `db pull`** — ບໍ່ໃຊ້ `migrate dev`. SQL ຢູ່ `migrations-v2/` ຄືແຫຼ່ງຄວາມຈິງ;
+  CHECK ແລະ generated column ຫຼາຍອັນ Prisma ສະແດງບໍ່ໄດ້.
+- **`users` ຕາຕະລາງດຽວ** ພ້ອມ `role` (CUSTOMER/PARTNER/ADMIN) + `admin_role`.
+  ຈຶ່ງມີ **JWT strategy ອັນດຽວ** ແລະ login endpoint ອັນດຽວ.
+- **argon2id** ສຳລັບລະຫັດໃໝ່; hash bcrypt ເກົ່າຍັງ login ໄດ້ ແລ້ວຖືກຂຽນທັບເປັນ argon2 ທັນທີ.
+- **RBAC** `@Roles()` + `@AdminRoles()` — guard ເປັນ global, route ຕ້ອງ `@Public()` ຈຶ່ງເປີດ.
+  **ບໍ່ໃສ່ `@Roles` = ເປີດໃຫ້ທຸກຄົນທີ່ login ແລ້ວ.**
+- **`@Audit()`** interceptor ຂຽນ `audit_logs` ພ້ອມ IP ຫຼັງ handler ສຳເລັດ.
+- **ເງິນເປັນ `bigint` ກີບລ້ວນ** (`src/common/money.ts`) — net ຄິດຈາກການລົບສະເໝີ.
+  ອອກ API ເປັນ `number` ຜ່ານ `kipOf()`; id ຍັງເປັນ string.
+- **ວັນທີ່ເປັນ UTC ລ້ວນ** (`src/common/dates.ts`) — ອ່ານກ່ອນແກ້ໂຄດທີ່ແຕະ `date` column.
+- **ລາຄາຄິດບ່ອນດຽວ** (`src/booking/pricing.service.ts`) — ແຂກ ແລະ walk-in ໃຊ້ `quote()` ອັນດຽວກັນ.
 
 ### ຈຸດທີ່ພາດງ່າຍ (ເຄີຍພາດມາແລ້ວ)
 
 - **`date` column + timezone.** Prisma ຂຽນ `date` ໂດຍເອົາ **UTC day** ຂອງ JS Date —
   `new Date(2026,6,13)` (local midnight) ຢູ່ UTC+7 ຈະລົງ DB ເປັນວັນທີ 12.
   ແລະ `pg` ອ່ານ `date` ຈາກ raw query ອອກມາເປັນ **local** midnight ຂະນະທີ່ Prisma ໃຫ້ UTC midnight
-  → key ບໍ່ກົງກັນ 1 ວັນ. ໃຊ້ helper ໃນ `dates.ts` ສະເໝີ, ແລະ raw query ໃຫ້ຄືນ
-  `to_char(..., 'YYYY-MM-DD')` ເປັນ text ແທນ date.
-- **BigInt.** ທຸກ `id` ເປັນ `int8` → Prisma ໃຫ້ BigInt ທີ່ `JSON.stringify` ບໍ່ໄດ້.
-  `BigIntInterceptor` ແປງເປັນ string ຂາອອກ (ບໍ່ໄດ້ patch global prototype).
-- **ລະຫັດການຈອງເປັນ hex.** `STL-0142` = id 322. ໂຄ້ດ hex ທີ່ເປັນຕົວເລກລ້ວນ
-  ຄືກັນກັບ id ທຳມະດາ — `parseBookingRef` ຈຶ່ງຄືນ **ສອງຄ່າ** ແລ້ວ query ດ້ວຍ `IN`.
-- **Token ທັງສາມ actor ໃຊ້ secret ອັນດຽວກັນ.** ລາຍເຊັນຈຶ່ງຜ່ານໝົດ — ສິ່ງທີ່ກັນໄວ້ແມ່ນ claim
-  `typ` ທີ່ **ທຸກ strategy ຕ້ອງກວດ** (`src/auth/strategies/payload.ts`). ຖ້າລືມ = partner
-  ກາຍເປັນ admin ໄດ້. smoke ມີ 2 ຂໍ້ກວດເລື່ອງນີ້ໂດຍສະເພາະ.
-- **Prisma transaction timeout.** Neon ຢູ່ໄກ (~150-300 ms ຕໍ່ຄຳຂໍ) — ຄ່າ default 5 ວິ ຂອງ Prisma
-  ບໍ່ພໍສຳລັບ transaction ການຈອງ ແລ້ວຈະລົ້ມເປັນ **P2028**. ຕັ້ງເປັນ 20 ວິ ຢູ່ `PrismaService`
-  ແລະ `holdNights()` ຂຽນປະຕິທິນດ້ວຍ statement ດຽວ (unnest) ບໍ່ແມ່ນ upsert ຕໍ່ຄືນ.
+  → key ບໍ່ກົງກັນ 1 ວັນ. ໃຊ້ helper ໃນ `dates.ts` ສະເໝີ, raw query ໃຫ້ຄືນ
+  `to_char(..., 'YYYY-MM-DD')` ເປັນ text.
+- **BigInt.** ທຸກ `id` ເປັນ `int8` → `JSON.stringify` ບໍ່ໄດ້. `BigIntInterceptor` ແປງເປັນ
+  string ຂາອອກ. ເງິນກໍເປັນ bigint ຄືກັນ ຈຶ່ງຕ້ອງຜ່ານ `kipOf()` ໃຫ້ເປັນ number ກ່ອນ
+  ບໍ່ດັ່ງນັ້ນ client ຈະໄດ້ຮັບເງິນເປັນ string.
+- **ຫ້າມຂຽນ `available_count`.** ມັນເປັນ generated column ແຕ່ Prisma introspect ອອກມາເປັນ
+  ຖັນທຳມະດາ — ຂຽນໃສ່ແລ້ວ Postgres error ຕອນ runtime. ອັບເດດແຕ່ອີກ 3 ຖັນ.
+- **`geog` ແລະ `search_vector` ເປັນ `Unsupported`** — Prisma query ບໍ່ໄດ້.
+  ຄົ້ນຫາ "ໃກ້ຂ້ອຍ" ແລະ full-text **ຕ້ອງໃຊ້ `$queryRaw`**.
+- **`TRUNCATE ... CASCADE` ລາມໄປຫາຕາຕະລາງທີ່ມີ FK ຫາມັນ** — ບັກນີ້ເຄີຍລຶບ master data ຫາຍງຽບໆ.
+- **ລະຫັດການຈອງເປັນ hex.** `STL-0142` = id 322. ໂຄ້ດ hex ທີ່ເປັນຕົວເລກລ້ວນຄືກັນກັບ id
+  ທຳມະດາ — `parseBookingRef` ຈຶ່ງຄືນ **ສອງຄ່າ** ແລ້ວ query ດ້ວຍ `IN`.
+- **ຢ່າຖືເວລາໃນ transaction ການຈອງ.** ຕັ້ງແຕ່ `hold()` ເປັນຕົ້ນໄປ ທຸກຄົນທີ່ຈອງຫ້ອງນັ້ນຄືນນັ້ນ
+  ລໍຢູ່ຂ້າງຫຼັງ ແລະ ແຕ່ລະ statement ຄື round-trip ໄປ Neon ອີກຄັ້ງ. ອ່ານລາຄາ, ນະໂຍບາຍ,
+  ຊື່ແຂກ, booking id **ກ່ອນ** ເປີດ transaction; ສົ່ງແຈ້ງເຕືອນ **ຫຼັງ** commit.
+  ບໍ່ດັ່ງນັ້ນຈອງພ້ອມກັນ 9 ຄົນຈະຊົນ 20 ວິນາທີແລ້ວໄດ້ 500.
 - **Webhook ຕ້ອງໃຊ້ raw body.** ລາຍເຊັນ HMAC ຄິດຈາກ byte ທີ່ຜູ້ໃຫ້ບໍລິການສົ່ງມາ; JSON ທີ່
-  parse ແລ້ວ serialize ຄືນ ລຳດັບ key ຈະປ່ຽນ ແລະ ລາຍເຊັນຈະບໍ່ກົງຈັກເທື່ອ. `main.ts` ຈຶ່ງເປີດ `rawBody: true`.
-- **`atTime()` ໃນ seed ຖືກ clamp ໄວ້ບໍ່ໃຫ້ເກີນເວລາປັດຈຸບັນ.** ບໍ່ດັ່ງນັ້ນ seed ຕອນເຊົ້າຈະຂຽນແຖວ
-  "ສ້າງເມື່ອ 21:00 ມື້ນີ້" ເຊິ່ງຢູ່ອະນາຄົດ ແລ້ວການຈອງໃໝ່ຈິງໆຈະຖືກຈັດອັນດັບຢູ່ລຸ່ມ.
+  parse ແລ້ວ serialize ຄືນ ລຳດັບ key ຈະປ່ຽນ ແລະ ລາຍເຊັນຈະບໍ່ກົງຈັກເທື່ອ.
+  `main.ts` ຈຶ່ງເປີດ `rawBody: true`.
+- **ຈຳກັດ login ຕ້ອງສູງກວ່າ `login_max_attempts`.** ຖ້າ throttle ຕ່ຳກວ່າ ຫຼື ເທົ່າກັນ
+  ມັນຈະຍິງກ່ອນ ແລ້ວການລັອກບັນຊີຈະບໍ່ມີວັນເຮັດວຽກ.
 
-### WebAdmin
+### ໜ້າເວັບ
 
-React 19 + Vite + TanStack Query. ບໍ່ໃຊ້ UI library — inline style ດຶງມາຈາກ
-`WebAdmin.dc.html` ໂດຍກົງ, token ສີຢູ່ `src/theme.ts`.
+WebAdmin ແລະ ເວັບລູກຄ້າໃຊ້ stack ດຽວກັນ: React 19 + Vite + TanStack Query,
+inline style ພ້ອມ token ສີຢູ່ `src/theme.ts`, ບໍ່ໃຊ້ UI library.
 
-`src/lib/api.ts` ຈັດການ 401 ດ້ວຍການ refresh 1 ຄັ້ງແລ້ວຍິງຄຳຂໍເດີມຄືນ; ຄຳຂໍທີ່ 401
-ພ້ອມກັນຫຼາຍອັນຈະໃຊ້ refresh promise ອັນດຽວກັນ (ບໍ່ດັ່ງນັ້ນ token rotation ຈະຕີກັນເອງ).
+`src/lib/api.ts` (ທັງສອງ) ຈັດການ 401 ດ້ວຍການ refresh 1 ຄັ້ງແລ້ວຍິງຄຳຂໍເດີມຄືນ.
+ຄຳຂໍທີ່ 401 ພ້ອມກັນຫຼາຍອັນ **ຕ້ອງ** ໃຊ້ refresh promise ອັນດຽວກັນ — backend ຖື
+refresh token ທີ່ໃຊ້ຊ້ຳວ່າຖືກລັກ ແລ້ວຈະ revoke ທຸກ session ຂອງບັນຊີນັ້ນ.
+
+ເວັບລູກຄ້າມີ QR encoder ຂອງຕົນເອງ (`components/QrCode.tsx`) ບໍ່ດຶງ dependency —
+ໜ້າຮັບເງິນບໍ່ຄວນຂຶ້ນກັບ npm advisory ອັນດຽວ.
 
 ## ການຊຳລະ (PhaJay)
 
@@ -163,35 +194,44 @@ React 19 + Vite + TanStack Query. ບໍ່ໃຊ້ UI library — inline style
 - **`simulated`** (ຄ່າເລີ່ມຕົ້ນ) — ສ້າງ QR ຮູບແບບ EMVCo ຈິງ ແຕ່ບໍ່ມີທະນາຄານ.
   ຢືນຢັນການຈ່າຍດ້ວຍ `POST /api/payments/dev/settle/:paymentId` ເຊິ່ງເຊັນ callback
   ດ້ວຍກະແຈອັນດຽວກັບ webhook ຈິງ — ເສັ້ນທາງທີ່ທົດສອບຈຶ່ງເປັນເສັ້ນທາງ production.
-- **`phajay`** — ຂອງຈິງ. ໃສ່ `PHAJAY_*` ໃນ `.env` ແລ້ວປ່ຽນຄ່ານີ້ ຄືການປ່ຽນທັງໝົດທີ່ຕ້ອງເຮັດ.
+  ເລືອກອັນນີ້ຕອນ `NODE_ENV=production` ຈະ log error ດັງໆຕອນ boot.
+- **`phajay`** — ຂອງຈິງ. ໃສ່ `PHAJAY_*` ໃນ `.env` ແລ້ວປ່ຽນຄ່ານີ້.
 
 **ເມື່ອໄດ້ spec ຈາກ acquirer ແລ້ວ ໃຫ້ແກ້ໄຟລ໌ດຽວ**: `src/payments/phajay.provider.ts`.
-ສອງຈຸດທີ່ເປັນຂອງແຕ່ລະ acquirer ຖືກໝາຍໄວ້ໃນ comment ຢູ່ຫົວໄຟລ໌ —
-QR ສ້າງເອງ ຫຼື ຂໍຈາກ API, ແລະ ຮູບແບບລາຍເຊັນ webhook.
 
 ## ຮູບ
 
 ອັບຜ່ານ `POST /api/partner/properties/:id/photos` (multipart, field `file`).
 ຮັບ JPEG/PNG/WebP ≤ 5 MB, ສູງສຸດ 12 ຮູບຕໍ່ທີ່ພັກ, ກວດ magic byte ບໍ່ແມ່ນພຽງ mime ທີ່ client ບອກ,
 ຊື່ໄຟລ໌ສ້າງໃໝ່ສະເໝີ. ເກັບຢູ່ `backend/uploads/` ແລ້ວ serve ທີ່ `/uploads/...`.
-ຍ້າຍໄປ S3/R2 = ຂຽນ class ໃໝ່ອັນດຽວທີ່ implement `Storage` ແລ້ວປ່ຽນ provider ໃນ `UploadsModule`.
 
-## Chat
-
-REST polling: `GET /api/{customer|partner|admin}/chat/bookings/:id/messages?since=<id>`.
-cursor ເປັນ **id ຂອງຂໍ້ຄວາມ** ບໍ່ແມ່ນເວລາ — ສອງຂໍ້ຄວາມໃນ millisecond ດຽວກັນຈະເຮັດໃຫ້
-cursor ແບບເວລາຂ້າມ ຫຼື ຊ້ຳ. `sender_type` ມາຈາກ token ບໍ່ແມ່ນຈາກ body.
+> **ອັນນີ້ deploy ຫຼາຍ instance ບໍ່ໄດ້** — ຮູບຢູ່ disk ເຄື່ອງດຽວ ແລະ ຫາຍເມື່ອ container restart.
 
 ## ຂອບເຂດປັດຈຸບັນ
 
 | ສ່ວນ | ສະຖານະ |
 |---|---|
+| Schema v2 (59 ຕາຕະລາງ) | ✅ |
 | Auth + RBAC + audit | ✅ |
-| Admin API (9 ໂມດູນ) | ✅ |
-| WebAdmin (9 ໜ້າຈໍ) | ✅ |
-| Partner API | ✅ |
-| Customer API | ✅ |
-| PhaJay QR · chat · ອັບໂຫຼດຮູບ | ✅ (QR ຈິງລໍຖ້າ credentials) |
-| Flutter partner app | ⬜ ຮອບໜ້າ — ລໍຖ້າ design |
-#   w e b l a o s t a y  
- 
+| ຄົ້ນຫາ · ຈອງ · hold · ຈ່າຍ · ຍົກເລີກ · payout · ledger | ✅ |
+| Admin API + WebAdmin (10 ໜ້າຈໍ) | ✅ |
+| Partner API + Flutter partner app | ✅ |
+| Customer API + ເວັບລູກຄ້າ | ✅ |
+| QR PhaJay | ⬜ ໂຄດພ້ອມ — ລໍ credentials |
+| ສົ່ງ SMS / ອີເມວ | ⬜ **ບໍ່ມີເລີຍ** — OTP ແລະ ກູ້ລະຫັດຜ່ານໃຊ້ບໍ່ໄດ້ໃນ production |
+| ເກັບຮູບໃສ່ S3/R2 | ⬜ |
+| Deploy · CI | ⬜ **ບໍ່ເຄີຍ deploy** |
+| Coupon · ໂປຣໂມຊັນ | ⬜ ມີແຕ່ schema — `discountAmount` ຍັງເປັນ 0 |
+| ແຈ້ງເຕືອນຈາກ template (`NotificationsService`) | ✅ |
+| ແຊັດ — API · ເວັບລູກຄ້າ · Flutter partner | ✅ |
+| ຕອບຮີວິວ (threaded) | ✅ |
+| CMS — banner · ປະກາດ · FAQ · ໜ້າຄົງທີ່ | ✅ ຈັດການໃນ WebAdmin, ອ່ານໃນເວັບລູກຄ້າ |
+| Push / device token | ⬜ ຍັງບໍ່ມີ — ລໍການເລືອກ vendor ຄືກັນກັບ SMS |
+| Unit test backend | ⬜ ມີແຕ່ smoke |
+| ແອັບລູກຄ້າ Flutter | ⬜ ຮອບໜ້າ |
+
+ຕາຕະລາງທີ່ຍັງບໍ່ມີໂຄດແຕະເຫຼືອ **7** ຈາກ 59 (ບໍ່ນັບ `spatial_ref_sys` ຂອງ PostGIS):
+`coupons` · `coupon_usages` · `promotion_partners` · `promotion_properties` ·
+`promotion_room_types` · `message_attachments` · `user_device_tokens` —
+ຄື coupon/ໂປຣໂມຊັນ (P2), ໄຟລ໌ແນບໃນແຊັດ ແລະ push token.
+ແຜນລະອຽດຢູ່ໃນແຜນວຽກຂອງໂປຣເຈັກ.

@@ -877,6 +877,381 @@ async function main() {
     }
   }
 
+  // ── notifications ─────────────────────────────────────────────────────────
+  //
+  // Every notification now renders from `notification_templates`. The check
+  // that matters is that no `{{placeholder}}` survives into a message a guest
+  // reads — an unfilled one means the caller and the template disagree.
+  console.log('\nnotifications');
+
+  const feed = await expect('GET /customer/notifications', 'GET', '/customer/notifications', {
+    token: CFRESH,
+    check: (b) => (Array.isArray(b?.items) && 'unread' in b ? null : 'bad shape'),
+  });
+
+  if (feed?.items?.length) {
+    const unrendered = feed.items.filter((n) =>
+      /\{\{\w+\}\}/.test(`${n.title} ${n.message ?? ''}`),
+    );
+    if (!unrendered.length) ok('no template placeholder survived into a message');
+    else {
+      bad(
+        'no template placeholder survived into a message',
+        unrendered.map((n) => n.message ?? n.title).join(' | ').slice(0, 160),
+      );
+    }
+
+    const shaped = feed.items.every(
+      (n) => n.id && n.title && 'isRead' in n && 'type' in n && 'referenceType' in n,
+    );
+    if (shaped) ok('the feed shape is complete');
+    else bad('the feed shape is complete', JSON.stringify(feed.items[0]).slice(0, 160));
+
+    await expect('POST /customer/notifications/:id/read', 'POST',
+      `/customer/notifications/${feed.items[0].id}/read`, { token: CFRESH });
+  }
+
+  await expect('the partner feed uses the same shape', 'GET', '/partner/notifications', {
+    token: P,
+    check: (b) => (Array.isArray(b?.items) && 'unread' in b ? null : 'shape differs'),
+  });
+
+  const dash = await call('GET', '/partner/dashboard', { token: P });
+  if (typeof dash.body?.unreadNotifications === 'number') {
+    ok('the partner dashboard reports a real unread count', `${dash.body.unreadNotifications}`);
+  } else {
+    bad('the partner dashboard reports a real unread count', String(dash.body?.unreadNotifications));
+  }
+
+  await expect('POST /customer/notifications/read-all', 'POST',
+    '/customer/notifications/read-all', { token: CFRESH });
+  const [{ n: stillUnread }] = await sql(
+    `SELECT count(*)::int n FROM notifications
+      WHERE user_id = (SELECT user_id FROM users WHERE email = 'souda.v@gmail.com')
+        AND is_read = false`,
+  );
+  if (stillUnread === 0) ok('read-all left nothing unread');
+  else bad('read-all left nothing unread', `${stillUnread} remain`);
+
+  // ── chat ──────────────────────────────────────────────────────────────────
+  console.log('\nchat');
+
+  const chatProperty = listing?.id ?? propA?.id;
+  const thread = await expect('POST /customer/conversations', 'POST', '/customer/conversations', {
+    token: CFRESH,
+    status: 201,
+    body: { propertyId: chatProperty },
+    check: (b) => (b?.id ? null : 'no conversation id'),
+  });
+
+  if (thread) {
+    // Opening a second thread with the same property must return the first —
+    // two would split the history and leave half of it unread forever.
+    const again = await call('POST', '/customer/conversations', {
+      token: CFRESH,
+      body: { propertyId: chatProperty },
+    });
+    if (String(again.body?.id) === String(thread.id)) ok('a second open thread is not created');
+    else bad('a second open thread is not created', `${again.body?.id} vs ${thread.id}`);
+
+    const sent = await expect('POST a message as the guest', 'POST',
+      `/customer/conversations/${thread.id}/messages`, {
+        token: CFRESH,
+        status: 201,
+        body: { text: 'ສະບາຍດີ ມີບ່ອນຈອດລົດບໍ?' },
+        check: (b) => (b?.mine === true && b?.text ? null : JSON.stringify(b)),
+      });
+
+    // The trigger owns the preview — nothing in the service writes it.
+    const [conv] = await sql(
+      `SELECT last_message_id FROM conversations WHERE conversation_id = $1`,
+      [thread.id],
+    );
+    if (conv?.last_message_id && String(conv.last_message_id) === String(sent?.id)) {
+      ok('the trigger set conversations.last_message_id');
+    } else {
+      bad('the trigger set conversations.last_message_id', JSON.stringify(conv));
+    }
+
+    // Which partner owns this property decides who may read the thread.
+    const [{ email: hostEmail }] = await sql(
+      `SELECT u.email FROM properties p
+         JOIN partners pt ON pt.partner_id = p.partner_id
+         JOIN users u     ON u.user_id     = pt.user_id
+        WHERE p.property_id = $1`,
+      [chatProperty],
+    );
+    const host = await login(hostEmail, PARTNER_PW);
+    const outsider =
+      hostEmail === 'vintage@laostay.la' ? partnerB.accessToken : partnerA.accessToken;
+
+    await expect("a partner cannot read another property's thread", 'GET',
+      `/partner/conversations/${thread.id}/messages`, { token: outsider, status: 404 });
+
+    const hostThreadUnread = async () => {
+      const list = await call('GET', '/partner/conversations', { token: host.accessToken });
+      return list.body?.items?.find((i) => String(i.id) === String(thread.id))?.unread;
+    };
+
+    const hostView = await expect('the host sees the thread', 'GET', '/partner/conversations', {
+      token: host.accessToken,
+      check: (b) =>
+        b?.items?.some((i) => String(i.id) === String(thread.id))
+          ? null
+          : 'the thread is not in the list',
+    });
+
+    if (hostView) {
+      // Unread is checked as a delta, not an absolute: the thread survives a
+      // re-run of this suite and would otherwise accumulate.
+      await call('POST', `/partner/conversations/${thread.id}/read`, { token: host.accessToken });
+      const hostBefore = await hostThreadUnread();
+
+      await call('POST', `/customer/conversations/${thread.id}/messages`, {
+        token: CFRESH,
+        body: { text: 'ອີກຄຳຖາມໜຶ່ງ — ເຊັກອິນໄດ້ຈັກໂມງ?' },
+      });
+      const hostAfter = await hostThreadUnread();
+
+      if (hostBefore === 0 && hostAfter === 1) {
+        ok("a message from the other side becomes unread", `${hostBefore} → ${hostAfter}`);
+      } else {
+        bad("a message from the other side becomes unread", `${hostBefore} → ${hostAfter}`);
+      }
+
+      // `since` is a message id, so polling returns only what is genuinely new.
+      // Anchored on the newest message in the thread: asking for everything
+      // after it must return nothing, and after the host's next reply, exactly
+      // that reply.
+      const latest = await call('GET', `/customer/conversations/${thread.id}/messages`, {
+        token: CFRESH,
+      });
+      const newestId = latest.body?.items?.at(-1)?.id;
+
+      const none = await call('GET',
+        `/customer/conversations/${thread.id}/messages?since=${newestId}`, { token: CFRESH });
+      if (none.body?.items?.length === 0) ok('?since past the newest returns nothing');
+      else bad('?since past the newest returns nothing', `${none.body?.items?.length} returned`);
+
+      await expect('the host replies', 'POST',
+        `/partner/conversations/${thread.id}/messages`, {
+          token: host.accessToken,
+          status: 201,
+          body: { text: 'ມີເດີ້ ຈອດໄດ້ຟຣີ' },
+        });
+
+      const afterReply = await call('GET',
+        `/customer/conversations/${thread.id}/messages?since=${newestId}`, { token: CFRESH });
+      if (afterReply.body?.items?.length === 1) ok('?since then returns exactly the new reply');
+      else bad('?since then returns exactly the new reply', `${afterReply.body?.items?.length}`);
+
+
+      await expect('POST read moves the cursor', 'POST',
+        `/partner/conversations/${thread.id}/read`, { token: host.accessToken });
+
+      const after = await call('GET', '/partner/conversations/unread', { token: host.accessToken });
+      if (after.body?.total === 0) ok('reading the thread cleared the unread count');
+      else bad('reading the thread cleared the unread count', `total=${after.body?.total}`);
+
+      // "Your own messages do not count" stated as a difference rather than an
+      // absolute: read the thread to zero, send one more, and it must still be
+      // zero. An absolute count would only hold on a freshly seeded database
+      // and would drift on every re-run.
+      const threadUnread = async () => {
+        const list = await call('GET', '/customer/conversations', { token: CFRESH });
+        return {
+          list,
+          unread: list.body?.items?.find((i) => String(i.id) === String(thread.id))?.unread,
+        };
+      };
+
+      await call('POST', `/customer/conversations/${thread.id}/read`, { token: CFRESH });
+      const readToZero = await threadUnread();
+      if (readToZero.unread === 0) ok('reading clears the guest side too');
+      else bad('reading clears the guest side too', `unread=${readToZero.unread}`);
+
+      await call('POST', `/customer/conversations/${thread.id}/messages`, {
+        token: CFRESH,
+        body: { text: 'ຂອບໃຈເດີ້' },
+      });
+      const afterOwn = await threadUnread();
+      if (afterOwn.unread === 0) ok('your own messages do not count as unread');
+      else bad('your own messages do not count as unread', `unread=${afterOwn.unread}`);
+
+      // And the global badge is the sum of the per-thread counts, not something
+      // computed a second, different way.
+      const badge = await call('GET', '/customer/conversations/unread', { token: CFRESH });
+      const summed = (afterOwn.list.body?.items ?? []).reduce((t, i) => t + i.unread, 0);
+      if (badge.body?.total === summed) {
+        ok('the unread badge equals the sum of the threads', `${summed}`);
+      } else {
+        bad('the unread badge equals the sum of the threads', `${badge.body?.total} vs ${summed}`);
+      }
+
+      await expect('an admin can read the thread', 'GET',
+        `/admin/conversations/${thread.id}/messages`, { token: A });
+
+      await expect('an empty message is refused', 'POST',
+        `/customer/conversations/${thread.id}/messages`, {
+          token: CFRESH, status: 400, body: { text: '   ' },
+        });
+
+      await expect('deleting your own message', 'DELETE',
+        `/customer/conversations/${thread.id}/messages/${sent?.id}`, {
+          token: CFRESH,
+          check: (b) => (b?.deleted === true ? null : JSON.stringify(b)),
+        });
+      await expect('deleting it twice is refused', 'DELETE',
+        `/customer/conversations/${thread.id}/messages/${sent?.id}`, {
+          token: CFRESH, status: 404,
+        });
+    }
+  }
+
+  // ── review replies ────────────────────────────────────────────────────────
+  console.log('\nreview replies');
+
+  const [reviewRow] = await sql(
+    `SELECT r.review_id, u.email AS host_email
+       FROM reviews r
+       JOIN properties p ON p.property_id = r.property_id
+       JOIN partners pt  ON pt.partner_id = p.partner_id
+       JOIN users u      ON u.user_id     = pt.user_id
+      ORDER BY r.review_id LIMIT 1`,
+  );
+
+  if (reviewRow) {
+    const reviewId = reviewRow.review_id;
+    await expect('GET /reviews/:id needs no token', 'GET', `/reviews/${reviewId}`, {
+      check: (b) => (b?.id && Array.isArray(b.replies) ? null : 'bad shape'),
+    });
+
+    const replyHost = await login(reviewRow.host_email, PARTNER_PW);
+    const outsider =
+      reviewRow.host_email === 'vintage@laostay.la'
+        ? partnerB.accessToken
+        : partnerA.accessToken;
+
+    // `review_replies.user_id` accepts any user, so this rule lives only in the
+    // service — a hole here would let anyone answer for a property.
+    await expect('an unrelated partner cannot reply', 'POST', `/reviews/${reviewId}/replies`, {
+      token: outsider,
+      status: 403,
+      body: { text: 'ບໍ່ແມ່ນທີ່ພັກຂອງຂ້ອຍ' },
+    });
+
+    const replied = await expect('the host replies to a review', 'POST',
+      `/reviews/${reviewId}/replies`, {
+        token: replyHost.accessToken,
+        status: 201,
+        body: { text: 'ຂອບໃຈຫຼາຍໆ ທີ່ມາພັກນຳກັນ' },
+        check: (b) =>
+          b?.replies?.length && b?.replyId ? null : 'no reply, or no id for the row just written',
+      });
+
+    if (replied) {
+      const [{ n }] = await sql(
+        `SELECT count(*)::int n FROM notifications
+          WHERE reference_type = 'review' AND reference_id = $1`,
+        [reviewId],
+      );
+      if (n >= 1) ok('the guest was told their review was answered');
+      else bad('the guest was told their review was answered', 'no notification');
+
+      // The id of the row just written, not the last root of the tree — a
+      // nested reply is a child, so the newest is not always last.
+      const replyId = replied.replyId;
+
+      await expect('a nested reply must belong to the same review', 'POST',
+        `/reviews/${reviewId}/replies`, {
+          token: replyHost.accessToken,
+          status: 400,
+          body: { text: 'ຕອບຜິດບ່ອນ', parentReplyId: '99999999' },
+        });
+
+      await expect('deleting the reply', 'DELETE', `/reviews/${reviewId}/replies/${replyId}`, {
+        token: replyHost.accessToken,
+      });
+    }
+  }
+
+  // ── CMS ───────────────────────────────────────────────────────────────────
+  console.log('\ncms');
+
+  await expect('GET /content/home is public', 'GET', '/content/home', {
+    check: (b) =>
+      Array.isArray(b?.banners) && Array.isArray(b?.announcements) ? null : 'bad shape',
+  });
+  await expect('GET /content/faqs is public and grouped', 'GET', '/content/faqs', {
+    check: (b) => (Array.isArray(b) && b[0]?.items?.length ? null : 'not grouped'),
+  });
+  await expect('GET /content/pages lists only live pages', 'GET', '/content/pages', {
+    check: (b) => {
+      if (!Array.isArray(b)) return 'not an array';
+      // The three legal pages ship inactive with placeholder text on purpose.
+      const legal = b.filter((p) => ['terms', 'privacy', 'partner_agreement'].includes(p.slug));
+      return legal.length ? `inactive legal pages served: ${legal.map((p) => p.slug)}` : null;
+    },
+  });
+  await expect('an inactive page 404s rather than serving a placeholder', 'GET',
+    '/content/pages/terms', { status: 404 });
+  await expect('an active page is served', 'GET', '/content/pages/about', {
+    check: (b) => (b?.slug === 'about' ? null : JSON.stringify(b)),
+  });
+
+  await expect('a customer cannot edit content', 'POST', '/admin/content/faqs', {
+    token: CFRESH, status: 403, body: { question: 'ບໍ່ຄວນໄດ້', answer: 'ບໍ່ຄວນໄດ້' },
+  });
+
+  const faq = await expect('POST /admin/content/faqs', 'POST', '/admin/content/faqs', {
+    token: A,
+    status: 201,
+    body: { category: 'ທົດສອບ', question: `smoke ${Date.now()}?`, answer: 'ຄຳຕອບທົດສອບ' },
+    check: (b) => (b?.id ? null : JSON.stringify(b)),
+  });
+
+  const banner = await expect('a banner pointing at a real property', 'POST',
+    '/admin/content/banners', {
+      token: A,
+      status: 201,
+      body: {
+        title: 'smoke banner',
+        targetType: 'property',
+        targetId: chatProperty,
+        displayOrder: 99,
+      },
+      check: (b) => (b?.id ? null : JSON.stringify(b)),
+    });
+
+  // `(target_type, target_id)` has no foreign key, so nothing but this check
+  // stops a banner linking to a property that does not exist.
+  await expect('a banner pointing at nothing is refused', 'POST', '/admin/content/banners', {
+    token: A,
+    status: 400,
+    body: { title: 'broken', targetType: 'property', targetId: '99999999' },
+  });
+
+  const page = await expect('POST /admin/content/pages upserts by slug', 'POST',
+    '/admin/content/pages', {
+      token: A,
+      status: 201,
+      body: { slug: 'about', title: 'ກ່ຽວກັບ LaoStay', content: '<p>smoke</p>', isActive: true },
+      check: (b) => (b?.slug === 'about' ? null : JSON.stringify(b)),
+    });
+  if (page) {
+    const [{ n }] = await sql(`SELECT count(*)::int n FROM app_pages WHERE page_slug = 'about'`);
+    if (n === 1) ok('the upsert did not create a second "about"');
+    else bad('the upsert did not create a second "about"', `${n} rows`);
+  }
+
+  await expect('a bad slug is refused', 'POST', '/admin/content/pages', {
+    token: A, status: 400, body: { slug: 'Not A Slug', title: 'x' },
+  });
+
+  // Clean up so a re-run starts from the seeded content.
+  if (faq) await call('DELETE', `/admin/content/faqs/${faq.id}`, { token: A });
+  if (banner) await call('DELETE', `/admin/content/banners/${banner.id}`, { token: A });
+
   // ── database invariants ───────────────────────────────────────────────────
   console.log('\ndatabase invariants');
   const invariants = [

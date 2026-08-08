@@ -290,3 +290,52 @@ export interface AuditRow {
   ip: string | null;
   createdAt: string | null;
 }
+
+// ── CMS ──────────────────────────────────────────────────────────────────────
+
+/** `banners.target_type` — a polymorphic pointer with no foreign key. */
+export type BannerTarget = 'property' | 'promotion' | 'url';
+
+/** `announcements.target_user_type`. */
+export type Audience = 'ALL' | 'CUSTOMER' | 'PARTNER';
+
+export interface Banner {
+  id: string;
+  title: string;
+  description: string | null;
+  imageUrl: string | null;
+  targetType: BannerTarget | null;
+  targetId: string | null;
+  order: number;
+  startDate: string | null;
+  endDate: string | null;
+  isActive: boolean;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string | null;
+  audience: Audience;
+  startDate: string | null;
+  endDate: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+}
+
+export interface Faq {
+  id: string;
+  category: string | null;
+  question: string;
+  answer: string;
+  order: number;
+  isActive: boolean;
+}
+
+export interface AppPage {
+  slug: string;
+  title: string;
+  content: string | null;
+  isActive: boolean;
+  updatedAt: string | null;
+}

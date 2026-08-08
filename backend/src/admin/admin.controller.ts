@@ -40,6 +40,7 @@ import { SettingsService } from '../common/settings.service';
 import { PayoutService } from './payout.service';
 import { BookingService } from '../booking/booking.service';
 import { PasswordService } from '../auth/password.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AdminRoles, Audit, CurrentUser, Roles, type AuthedUser } from '../common/decorators';
 import { MONEY_ROLES, REVENUE_STATUSES } from '../common/enums';
 import { kipOf, rateOf } from '../common/money';
@@ -161,6 +162,7 @@ export class AdminController {
     private readonly payouts: PayoutService,
     private readonly bookings: BookingService,
     private readonly passwords: PasswordService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── dashboard ─────────────────────────────────────────────────────────────
@@ -305,10 +307,7 @@ export class AdminController {
   @Patch('approvals/:id/approve')
   @Audit('approve_partner', 'admin', 'partners')
   async approve(@Param('id') id: string, @CurrentUser() user: AuthedUser) {
-    return this.decide(BigInt(id), partner_status.verified, user.userId, {
-      title: 'ອະນຸມັດແລ້ວ! 🎉',
-      message: 'ໃບສະໝັກທີ່ພັກຂອງທ່ານຜ່ານການອະນຸມັດ — ເລີ່ມຮັບການຈອງໄດ້ເລີຍ',
-    });
+    return this.decide(BigInt(id), partner_status.verified, user.userId, 'partner_approved');
   }
 
   @Patch('approvals/:id/reject')
@@ -318,9 +317,8 @@ export class AdminController {
     @Body() dto: RejectDto,
     @CurrentUser() user: AuthedUser,
   ) {
-    return this.decide(BigInt(id), partner_status.rejected, user.userId, {
-      title: 'ໃບສະໝັກບໍ່ຜ່ານ',
-      message: dto.reason?.slice(0, 500) ?? 'ໃບສະໝັກຂອງທ່ານຍັງບໍ່ຜ່ານ ກະລຸນາຕິດຕໍ່ຝ່າຍຊ່ວຍເຫຼືອ',
+    return this.decide(BigInt(id), partner_status.rejected, user.userId, 'partner_rejected', {
+      reason: dto.reason?.slice(0, 500) ?? 'ກະລຸນາຕິດຕໍ່ຝ່າຍຊ່ວຍເຫຼືອເພື່ອສອບຖາມລາຍລະອຽດ',
     });
   }
 
@@ -328,7 +326,8 @@ export class AdminController {
     partnerId: bigint,
     status: partner_status,
     adminUserId: bigint,
-    notice: { title: string; message: string },
+    templateCode: string,
+    vars?: Record<string, string>,
   ) {
     return this.prisma.$transaction(async (tx) => {
       const partner = await tx.partners.findUnique({ where: { partner_id: partnerId } });
@@ -360,15 +359,12 @@ export class AdminController {
         });
       }
 
-      await tx.notifications.create({
-        data: {
-          user_id: partner.user_id,
-          title: notice.title,
-          message: notice.message,
-          notification_type: 'system',
-          reference_type: 'partner',
-          reference_id: partnerId,
-        },
+      await this.notifications.send(tx, {
+        userId: partner.user_id,
+        templateCode,
+        vars,
+        referenceType: 'partner',
+        referenceId: partnerId,
       });
 
       return { id: updated.partner_id.toString(), status: updated.status };

@@ -4,6 +4,7 @@ import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { booking_status, user_role } from '@prisma/client';
 import { BookingService } from './booking.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CurrentUser, Roles, type AuthedUser } from '../common/decorators';
 import { paged } from '../common/dto/pagination.dto';
 import { kipOf, rateOf } from '../common/money';
@@ -34,6 +35,8 @@ export class CustomerController {
   constructor(
     private readonly bookings: BookingService,
     private readonly prisma: PrismaService,
+    // `notifications_` because `notifications` is already a route handler here.
+    private readonly notifications_: NotificationsService,
   ) {}
 
   // ── bookings ──────────────────────────────────────────────────────────────
@@ -316,37 +319,24 @@ export class CustomerController {
 
   // ── notifications ─────────────────────────────────────────────────────────
 
-  @Get('notifications')
-  async notifications(@CurrentUser() user: AuthedUser) {
-    const [items, unread] = await Promise.all([
-      this.prisma.notifications.findMany({
-        where: { user_id: user.userId },
-        orderBy: { created_at: 'desc' },
-        take: 50,
-      }),
-      this.prisma.notifications.count({ where: { user_id: user.userId, is_read: false } }),
-    ]);
+  // A notification does not know which kind of account it belongs to, so both
+  // this controller and the partner's delegate to the same service rather than
+  // keeping two copies of the same query.
 
-    return {
-      items: items.map((n) => ({
-        id: n.notification_id.toString(),
-        title: n.title,
-        message: n.message,
-        type: n.notification_type,
-        isRead: n.is_read,
-        createdAt: n.created_at,
-      })),
-      unread,
-    };
+  @Get('notifications')
+  notifications(@CurrentUser() user: AuthedUser) {
+    return this.notifications_.feed(user.userId);
   }
 
   @Post('notifications/read-all')
   @HttpCode(200)
-  async readAll(@CurrentUser() user: AuthedUser) {
-    const { count } = await this.prisma.notifications.updateMany({
-      where: { user_id: user.userId, is_read: false },
-      data: { is_read: true, read_at: new Date() },
-    });
-    return { updated: count };
+  readAll(@CurrentUser() user: AuthedUser) {
+    return this.notifications_.markAllRead(user.userId);
+  }
+
+  @Post('notifications/:id/read')
+  @HttpCode(200)
+  markRead(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
+    return this.notifications_.markRead(user.userId, BigInt(id));
   }
 }
