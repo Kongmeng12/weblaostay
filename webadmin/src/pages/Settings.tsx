@@ -117,7 +117,7 @@ export function Settings() {
       {/* platform */}
       <Card padding={24}>
         <CardTitle>ຂໍ້ມູນລະບົບ</CardTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="adm-pair">
           <Field label="ຊື່ແພລດຟອມ">
             <input
               value={form?.app.platform_name ?? ''}

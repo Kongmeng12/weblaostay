@@ -77,3 +77,242 @@ input:disabled {
     transform: rotate(360deg);
   }
 }
+
+/* ── Responsive layout ───────────────────────────────────────────────────────
+   The admin is used on a desk, on an iPad in a lobby, and on a phone when
+   something needs approving on the move. Layout lives here rather than in
+   inline styles because inline styles cannot carry a media query. */
+
+.adm-shell {
+  display: flex;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+
+.adm-sidebar {
+  width: 248px;
+  flex: none;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 14px;
+  z-index: 60;
+}
+
+.adm-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+.adm-content {
+  padding: 28px;
+  max-width: 1600px;
+}
+
+.adm-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 28px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* The drawer handle and its scrim exist only below the breakpoint. */
+.adm-burger,
+.adm-scrim {
+  display: none;
+}
+
+/* ── Grids ─────────────────────────────────────────────────────────────────
+   Named for what they hold, not for their column count, so a page does not
+   have to know which breakpoint it is in. */
+
+.adm-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.adm-trio {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.adm-split {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  align-items: start;
+  gap: 16px;
+}
+
+.adm-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Three short fields on one line — order, start date, end date. */
+.adm-fields-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.adm-fields-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.adm-fields-wide-narrow {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+
+/* ── Tablet and below: the sidebar becomes a drawer ────────────────────────
+   248px of navigation out of a 768px iPad leaves too little for a table, and
+   on a phone it leaves nothing at all. */
+@media (max-width: 1024px) {
+  .adm-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.4);
+  }
+  .adm-sidebar[data-open='true'] {
+    transform: none;
+  }
+
+  .adm-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(30, 22, 16, 0.5);
+    z-index: 50;
+  }
+
+  .adm-burger {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border-radius: 11px;
+    border: 1px solid #e4d9c6;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .adm-content {
+    padding: 20px 18px;
+  }
+
+  .adm-header {
+    padding: 16px 18px;
+  }
+
+  .adm-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .adm-trio,
+  .adm-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Phone ─────────────────────────────────────────────────────────────────
+   One column for anything holding a sentence; KPI tiles stay paired because
+   four numbers side by side is the point of them. */
+@media (max-width: 640px) {
+  .adm-content {
+    padding: 16px 14px;
+  }
+
+  .adm-header {
+    padding: 14px;
+  }
+
+  .adm-pair,
+  .adm-fields-3,
+  .adm-fields-2,
+  .adm-fields-wide-narrow {
+    grid-template-columns: 1fr;
+  }
+
+  .adm-sidebar {
+    width: min(84vw, 280px);
+  }
+}
+
+@media (max-width: 420px) {
+  .adm-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Sign-in ─────────────────────────────────────────────────────────────── */
+
+.adm-login {
+  width: 1100px;
+  max-width: 100%;
+  min-height: 640px;
+  display: flex;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 30px 70px -20px rgba(40, 30, 20, 0.5);
+}
+
+.adm-login-brand {
+  flex: 1;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+.adm-login-form {
+  width: 460px;
+  flex: none;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Below this the brand panel is decoration competing with the only thing on
+   the screen anyone came for. */
+@media (max-width: 900px) {
+  .adm-login {
+    min-height: 0;
+  }
+  .adm-login-brand {
+    display: none;
+  }
+  .adm-login-form {
+    width: 100%;
+    padding: 36px 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .adm-login {
+    box-shadow: none;
+    border-radius: 12px;
+  }
+  .adm-login-form {
+    padding: 28px 20px;
+  }
+}

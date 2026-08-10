@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, type AdminRole } from '../lib/api';
@@ -46,6 +47,21 @@ export function Shell() {
   const { admin, signOut } = useAuth();
   const location = useLocation();
 
+  // Only meaningful below 1024px, where the sidebar is a drawer. Above it the
+  // CSS ignores the flag entirely, so there is nothing to keep in sync.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Tapping a destination should take you there and get out of the way.
+  useEffect(() => setDrawerOpen(false), [location.pathname]);
+
+  // A drawer that survives Escape is a trap on a phone.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDrawerOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerOpen]);
+
   // Drives the badge on "ອະນຸມັດ Partner" so it always reflects reality. The
   // endpoint returns one key per partner_status, so a run with nothing pending
   // omits "pending" entirely rather than sending a zero.
@@ -61,216 +77,222 @@ export function Shell() {
   const current = [...NAV].reverse().find((n) => matches(location.pathname, n.to)) ?? NAV[0];
 
   return (
+    // Full bleed, not a card on a page. The sidebar runs the whole height of
+    // the window and stays there while the content scrolls under it — an admin
+    // spends all day in this frame, and a floating panel with a margin around
+    // it wastes the screen they are working on.
     <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-        padding: 24,
-        background: c.pageOuter,
-        minHeight: '100vh',
-        fontFamily: "'Noto Sans Lao', sans-serif",
-      }}
+      className="adm-shell"
+      style={{ background: c.bg, fontFamily: "'Noto Sans Lao', sans-serif" }}
     >
-      <div
-        style={{
-          width: 1440,
-          maxWidth: '100%',
-          minHeight: 'calc(100vh - 48px)',
-          borderRadius: radius.lg,
-          overflow: 'hidden',
-          background: '#fff',
-          boxShadow: '0 30px 70px -20px rgba(40,30,20,.5)',
-          display: 'flex',
-        }}
+      {/* Below the breakpoint the drawer floats over the page, so it needs
+          something to close against. */}
+      {drawerOpen && <div className="adm-scrim" onClick={() => setDrawerOpen(false)} />}
+
+      {/* ── sidebar ─────────────────────────────────────────────────────── */}
+      <aside
+        className="adm-sidebar"
+        data-open={drawerOpen}
+        style={{ background: `linear-gradient(160deg, ${c.sidebarFrom}, ${c.sidebarTo})` }}
       >
-        {/* ── sidebar ─────────────────────────────────────────────────────── */}
-        <aside
-          style={{
-            width: 248,
-            flex: 'none',
-            background: `linear-gradient(160deg, ${c.sidebarFrom}, ${c.sidebarTo})`,
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '22px 14px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 22px' }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                background: c.accent,
-                display: 'grid',
-                placeItems: 'center',
-                font: f(800, 18),
-                color: '#fff',
-              }}
-            >
-              L
-            </div>
-            <div>
-              <div style={{ font: f(800, 15), color: '#fff' }}>LaoStay</div>
-              <div style={{ font: f(400, 11), color: c.onDarkSoft }}>Web Admin</div>
-            </div>
-          </div>
-
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1 }}>
-            {visible.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                style={({ isActive }) => ({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 11,
-                  padding: '11px 12px',
-                  borderRadius: radius.md,
-                  font: f(600, 13),
-                  textDecoration: 'none',
-                  background: isActive ? c.accent : 'transparent',
-                  color: isActive ? '#fff' : c.onDark,
-                  transition: 'background .15s',
-                })}
-                onMouseEnter={(e) => {
-                  if (!e.currentTarget.style.background.includes('253')) return;
-                }}
-              >
-                {({ isActive }) => (
-                  <>
-                    <span style={{ fontSize: 15, width: 18, textAlign: 'center' }}>
-                      {item.emoji}
-                    </span>
-                    <span style={{ flex: 1 }}>{item.name}</span>
-                    {item.to === '/approvals' && !!approvalCounts?.pending && (
-                      <span
-                        style={{
-                          minWidth: 20,
-                          height: 20,
-                          padding: '0 6px',
-                          borderRadius: 10,
-                          background: isActive ? '#fff' : c.accent,
-                          color: isActive ? c.accent : '#fff',
-                          font: f(700, 11),
-                          display: 'grid',
-                          placeItems: 'center',
-                        }}
-                      >
-                        {approvalCounts.pending}
-                      </span>
-                    )}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </nav>
-
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 22px' }}>
           <div
             style={{
-              borderTop: '1px solid rgba(255,255,255,.1)',
-              paddingTop: 14,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              background: c.accent,
+              display: 'grid',
+              placeItems: 'center',
+              font: f(800, 18),
+              color: '#fff',
             }}
           >
-            <div
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: '50%',
-                background: avatarFor(admin?.email ?? 'a'),
-                display: 'grid',
-                placeItems: 'center',
-                font: f(700, 13),
-                color: '#fff',
-                flex: 'none',
-              }}
-            >
-              {initials(admin?.fullName ?? admin?.email ?? '?')}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  font: f(700, 12),
-                  color: '#fff',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {admin?.fullName ?? admin?.email}
-              </div>
-              <div style={{ font: f(400, 10), color: c.onDarkSoft }}>
-                {admin?.adminRole ? ROLE_LABEL[admin.adminRole] : '—'}
-              </div>
-            </div>
-            <button
-              title="ອອກຈາກລະບົບ"
-              onClick={() => void signOut()}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 9,
-                display: 'grid',
-                placeItems: 'center',
-                cursor: 'pointer',
-                color: '#8C7F6C',
-                background: 'transparent',
-                border: 'none',
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
+            L
           </div>
-        </aside>
+          <div>
+            <div style={{ font: f(800, 15), color: '#fff' }}>LaoStay</div>
+            <div style={{ font: f(400, 11), color: c.onDarkSoft }}>Web Admin</div>
+          </div>
+        </div>
 
-        {/* ── main ────────────────────────────────────────────────────────── */}
-        <main
+        {/* Scrolls on its own if the window is short — the account footer
+            below must stay reachable. */}
+        <nav
           style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 3,
             flex: 1,
-            minWidth: 0,
-            background: c.bg,
             overflowY: 'auto',
-            maxHeight: 'calc(100vh - 48px)',
+            minHeight: 0,
           }}
         >
-          <header
+          {visible.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              style={({ isActive }) => ({
+                display: 'flex',
+                alignItems: 'center',
+                gap: 11,
+                padding: '11px 12px',
+                borderRadius: radius.md,
+                font: f(600, 13),
+                textDecoration: 'none',
+                background: isActive ? c.accent : 'transparent',
+                color: isActive ? '#fff' : c.onDark,
+                transition: 'background .15s',
+              })}
+              onMouseEnter={(e) => {
+                if (!e.currentTarget.style.background.includes('253')) return;
+              }}
+            >
+              {({ isActive }) => (
+                <>
+                  <span style={{ fontSize: 15, width: 18, textAlign: 'center' }}>
+                    {item.emoji}
+                  </span>
+                  <span style={{ flex: 1 }}>{item.name}</span>
+                  {item.to === '/approvals' && !!approvalCounts?.pending && (
+                    <span
+                      style={{
+                        minWidth: 20,
+                        height: 20,
+                        padding: '0 6px',
+                        borderRadius: 10,
+                        background: isActive ? '#fff' : c.accent,
+                        color: isActive ? c.accent : '#fff',
+                        font: f(700, 11),
+                        display: 'grid',
+                        placeItems: 'center',
+                      }}
+                    >
+                      {approvalCounts.pending}
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div
+          style={{
+            borderTop: '1px solid rgba(255,255,255,.1)',
+            paddingTop: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '22px 28px',
-              background: c.bg,
-              borderBottom: `1px solid ${c.border}`,
-              position: 'sticky',
-              top: 0,
-              zIndex: 10,
+              width: 34,
+              height: 34,
+              borderRadius: '50%',
+              background: avatarFor(admin?.email ?? 'a'),
+              display: 'grid',
+              placeItems: 'center',
+              font: f(700, 13),
+              color: '#fff',
+              flex: 'none',
             }}
           >
-            <div>
-              <div style={{ font: f(800, 22), color: c.text }}>{current.title}</div>
-              <div style={{ font: f(400, 13), color: c.muted, marginTop: 2 }}>
-                {current.subtitle}
-              </div>
-            </div>
-          </header>
-
-          <div style={{ padding: 28 }}>
-            <Outlet />
+            {initials(admin?.fullName ?? admin?.email ?? '?')}
           </div>
-        </main>
-      </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                font: f(700, 12),
+                color: '#fff',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {admin?.fullName ?? admin?.email}
+            </div>
+            <div style={{ font: f(400, 10), color: c.onDarkSoft }}>
+              {admin?.adminRole ? ROLE_LABEL[admin.adminRole] : '—'}
+            </div>
+          </div>
+          <button
+            title="ອອກຈາກລະບົບ"
+            onClick={() => void signOut()}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 9,
+              display: 'grid',
+              placeItems: 'center',
+              cursor: 'pointer',
+              color: '#8C7F6C',
+              background: 'transparent',
+              border: 'none',
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </aside>
+
+      {/* ── main ────────────────────────────────────────────────────────── */}
+      {/* The page itself scrolls — no inner scroll box. Two nested scrollbars
+          in one screen is the thing that makes an admin panel feel like a
+          widget rather than an application. */}
+      <main className="adm-main" style={{ background: c.bg }}>
+        <header
+          className="adm-header"
+          style={{ background: c.bg, borderBottom: `1px solid ${c.border}` }}
+        >
+          <button
+            className="adm-burger"
+            aria-label="ເປີດເມນູ"
+            aria-expanded={drawerOpen}
+            onClick={() => setDrawerOpen(true)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M4 7h16M4 12h16M4 17h16"
+                stroke={c.text}
+                strokeWidth="1.9"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                font: f(800, 22),
+                color: c.text,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {current.title}
+            </div>
+            <div style={{ font: f(400, 13), color: c.muted, marginTop: 2 }}>{current.subtitle}</div>
+          </div>
+        </header>
+
+        {/* Capped so a table does not stretch to arm's length on a wide
+            monitor, but left-aligned rather than centred — the content should
+            stay next to the sidebar it belongs to. */}
+        <div className="adm-content">
+          <Outlet />
+        </div>
+      </main>
     </div>
   );
 }

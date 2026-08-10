@@ -71,7 +71,7 @@ export function Reviews() {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 22 }}>
+      <div className="adm-kpis" style={{ marginBottom: 22 }}>
         <StatBox label="ຮີວິວທັງໝົດ" value={counts.data?.total} />
         <StatBox
           label="ຄະແນນສະເລ່ຍ"

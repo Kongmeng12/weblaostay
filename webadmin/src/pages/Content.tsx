@@ -334,7 +334,7 @@ function BannersTab() {
               </Field>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div className="adm-fields-3">
               <Field label="ລຳດັບ">
                 <input
                   type="number"
@@ -546,7 +546,7 @@ function AnnouncementsTab() {
                 })}
               </div>
             </Field>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="adm-fields-2">
               <Field label="ເລີ່ມສະແດງ">
                 <input
                   type="date"
@@ -708,7 +708,7 @@ function FaqsTab() {
                 style={{ ...inputStyle, resize: 'vertical' }}
               />
             </Field>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+            <div className="adm-fields-wide-narrow">
               <Field label="ໝວດ" hint={categories.length ? `ມີຢູ່: ${categories.join(' · ')}` : undefined}>
                 <input
                   value={editing.category ?? ''}

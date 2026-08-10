@@ -100,6 +100,15 @@ SQL ຢູ່ `backend/prisma/migrations-v2/` ແລ່ນຕາມລຳດັ�
 
 ## ການທົດສອບ
 
+ເປີດ server ດ້ວຍ `npm run dev` (terminal ໜຶ່ງ) ແລ້ວ:
+
+```bash
+npm run check      # ທຸກຢ່າງ ຮຽງກັນ — ຢຸດທັນທີເມື່ອອັນໃດຕົກ
+```
+
+**`check` ຂຽນລົງ DB**: ຈອງ · ຈ່າຍ · ຍົກເລີກ · payout · ຂໍ້ຄວາມແຊັດ.
+ຢາກແລ່ນເປັນສ່ວນໆ:
+
 ```bash
 # Backend — ຕ້ອງມີ API ແລ່ນຢູ່, ຂຽນລົງ DB ຈິງ
 cd backend && npm run smoke              # 112 ຂໍ້
@@ -110,8 +119,9 @@ npm run check:browse                     # 21 ຂໍ້, ອ່ານຢ່າ�
 npm run check:chat                       # 19 ຂໍ້ ແຊັດ + ຕອບຮີວິວ, ຂຽນລົງ DB
 npm run check:journey                    # ຈອງຈົນຈົບ, ຂຽນລົງ DB
 
-# WebAdmin — admin ເຜີຍແຜ່ ແລ້ວແຂກເຫັນ
+# WebAdmin
 cd ../webadmin
+npm run check:responsive                 # 10 ໜ້າ × 8 ຂະໜາດຈໍ, ອ່ານຢ່າງດຽວ
 npm run check:cms                        # 14 ຂໍ້, ຂຽນລົງ DB ແລ້ວລຶບຄືນ
 
 # Partner app

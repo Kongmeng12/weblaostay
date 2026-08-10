@@ -46,9 +46,15 @@ export const c = {
 
 export const font = "'Noto Sans Lao', system-ui, -apple-system, sans-serif";
 
-/** `font: 700 13px 'Noto Sans Lao'` in one call. */
+/**
+ * `font: 700 13px/20px 'Noto Sans Lao'` in one call.
+ *
+ * The `px` on the line height is not optional. In the `font` shorthand a
+ * unitless number is a *multiplier*, so `f(800, 34, 44)` would ask for a line
+ * 44 × 34px = 1496px tall and every heading would push the page metres long.
+ */
 export const f = (weight: number, size: number, lineHeight?: number): string =>
-  `${weight} ${size}px${lineHeight ? '/' + lineHeight : ''} ${font}`;
+  `${weight} ${size}px${lineHeight ? `/${lineHeight}px` : ''} ${font}`;
 
 export const radius = { sm: 8, md: 12, lg: 18, xl: 26 } as const;
 

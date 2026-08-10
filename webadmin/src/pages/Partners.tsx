@@ -75,7 +75,9 @@ export function Partners() {
             { value: 'suspended', label: 'ລະງັບ' },
           ]}
         />
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {/* Wraps: a province picker and a search box side by side are wider
+            than a phone, and neither may be pushed off the screen. */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             value={province}
             onChange={(e) => {

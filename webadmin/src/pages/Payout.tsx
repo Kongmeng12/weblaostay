@@ -66,7 +66,15 @@ export function Payout() {
   return (
     <div>
       {/* summary strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, marginBottom: 22 }}>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'flex-start',
+          gap: 16,
+          marginBottom: 22,
+        }}
+      >
         <div
           style={{
             background: 'linear-gradient(140deg,#3A2A1E,#2C1E16)',

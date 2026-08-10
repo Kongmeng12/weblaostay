@@ -184,6 +184,7 @@ export function SearchInput({
         borderRadius: radius.md,
         padding: '9px 14px',
         width,
+        maxWidth: '100%',
       }}
     >
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ flex: 'none' }}>

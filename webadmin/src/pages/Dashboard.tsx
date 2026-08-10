@@ -41,14 +41,7 @@ export function Dashboard() {
   return (
     <div>
       {/* KPI row */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 16,
-          marginBottom: 22,
-        }}
-      >
+      <div className="adm-kpis" style={{ marginBottom: 22 }}>
         <KpiCard
           emoji="💰"
           emojiBg="#FFE3D6"
@@ -88,64 +81,12 @@ export function Dashboard() {
         />
       </div>
 
-      {/* chart + payout card */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 16, marginBottom: 22 }}>
-        <Card>
-          <CardTitle
-            right={
-              <span style={{ font: f(600, 12), color: c.muted }}>
-                {gmv.data
-                  ? `${GMV_DAYS} ວັນລ່າສຸດ · ສູງສຸດ ${kipShort(gmv.data.peak)}`
-                  : `${GMV_DAYS} ວັນລ່າສຸດ`}
-              </span>
-            }
-          >
-            ຍອດຂາຍຕໍ່ວັນ · Daily GMV
-          </CardTitle>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-end',
-              justifyContent: 'space-between',
-              height: 180,
-              gap: 6,
-            }}
-          >
-            {(gmv.data?.series ?? Array.from({ length: GMV_DAYS }, () => null)).map((point, i) => (
-              <div
-                key={point?.date ?? i}
-                title={
-                  point
-                    ? `${laoDate(point.date)} · ${kip(point.total)} · ${point.bookings} ການຈອງ`
-                    : ''
-                }
-                style={{
-                  flex: 1,
-                  // A zero day still needs a visible sliver, or the chart looks broken.
-                  height: point ? `${Math.max(point.heightPercent, 2)}%` : '30%',
-                  background: point ? (i >= GMV_DAYS - 2 ? c.accent : '#D9C0A0') : c.divider,
-                  borderRadius: '5px 5px 0 0',
-                  transition: 'height .3s',
-                }}
-              />
-            ))}
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginTop: 10,
-              font: f(400, 10),
-              color: c.faint,
-            }}
-          >
-            <span>{gmv.data?.series[0] ? laoDate(gmv.data.series[0].date) : ''}</span>
-            <span>
-              {gmv.data?.series.at(-1) ? laoDate(gmv.data.series.at(-1)!.date) : ''}
-            </span>
-          </div>
-        </Card>
+      {/* chart + payout card.
+          `alignItems: start` on purpose: the payout card holds four short lines
+          and stretching it to the chart's height left a hand's width of empty
+          brown in the middle of the page. */}
+      <div className="adm-split" style={{ marginBottom: 22 }}>
+        <GmvChart data={gmv.data} loading={gmv.isLoading} />
 
         <div
           style={{
@@ -159,22 +100,46 @@ export function Dashboard() {
           <div style={{ font: f(600, 13), color: '#E9D8C6', marginBottom: 8 }}>
             ຍອດຕ້ອງໂອນໃຫ້ Partner
           </div>
-          <div style={{ font: f(800, 30), color: '#fff', marginBottom: 6 }}>
-            {k ? kipShort(k.pendingPayouts.amount) : '—'}
-          </div>
-          <div style={{ font: f(400, 12), color: c.onDarkSoft, marginBottom: 'auto' }}>
-            {!k
-              ? 'ກຳລັງໂຫຼດ...'
-              : k.pendingPayouts.count > 0
-                ? `${k.pendingPayouts.count} ຮອບລໍໂອນ`
-                : 'ບໍ່ມີຮອບຄ້າງ'}
-          </div>
+          {k ? (
+            <>
+              <div style={{ font: f(800, 30), color: '#fff', marginBottom: 6 }}>
+                {kipShort(k.pendingPayouts.amount)}
+              </div>
+              <div style={{ font: f(400, 12), color: c.onDarkSoft }}>
+                {k.pendingPayouts.count > 0
+                  ? `${k.pendingPayouts.count} ຮອບລໍໂອນ`
+                  : 'ບໍ່ມີຮອບຄ້າງ'}
+              </div>
+            </>
+          ) : (
+            <>
+              <div
+                style={{
+                  height: 38,
+                  width: '55%',
+                  borderRadius: radius.sm,
+                  background: 'rgba(255,255,255,.10)',
+                  marginBottom: 8,
+                  animation: 'laostayPulse 1.2s ease-in-out infinite',
+                }}
+              />
+              <div
+                style={{
+                  height: 14,
+                  width: '35%',
+                  borderRadius: radius.sm,
+                  background: 'rgba(255,255,255,.07)',
+                  animation: 'laostayPulse 1.2s ease-in-out infinite',
+                }}
+              />
+            </>
+          )}
           {can('super_admin', 'finance') ? (
-            <Button size="lg" onClick={() => navigate('/payout')} style={{ marginTop: 20 }}>
+            <Button size="lg" onClick={() => navigate('/payout')} style={{ marginTop: 18 }}>
               ຈັດການໂອນເງິນ →
             </Button>
           ) : (
-            <div style={{ marginTop: 20, font: f(400, 12), color: '#8C7F6C' }}>
+            <div style={{ marginTop: 18, font: f(400, 12), color: '#8C7F6C' }}>
               ຕ້ອງມີສິດ finance ຈຶ່ງຈັດການໂອນເງິນໄດ້
             </div>
           )}
@@ -223,6 +188,136 @@ export function Dashboard() {
         />
       </Card>
     </div>
+  );
+}
+
+const PLOT_HEIGHT = 190;
+
+/**
+ * Daily takings for the last fortnight.
+ *
+ * A real platform has quiet days, and a run of them used to render as fourteen
+ * identical two-pixel stubs floating in white — indistinguishable from a chart
+ * that had failed to load. So the bars now sit on a baseline, the peak is drawn
+ * as a labelled gridline to give the heights a scale, and a fortnight with no
+ * takings at all says so in words instead of drawing nothing fourteen times.
+ */
+function GmvChart({ data, loading }: { data: GmvSeries | undefined; loading: boolean }) {
+  const today = data?.series.at(-1)?.date;
+
+  return (
+    <Card>
+      <CardTitle
+        right={
+          <span style={{ font: f(600, 12), color: c.muted }}>
+            {data ? `${GMV_DAYS} ວັນລ່າສຸດ · ລວມ ${kipShort(data.total)}` : `${GMV_DAYS} ວັນລ່າສຸດ`}
+          </span>
+        }
+      >
+        ຍອດຂາຍຕໍ່ວັນ · Daily GMV
+      </CardTitle>
+
+      {data && data.total === 0 ? (
+        <div
+          style={{
+            height: PLOT_HEIGHT,
+            display: 'grid',
+            placeItems: 'center',
+            textAlign: 'center',
+            background: c.bg,
+            borderRadius: radius.md,
+          }}
+        >
+          <div>
+            <div style={{ font: f(700, 14), color: c.soft }}>ບໍ່ມີຍອດຂາຍໃນ {GMV_DAYS} ວັນນີ້</div>
+            <div style={{ font: f(400, 12), color: c.muted, marginTop: 4 }}>
+              ການຈອງທີ່ຊຳລະແລ້ວຈະຂຶ້ນຢູ່ນີ້
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ position: 'relative', paddingTop: 18 }}>
+          {/* peak gridline — without a scale the bars are just shapes */}
+          {data && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: 18,
+                  borderTop: `1px dashed ${c.border}`,
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  font: f(600, 10),
+                  color: c.faint,
+                }}
+              >
+                {kipShort(data.peak)}
+              </div>
+            </>
+          )}
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: 6,
+              height: PLOT_HEIGHT,
+              borderBottom: `1px solid ${c.border}`,
+            }}
+          >
+            {(data?.series ?? Array.from({ length: GMV_DAYS }, () => null)).map((point, i) => {
+              const isToday = !!point && point.date === today;
+              return (
+                <div
+                  key={point?.date ?? i}
+                  title={
+                    point
+                      ? `${laoDate(point.date)} · ${kip(point.total)} · ${point.bookings} ການຈອງ`
+                      : ''
+                  }
+                  style={{
+                    flex: 1,
+                    // A day with no takings keeps a sliver on the baseline so the
+                    // column is still hoverable and the row still reads as a chart.
+                    height: point ? `${Math.max(point.heightPercent, 1.5)}%` : '28%',
+                    background: !point
+                      ? c.divider
+                      : point.total === 0
+                        ? c.border
+                        : isToday
+                          ? c.accent
+                          : '#D9C0A0',
+                    borderRadius: '5px 5px 0 0',
+                    opacity: loading ? 0.4 : 1,
+                    transition: 'height .3s, opacity .2s',
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginTop: 8,
+          font: f(400, 10),
+          color: c.faint,
+        }}
+      >
+        <span>{data?.series[0] ? laoDate(data.series[0].date) : ''}</span>
+        <span>{data?.series.at(-1) ? `${laoDate(data.series.at(-1)!.date)} · ມື້ນີ້` : ''}</span>
+      </div>
+    </Card>
   );
 }
 
@@ -283,17 +378,28 @@ function KpiCard({
         </div>
         <span style={{ font: f(400, 12), color: c.muted }}>{label}</span>
       </div>
-      <div
-        style={{
-          font: f(800, 26),
-          color: valueColor,
-          opacity: loading ? 0.35 : 1,
-          transition: 'opacity .2s',
-        }}
-      >
-        {value}
+      {/* A dash reads as "nothing to show". While the figure is still in flight
+          — and against a remote database that is a second or two — a pulsing
+          bar says "not yet" instead. */}
+      {loading ? (
+        <div
+          style={{
+            height: 34,
+            width: '62%',
+            borderRadius: radius.sm,
+            background: c.bg,
+            animation: 'laostayPulse 1.2s ease-in-out infinite',
+          }}
+        />
+      ) : (
+        <div style={{ font: f(800, 26), color: valueColor }}>{value}</div>
+      )}
+      {/* Held back while loading: every note has a "nothing to report" fallback,
+          and printing "no applications pending" before the figures arrive is a
+          claim the page cannot yet make. */}
+      <div style={{ font: f(600, 12), color: noteColor, marginTop: 4, minHeight: 18 }}>
+        {loading ? '' : note}
       </div>
-      <div style={{ font: f(600, 12), color: noteColor, marginTop: 4, minHeight: 18 }}>{note}</div>
     </Card>
   );
 }

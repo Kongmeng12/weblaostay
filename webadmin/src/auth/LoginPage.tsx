@@ -37,36 +37,18 @@ export function LoginPage() {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 24,
+        padding: 20,
         background: c.pageOuter,
         minHeight: '100vh',
         fontFamily: "'Noto Sans Lao', sans-serif",
       }}
     >
-      <div
-        style={{
-          width: 1100,
-          maxWidth: '100%',
-          minHeight: 640,
-          borderRadius: radius.lg,
-          overflow: 'hidden',
-          background: '#fff',
-          boxShadow: '0 30px 70px -20px rgba(40,30,20,.5)',
-          display: 'flex',
-        }}
-      >
-        {/* brand panel */}
+      <div className="adm-login">
+        {/* brand panel — hidden on a phone, where it would push the form off
+            the screen to say something the visitor did not come to read */}
         <div
-          style={{
-            flex: 1,
-            background: `linear-gradient(150deg, ${c.sidebarFrom}, #241B15 70%)`,
-            padding: 48,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
+          className="adm-login-brand"
+          style={{ background: `linear-gradient(150deg, ${c.sidebarFrom}, #241B15 70%)` }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
@@ -106,16 +88,7 @@ export function LoginPage() {
         </div>
 
         {/* form panel */}
-        <div
-          style={{
-            width: 460,
-            flex: 'none',
-            padding: 48,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-          }}
-        >
+        <div className="adm-login-form">
           <div style={{ font: f(800, 26), color: c.text, marginBottom: 6 }}>ເຂົ້າສູ່ລະບົບ</div>
           <div style={{ font: f(400, 13), color: c.muted, marginBottom: 28 }}>
             ໃສ່ອີເມວ ແລະ ລະຫັດຜ່ານຂອງທ່ານ

@@ -10,6 +10,7 @@
     "dev:web": "npm --prefix webapp run dev",
     "setup": "npm install && npm --prefix backend install && npm --prefix webadmin install && npm --prefix webapp install && npm --prefix backend run db:generate",
     "smoke": "npm --prefix backend run smoke",
+    "check": "npm --prefix backend run smoke && npm --prefix webapp run check:browse && npm --prefix webapp run check:chat && npm --prefix webadmin run check:cms && npm --prefix webapp run check:journey",
     "studio": "npm --prefix backend run db:studio",
     "typecheck": "npm --prefix backend run build && npm --prefix webadmin run typecheck && npm --prefix webapp run typecheck",
     "build": "npm --prefix backend run build && npm --prefix webadmin run build && npm --prefix webapp run build"

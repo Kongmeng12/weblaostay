@@ -61,7 +61,7 @@ export function Approvals() {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 22 }}>
+      <div className="adm-trio" style={{ marginBottom: 22 }}>
         <StatBox label="ລໍອະນຸມັດ" value={counts.data && (counts.data.pending ?? 0)} color={c.accent} />
         <StatBox
           label="ອະນຸມັດແລ້ວ"
