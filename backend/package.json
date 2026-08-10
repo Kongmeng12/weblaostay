@@ -12,9 +12,11 @@
     "db:pull": "prisma db pull",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "check:storage": "npm run build && node scripts/storage-check.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1106.0",
     "@nestjs/common": "^11.1.6",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.6",

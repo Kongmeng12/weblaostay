@@ -110,8 +110,10 @@ npm run check      # ທຸກຢ່າງ ຮຽງກັນ — ຢຸດທ�
 ຢາກແລ່ນເປັນສ່ວນໆ:
 
 ```bash
-# Backend — ຕ້ອງມີ API ແລ່ນຢູ່, ຂຽນລົງ DB ຈິງ
-cd backend && npm run smoke              # 112 ຂໍ້
+# Backend
+cd backend
+npm run check:storage                    # 16 ຂໍ້, ບໍ່ຕ້ອງມີ server ຫຼື DB
+npm run smoke                            # 112 ຂໍ້ — ຕ້ອງມີ API ແລ່ນຢູ່, ຂຽນລົງ DB ຈິງ
 
 # ເວັບລູກຄ້າ — ຂັບ browser ຈິງ
 cd webapp
@@ -121,7 +123,7 @@ npm run check:journey                    # ຈອງຈົນຈົບ, ຂຽ�
 
 # WebAdmin
 cd ../webadmin
-npm run check:responsive                 # 10 ໜ້າ × 8 ຂະໜາດຈໍ, ອ່ານຢ່າງດຽວ
+npm run check:responsive                 # 17 ໜ້າ × 8 ຂະໜາດຈໍ, ອ່ານຢ່າງດຽວ
 npm run check:cms                        # 14 ຂໍ້, ຂຽນລົງ DB ແລ້ວລຶບຄືນ
 
 # Partner app
@@ -215,7 +217,18 @@ refresh token ທີ່ໃຊ້ຊ້ຳວ່າຖືກລັກ ແລ້�
 ຮັບ JPEG/PNG/WebP ≤ 5 MB, ສູງສຸດ 12 ຮູບຕໍ່ທີ່ພັກ, ກວດ magic byte ບໍ່ແມ່ນພຽງ mime ທີ່ client ບອກ,
 ຊື່ໄຟລ໌ສ້າງໃໝ່ສະເໝີ. ເກັບຢູ່ `backend/uploads/` ແລ້ວ serve ທີ່ `/uploads/...`.
 
-> **ອັນນີ້ deploy ຫຼາຍ instance ບໍ່ໄດ້** — ຮູບຢູ່ disk ເຄື່ອງດຽວ ແລະ ຫາຍເມື່ອ container restart.
+ບ່ອນເກັບເລືອກດ້ວຍ `STORAGE_PROVIDER`:
+
+| ຄ່າ | ໄຟລ໌ໄປໃສ | ເໝາະເມື່ອ |
+|---|---|---|
+| `local` (ຄ່າເລີ່ມຕົ້ນ) | `backend/uploads/` ແລະ process ນີ້ serve ເອງ | VPS ໜຶ່ງເຄື່ອງ ທີ່ disk ບໍ່ຫາຍ |
+| `r2` | bucket ແບບ S3 — Cloudflare R2, AWS S3, MinIO | ຫຼາຍກວ່າ 1 instance ຫຼື disk ຫາຍຕອນ deploy |
+
+ຕັ້ງ `r2` ແລ້ວ key `S3_*` ຂາດ → **process ບໍ່ start** ບໍ່ແມ່ນຕົກກັບໄປໃຊ້ disk ງຽບໆ.
+ຄ່າທັງໝົດອະທິບາຍໄວ້ໃນ [.env.example](backend/.env.example).
+
+> `local` ໃນ production **deploy ຫຼາຍ instance ບໍ່ໄດ້** ແລະ ຮູບຫາຍເມື່ອ container ຖືກສ້າງໃໝ່ —
+> boot ຈະ log ເປັນ ERROR ເຕືອນໄວ້. ແລະ backup ຕ້ອງລວມໂຟນເດີ `uploads/` ນຳ ເພາະ dump ຂອງ DB ບໍ່ມີມັນ.
 
 ## ຂອບເຂດປັດຈຸບັນ
 
@@ -224,12 +237,12 @@ refresh token ທີ່ໃຊ້ຊ້ຳວ່າຖືກລັກ ແລ້�
 | Schema v2 (59 ຕາຕະລາງ) | ✅ |
 | Auth + RBAC + audit | ✅ |
 | ຄົ້ນຫາ · ຈອງ · hold · ຈ່າຍ · ຍົກເລີກ · payout · ledger | ✅ |
-| Admin API + WebAdmin (10 ໜ້າຈໍ) | ✅ |
+| Admin API + WebAdmin (17 ໜ້າຈໍ) | ✅ |
 | Partner API + Flutter partner app | ✅ |
 | Customer API + ເວັບລູກຄ້າ | ✅ |
 | QR PhaJay | ⬜ ໂຄດພ້ອມ — ລໍ credentials |
 | ສົ່ງ SMS / ອີເມວ | ⬜ **ບໍ່ມີເລີຍ** — OTP ແລະ ກູ້ລະຫັດຜ່ານໃຊ້ບໍ່ໄດ້ໃນ production |
-| ເກັບຮູບໃສ່ S3/R2 | ⬜ |
+| ເກັບຮູບໃສ່ S3/R2 | ✅ ໂຄດພ້ອມ — ຕັ້ງ `STORAGE_PROVIDER=r2` ເມື່ອມີ bucket |
 | Deploy · CI | ⬜ **ບໍ່ເຄີຍ deploy** |
 | Coupon · ໂປຣໂມຊັນ | ⬜ ມີແຕ່ schema — `discountAmount` ຍັງເປັນ 0 |
 | ແຈ້ງເຕືອນຈາກ template (`NotificationsService`) | ✅ |

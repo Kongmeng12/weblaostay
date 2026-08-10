@@ -6,14 +6,18 @@ import { c, f, radius } from '../theme';
 export function Card({
   children,
   style,
+  className,
   padding = 22,
 }: {
   children: ReactNode;
   style?: CSSProperties;
+  /** For layout that needs a media query, which an inline style cannot carry. */
+  className?: string;
   padding?: number;
 }) {
   return (
     <div
+      className={className}
       style={{
         background: c.surface,
         border: `1px solid ${c.border}`,
@@ -536,5 +540,117 @@ export function Avatar({
     >
       {label}
     </div>
+  );
+}
+
+// ── Accordion ────────────────────────────────────────────────────────────────
+
+/**
+ * A titled section that opens and closes.
+ *
+ * For pages that are a stack of unrelated settings: all of them on screen at
+ * once is two thousand pixels of scrolling to change one number, and none of it
+ * tells you where that number lives.
+ *
+ * `badge` is for something the closed header must still say — an unsaved edit
+ * inside a section nobody can see is how a change gets lost.
+ */
+export function Accordion({
+  icon,
+  title,
+  subtitle,
+  badge,
+  open,
+  onToggle,
+  children,
+}: {
+  icon: string;
+  title: string;
+  subtitle?: string;
+  badge?: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Card padding={0} style={{ overflow: 'hidden' }}>
+      <button
+        onClick={onToggle}
+        aria-expanded={open}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 13,
+          padding: '16px 20px',
+          background: 'none',
+          border: 'none',
+          textAlign: 'left',
+          cursor: 'pointer',
+        }}
+      >
+        <span
+          style={{
+            width: 34,
+            height: 34,
+            flex: 'none',
+            borderRadius: radius.md,
+            background: c.bg,
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: 16,
+          }}
+        >
+          {icon}
+        </span>
+
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', font: f(700, 15), color: c.text }}>{title}</span>
+          {subtitle && (
+            <span
+              style={{
+                display: 'block',
+                font: f(400, 12),
+                color: c.muted,
+                marginTop: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {subtitle}
+            </span>
+          )}
+        </span>
+
+        {badge}
+
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          style={{
+            flex: 'none',
+            transform: open ? 'rotate(180deg)' : 'none',
+            transition: 'transform .18s',
+          }}
+        >
+          <path
+            d="M6 9l6 6 6-6"
+            stroke={c.muted}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ padding: '4px 20px 22px', borderTop: `1px solid ${c.divider}` }}>
+          {children}
+        </div>
+      )}
+    </Card>
   );
 }

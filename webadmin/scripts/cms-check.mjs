@@ -146,11 +146,13 @@ const signedIn = await page
   .catch(() => false);
 check('an admin can sign in', signedIn);
 
+// Each CMS table is its own route now, reached from the sidebar; /content
+// still redirects to the first of them so old links keep working.
 await page.goto(`${ADMIN}/content`, { waitUntil: 'networkidle2' });
 await page.waitForFunction(() => document.body.innerText.includes('ແບນເນີໜ້າຫຼັກ'), {
-  timeout: 25_000,
+  timeout: 40_000,
 });
-check('the content page opens on the banners tab', (await text()).includes('ແບນເນີໜ້າຫຼັກ'));
+check('/content redirects to the banners screen', page.url().endsWith('/content/banners'), page.url());
 
 // ── a banner that should show ───────────────────────────────────────────────
 await clickButton('+ ແບນເນີໃໝ່');
@@ -183,10 +185,13 @@ check('a banner past its window is marked expired', (await text()).includes('ໝ
 
 // ── an announcement ─────────────────────────────────────────────────────────
 await page.evaluate(() => {
-  const tab = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'ປະກາດ');
-  tab?.click();
+  const link = [...document.querySelectorAll('nav a')].find((a) => a.innerText.includes('ປະກາດ'));
+  link?.click();
 });
-await settle(700);
+await page.waitForFunction(() => document.body.innerText.includes('+ ປະກາດໃໝ່'), {
+  timeout: 30_000,
+});
+await settle(500);
 await clickButton('+ ປະກາດໃໝ່');
 await fill('ຫົວຂໍ້', ANNOUNCEMENT_TITLE);
 await fill('ເນື້ອຫາ', 'ລະບົບຈະປິດປັບປຸງຄືນວັນເສົາ');

@@ -17,31 +17,200 @@ interface NavItem {
   to: string;
   name: string;
   emoji: string;
+  /** Shown in the page header once you are there. */
   title: string;
   subtitle: string;
   /** Roles allowed to see the entry. Undefined means everyone. */
   roles?: AdminRole[];
+  /**
+   * How wide the page's column should be. A form reads badly past ~860px;
+   * a table wants the room. The header uses the same width so its title lines
+   * up with the card underneath instead of floating off to the left.
+   */
+  width?: 'narrow' | 'medium';
 }
 
-export const NAV: NavItem[] = [
-  { to: '/', name: 'ແດຊບອຣ໌ດ', emoji: '▦', title: 'ແດຊບອຣ໌ດ · Dashboard', subtitle: 'ພາບລວມລະບົບ ຈອງ & ການເງິນ' },
-  { to: '/bookings', name: 'ການຈອງ', emoji: '🧾', title: 'ການຈອງທັງໝົດ', subtitle: 'ຈັດການການຈອງໃນລະບົບ' },
-  { to: '/customers', name: 'ລູກຄ້າ', emoji: '👥', title: 'ລູກຄ້າ', subtitle: 'ຈັດການບັນຊີລູກຄ້າ' },
+/**
+ * A collapsible heading in the sidebar.
+ *
+ * `key` is what the open/closed state is stored against, so renaming a group
+ * on screen does not silently reset which ones an admin had open.
+ */
+interface NavGroup {
+  key: string;
+  name: string;
+  items: NavItem[];
+}
+
+/**
+ * The sidebar, defined once.
+ *
+ * Every page renders inside this shell through the router's `<Outlet/>`; no
+ * page draws its own navigation, so adding a screen means adding a line here
+ * and a `<Route>` in App.tsx — nothing else.
+ *
+ * Two entries stand alone at the top and bottom. The dashboard is where you
+ * land and the settings are where you rarely go; burying either under a
+ * heading you have to open first would cost a click for no grouping benefit.
+ */
+const DASHBOARD: NavItem = {
+  to: '/',
+  name: 'ແດຊບອຣ໌ດ',
+  emoji: '▦',
+  title: 'ແດຊບອຣ໌ດ · Dashboard',
+  subtitle: 'ພາບລວມລະບົບ ຈອງ & ການເງິນ',
+};
+
+export const NAV_GROUPS: NavGroup[] = [
   {
-    to: '/payout',
-    name: 'ການເງິນ · Payout',
-    emoji: '💰',
-    title: 'ຈັດການໂອນເງິນ · Payout',
-    subtitle: 'ໂອນເງິນໃຫ້ Partner ລາຍສັປດາຫ໌',
-    roles: ['super_admin', 'finance'],
+    key: 'operations',
+    name: 'ການດຳເນີນງານ',
+    items: [
+      {
+        to: '/bookings',
+        name: 'ການຈອງ',
+        emoji: '🧾',
+        title: 'ການຈອງທັງໝົດ',
+        subtitle: 'ຈັດການການຈອງໃນລະບົບ',
+      },
+      {
+        to: '/customers',
+        name: 'ລູກຄ້າ',
+        emoji: '👥',
+        title: 'ລູກຄ້າ',
+        subtitle: 'ຈັດການບັນຊີລູກຄ້າ',
+      },
+      {
+        to: '/reviews',
+        name: 'ຮີວິວ & ຂໍ້ພິພາດ',
+        emoji: '⭐',
+        title: 'ຮີວິວ & ຂໍ້ພິພາດ',
+        subtitle: 'ດູແລຮີວິວ ແລະ ຂໍ້ຮ້ອງເຮັຍນ',
+      },
+    ],
   },
-  { to: '/approvals', name: 'ອະນຸມັດ Partner', emoji: '🤝', title: 'ອະນຸມັດ Partner', subtitle: 'ກວດສອບໃບສະໝັກທີ່ພັກໃໝ່' },
-  { to: '/partners', name: 'ທີ່ພັກ & Partner', emoji: '🏡', title: 'ທີ່ພັກ & Partner', subtitle: 'Partner ໃນລະບົບ' },
-  { to: '/reviews', name: 'ຮີວິວ & ຂໍ້ພິພາດ', emoji: '⭐', title: 'ຮີວິວ & ຂໍ້ພິພາດ', subtitle: 'ດູແລຮີວິວ ແລະ ຂໍ້ຮ້ອງເຮັຍນ' },
-  { to: '/promos', name: 'ໂຄ້ດສ່ວນຫຼຸດ', emoji: '🎟️', title: 'ໂຄ້ດສ່ວນຫຼຸດ', subtitle: 'ຈັດການໂຄ້ດສ່ວນຫຼຸດ & ໂປຣໂມຊັນ' },
-  { to: '/content', name: 'ເນື້ອຫາ', emoji: '📝', title: 'ເນື້ອຫາ · CMS', subtitle: 'ແບນເນີ, ປະກາດ, ຄຳຖາມທີ່ພົບເລື້ອຍ ແລະ ໜ້າຄົງທີ່' },
-  { to: '/settings', name: 'ຕັ້ງຄ່າ', emoji: '⚙️', title: 'ຕັ້ງຄ່າລະບົບ', subtitle: 'ຄ່າຄອມມິຊຊັນ, ຜູ້ດູແລ ແລະ ລະບົບ' },
+  {
+    key: 'partners',
+    name: 'Partner & ການເງິນ',
+    items: [
+      {
+        to: '/approvals',
+        name: 'ອະນຸມັດ Partner',
+        emoji: '🤝',
+        title: 'ອະນຸມັດ Partner',
+        subtitle: 'ກວດສອບໃບສະໝັກທີ່ພັກໃໝ່',
+      },
+      {
+        to: '/partners',
+        name: 'ທີ່ພັກ & Partner',
+        emoji: '🏡',
+        title: 'ທີ່ພັກ & Partner',
+        subtitle: 'Partner ໃນລະບົບ',
+      },
+      {
+        to: '/payout',
+        name: 'ການເງິນ · Payout',
+        emoji: '💰',
+        title: 'ຈັດການໂອນເງິນ · Payout',
+        subtitle: 'ໂອນເງິນໃຫ້ Partner ລາຍສັປດາຫ໌',
+        roles: ['super_admin', 'finance'],
+      },
+    ],
+  },
+  {
+    key: 'content',
+    name: 'ເນື້ອຫາ & ການຕະຫຼາດ',
+    items: [
+      {
+        to: '/content/banners',
+        width: 'medium',
+        name: 'ແບນເນີ',
+        emoji: '🖼',
+        title: 'ແບນເນີໜ້າຫຼັກ',
+        subtitle: 'ຮູບໂປຣໂມຊັນເທິງສຸດຂອງແອັບລູກຄ້າ',
+      },
+      {
+        to: '/content/announcements',
+        width: 'medium',
+        name: 'ປະກາດ',
+        emoji: '📢',
+        title: 'ປະກາດ',
+        subtitle: 'ຂໍ້ຄວາມແຈ້ງເຖິງລູກຄ້າ ຫຼື Partner',
+      },
+      {
+        to: '/content/faqs',
+        width: 'medium',
+        name: 'ຄຳຖາມທີ່ພົບເລື້ອຍ',
+        emoji: '❓',
+        title: 'ຄຳຖາມທີ່ພົບເລື້ອຍ · FAQ',
+        subtitle: 'ຄຳຖາມ-ຄຳຕອບໃນໜ້າຊ່ວຍເຫຼືອ',
+      },
+      {
+        to: '/content/pages',
+        width: 'medium',
+        name: 'ໜ້າຄົງທີ່',
+        emoji: '📄',
+        title: 'ໜ້າຄົງທີ່',
+        subtitle: 'ເງື່ອນໄຂການໃຊ້ງານ, ນະໂຍບາຍ ແລະ ໜ້າກ່ຽວກັບ',
+      },
+      {
+        to: '/promos',
+        name: 'ໂຄ້ດສ່ວນຫຼຸດ',
+        emoji: '🎟️',
+        title: 'ໂຄ້ດສ່ວນຫຼຸດ',
+        subtitle: 'ຈັດການໂຄ້ດສ່ວນຫຼຸດ & ໂປຣໂມຊັນ',
+      },
+    ],
+  },
+  {
+    key: 'settings',
+    name: 'ຕັ້ງຄ່າລະບົບ',
+    items: [
+      {
+        to: '/settings/platform',
+        width: 'narrow',
+        name: 'ຂໍ້ມູນລະບົບ',
+        emoji: '🏷',
+        title: 'ຂໍ້ມູນລະບົບ',
+        subtitle: 'ຊື່ແພລດຟອມ ແລະ ຊ່ອງທາງຕິດຕໍ່ທີ່ລູກຄ້າເຫັນ',
+      },
+      {
+        to: '/settings/fees',
+        width: 'narrow',
+        name: 'ຄ່າຄອມມິຊຊັນ',
+        emoji: '💵',
+        title: 'ຄ່າຄອມມິຊຊັນ & ການເງິນ',
+        subtitle: 'ອັດຕາທີ່ໃຊ້ຄິດທຸກການຈອງ',
+      },
+      {
+        to: '/settings/operations',
+        width: 'narrow',
+        name: 'ການດຳເນີນງານ',
+        emoji: '⏱',
+        title: 'ການດຳເນີນງານ',
+        subtitle: 'ເວລາກັນຫ້ອງ, ອາຍຸ QR, ຮອບໂອນເງິນ ແລະ ການລັອກບັນຊີ',
+      },
+      {
+        to: '/settings/admins',
+        width: 'narrow',
+        name: 'ຜູ້ດູແລລະບົບ',
+        emoji: '👤',
+        title: 'ຜູ້ດູແລລະບົບ',
+        subtitle: 'ບັນຊີພະນັກງານ ແລະ ສິດຂອງແຕ່ລະຄົນ',
+      },
+      {
+        to: '/settings/audit',
+        name: 'Audit log',
+        emoji: '📋',
+        title: 'ບັນທຶກການກະທຳ · Audit log',
+        subtitle: 'ທຸກການກະທຳສຳຄັນຖືກບັນທຶກພ້ອມ IP ຜູ້ກະທຳ',
+      },
+    ],
+  },
 ];
+
+/** Flat, for looking up the header title of whatever route is showing. */
+export const NAV: NavItem[] = [DASHBOARD, ...NAV_GROUPS.flatMap((g) => g.items)];
 
 export function Shell() {
   const { admin, signOut } = useAuth();
@@ -65,16 +234,50 @@ export function Shell() {
   // Drives the badge on "ອະນຸມັດ Partner" so it always reflects reality. The
   // endpoint returns one key per partner_status, so a run with nothing pending
   // omits "pending" entirely rather than sending a zero.
-  const { data: approvalCounts } = useQuery({
+  const { data: counts } = useQuery({
     queryKey: ['approvals', 'counts'],
     queryFn: () => api.get<Partial<Record<string, number>>>('/admin/approvals/counts'),
     refetchInterval: 60_000,
   });
 
-  const visible = NAV.filter(
-    (n) => !n.roles || (admin?.adminRole ? n.roles.includes(admin.adminRole) : false),
+  const allowed = (item: NavItem) =>
+    !item.roles || (admin?.adminRole ? item.roles.includes(admin.adminRole) : false);
+
+  // A group whose every entry is hidden by role is not an empty heading — it
+  // is not there at all.
+  const groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter(
+    (g) => g.items.length > 0,
   );
+
   const current = [...NAV].reverse().find((n) => matches(location.pathname, n.to)) ?? NAV[0];
+  const column = `adm-column${current.width ? ' adm-' + current.width : ''}`;
+
+  // Groups start closed except the one holding the current page, and stay
+  // however the admin leaves them afterwards.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      NAV_GROUPS.map((g) => [g.key, g.items.some((i) => matches(location.pathname, i.to))]),
+    ),
+  );
+
+  // Following a link into a closed group — from a dashboard shortcut, or a
+  // reload — must reveal where you now are.
+  useEffect(() => {
+    const holding = NAV_GROUPS.find((g) => g.items.some((i) => matches(location.pathname, i.to)));
+    if (holding) setOpenGroups((o) => (o[holding.key] ? o : { ...o, [holding.key]: true }));
+  }, [location.pathname]);
+
+  // With every group open the list is taller than the window, so the entry you
+  // just landed on can be below the fold. Waits a frame: the group above has to
+  // expand before there is anything to scroll to.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      document
+        .querySelector('nav a[aria-current="page"]')
+        ?.scrollIntoView({ block: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [location.pathname, openGroups]);
 
   return (
     // Full bleed, not a card on a page. The sidebar runs the whole height of
@@ -128,54 +331,67 @@ export function Shell() {
             minHeight: 0,
           }}
         >
-          {visible.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: 11,
-                padding: '11px 12px',
-                borderRadius: radius.md,
-                font: f(600, 13),
-                textDecoration: 'none',
-                background: isActive ? c.accent : 'transparent',
-                color: isActive ? '#fff' : c.onDark,
-                transition: 'background .15s',
-              })}
-              onMouseEnter={(e) => {
-                if (!e.currentTarget.style.background.includes('253')) return;
-              }}
-            >
-              {({ isActive }) => (
-                <>
-                  <span style={{ fontSize: 15, width: 18, textAlign: 'center' }}>
-                    {item.emoji}
-                  </span>
-                  <span style={{ flex: 1 }}>{item.name}</span>
-                  {item.to === '/approvals' && !!approvalCounts?.pending && (
-                    <span
-                      style={{
-                        minWidth: 20,
-                        height: 20,
-                        padding: '0 6px',
-                        borderRadius: 10,
-                        background: isActive ? '#fff' : c.accent,
-                        color: isActive ? c.accent : '#fff',
-                        font: f(700, 11),
-                        display: 'grid',
-                        placeItems: 'center',
-                      }}
-                    >
-                      {approvalCounts.pending}
-                    </span>
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
+          <NavRow item={DASHBOARD} badge={0} />
+
+          {groups.map((group) => {
+            const open = !!openGroups[group.key];
+            // What the heading must still say while it is closed.
+            const hidden = open ? 0 : group.items.reduce((n, i) => n + badgeFor(i, counts), 0);
+
+            return (
+              <div key={group.key}>
+                <button
+                  onClick={() => setOpenGroups((o) => ({ ...o, [group.key]: !o[group.key] }))}
+                  aria-expanded={open}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '11px 12px',
+                    marginTop: 6,
+                    borderRadius: radius.md,
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    // No `text-transform: uppercase` — Lao script has no case,
+                    // so it would shout the Latin words and leave the rest,
+                    // giving "PARTNER & ການເງິນ".
+                    font: f(700, 11.5),
+                    letterSpacing: 0.3,
+                    color: c.onDarkSoft,
+                    textAlign: 'left',
+                  }}
+                >
+                  <span style={{ flex: 1 }}>{group.name}</span>
+                  {!!hidden && <Badge count={hidden} active={false} />}
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}
+                  >
+                    <path
+                      d="M6 9l6 6 6-6"
+                      stroke="currentColor"
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+
+                {open && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {group.items.map((item) => (
+                      <NavRow key={item.to} item={item} badge={badgeFor(item, counts)} indent />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div
@@ -255,6 +471,7 @@ export function Shell() {
           className="adm-header"
           style={{ background: c.bg, borderBottom: `1px solid ${c.border}` }}
         >
+          <div className={column}>
           <button
             className="adm-burger"
             aria-label="ເປີດເມນູ"
@@ -284,13 +501,13 @@ export function Shell() {
             </div>
             <div style={{ font: f(400, 13), color: c.muted, marginTop: 2 }}>{current.subtitle}</div>
           </div>
+          </div>
         </header>
 
-        {/* Capped so a table does not stretch to arm's length on a wide
-            monitor, but left-aligned rather than centred — the content should
-            stay next to the sidebar it belongs to. */}
         <div className="adm-content">
-          <Outlet />
+          <div className={column}>
+            <Outlet />
+          </div>
         </div>
       </main>
     </div>
@@ -300,4 +517,77 @@ export function Shell() {
 function matches(pathname: string, to: string): boolean {
   if (to === '/') return pathname === '/';
   return pathname === to || pathname.startsWith(to + '/');
+}
+
+/**
+ * The number an entry carries, or zero.
+ *
+ * Only approvals has one today. It lives in a function rather than inline so
+ * that a closed group can sum what it is hiding without the rendering code
+ * knowing which entries have counts.
+ */
+function badgeFor(item: NavItem, counts: Partial<Record<string, number>> | undefined): number {
+  if (item.to === '/approvals') return counts?.pending ?? 0;
+  return 0;
+}
+
+function Badge({ count, active }: { count: number; active: boolean }) {
+  return (
+    <span
+      style={{
+        minWidth: 20,
+        height: 20,
+        padding: '0 6px',
+        borderRadius: 10,
+        background: active ? '#fff' : c.accent,
+        color: active ? c.accent : '#fff',
+        font: f(700, 11),
+        display: 'grid',
+        placeItems: 'center',
+        flex: 'none',
+      }}
+    >
+      {count}
+    </span>
+  );
+}
+
+function NavRow({
+  item,
+  badge,
+  indent,
+}: {
+  item: NavItem;
+  badge: number;
+  indent?: boolean;
+}) {
+  return (
+    <NavLink
+      to={item.to}
+      end={item.to === '/'}
+      style={({ isActive }) => ({
+        display: 'flex',
+        alignItems: 'center',
+        gap: 11,
+        padding: '11px 12px',
+        paddingLeft: indent ? 22 : 12,
+        borderRadius: radius.md,
+        font: f(600, 13),
+        textDecoration: 'none',
+        background: isActive ? c.accent : 'transparent',
+        color: isActive ? '#fff' : c.onDark,
+        transition: 'background .15s',
+      })}
+    >
+      {({ isActive }) => (
+        <>
+          <span style={{ fontSize: 15, width: 18, textAlign: 'center', flex: 'none' }}>
+            {item.emoji}
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>{item.name}</span>
+          {!!badge && <Badge count={badge} active={isActive} />}
+        </>
+      )}
+    </NavLink>
+  );
 }

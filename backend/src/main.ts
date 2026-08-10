@@ -35,16 +35,23 @@ async function bootstrap(): Promise<void> {
   // uploaded photos, which the apps load from a different origin.
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 
-  // Uploaded property and room photos. Served outside the /api prefix so the
+  // Uploaded property and room photos, served outside the /api prefix so the
   // URLs stored in the database stay stable if the API is ever versioned.
-  mkdirSync(UPLOAD_ROOT, { recursive: true });
-  app.useStaticAssets(UPLOAD_ROOT, {
-    prefix: UPLOAD_URL_PREFIX,
-    // The filenames are random, so a long cache is safe: a given URL's bytes
-    // never change.
-    maxAge: '30d',
-    index: false,
-  });
+  //
+  // Only when the photos are actually on this machine. Pointed at a bucket,
+  // the app must not also answer /uploads: a stale file left in the local
+  // folder would shadow the object the database now names.
+  const storageProvider = (config.get<string>('STORAGE_PROVIDER') ?? 'local').toLowerCase();
+  if (storageProvider === 'local') {
+    mkdirSync(UPLOAD_ROOT, { recursive: true });
+    app.useStaticAssets(UPLOAD_ROOT, {
+      prefix: UPLOAD_URL_PREFIX,
+      // The filenames are random, so a long cache is safe: a given URL's bytes
+      // never change.
+      maxAge: '30d',
+      index: false,
+    });
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({

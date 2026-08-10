@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   CardTitle,
-  Chips,
   EmptyState,
   ErrorState,
   Field,
@@ -17,41 +16,11 @@ import {
   inputStyle,
 } from '../components/ui';
 
-type Tab = 'banners' | 'announcements' | 'faqs' | 'pages';
-
-const TABS: { value: Tab; label: string }[] = [
-  { value: 'banners', label: 'ແບນເນີ' },
-  { value: 'announcements', label: 'ປະກາດ' },
-  { value: 'faqs', label: 'ຄຳຖາມທີ່ພົບເລື້ອຍ' },
-  { value: 'pages', label: 'ໜ້າຄົງທີ່' },
-];
-
 const AUDIENCE_LABEL: Record<Audience, string> = {
   ALL: 'ທຸກຄົນ',
   CUSTOMER: 'ລູກຄ້າ',
   PARTNER: 'Partner',
 };
-
-/**
- * Editorial content — what the apps show on their home screen and in their
- * legal pages.
- *
- * Four tables with the same shape of work (list, edit, publish), so they share
- * one page rather than four sidebar entries nobody visits.
- */
-export function Content() {
-  const [tab, setTab] = useState<Tab>('banners');
-
-  return (
-    <div style={{ maxWidth: 980, display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <Chips options={TABS} value={tab} onChange={setTab} />
-      {tab === 'banners' && <BannersTab />}
-      {tab === 'announcements' && <AnnouncementsTab />}
-      {tab === 'faqs' && <FaqsTab />}
-      {tab === 'pages' && <PagesTab />}
-    </div>
-  );
-}
 
 /**
  * One row's worth of live/scheduled state.
@@ -126,7 +95,7 @@ const EMPTY_BANNER: BannerForm = {
   isActive: true,
 };
 
-function BannersTab() {
+export function ContentBanners() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<BannerForm | null>(null);
 
@@ -396,7 +365,7 @@ const EMPTY_ANNOUNCEMENT: AnnouncementForm = {
   isActive: true,
 };
 
-function AnnouncementsTab() {
+export function ContentAnnouncements() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<AnnouncementForm | null>(null);
 
@@ -588,7 +557,7 @@ const EMPTY_FAQ: FaqForm = {
   isActive: true,
 };
 
-function FaqsTab() {
+export function ContentFaqs() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<FaqForm | null>(null);
 
@@ -746,7 +715,7 @@ function FaqsTab() {
 
 // ── static pages ─────────────────────────────────────────────────────────────
 
-function PagesTab() {
+export function ContentPages() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<AppPage | null>(null);
   const [creating, setCreating] = useState(false);

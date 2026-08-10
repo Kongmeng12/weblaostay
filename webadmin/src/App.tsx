@@ -11,8 +11,19 @@ import { Approvals } from './pages/Approvals';
 import { Partners } from './pages/Partners';
 import { Reviews } from './pages/Reviews';
 import { Promos } from './pages/Promos';
-import { Content } from './pages/Content';
-import { Settings } from './pages/Settings';
+import {
+  ContentAnnouncements,
+  ContentBanners,
+  ContentFaqs,
+  ContentPages,
+} from './pages/Content';
+import {
+  SettingsAdmins,
+  SettingsAudit,
+  SettingsFees,
+  SettingsOperations,
+  SettingsPlatform,
+} from './pages/Settings';
 import { c, f } from './theme';
 
 const queryClient = new QueryClient({
@@ -63,8 +74,22 @@ function Root() {
         <Route path="partners" element={<Partners />} />
         <Route path="reviews" element={<Reviews />} />
         <Route path="promos" element={<Promos />} />
-        <Route path="content" element={<Content />} />
-        <Route path="settings" element={<Settings />} />
+
+        {/* Each CMS table is its own screen, reached from the sidebar. The bare
+            /content path is kept so old links and bookmarks still land. */}
+        <Route path="content" element={<Navigate to="/content/banners" replace />} />
+        <Route path="content/banners" element={<ContentBanners />} />
+        <Route path="content/announcements" element={<ContentAnnouncements />} />
+        <Route path="content/faqs" element={<ContentFaqs />} />
+        <Route path="content/pages" element={<ContentPages />} />
+
+        <Route path="settings" element={<Navigate to="/settings/platform" replace />} />
+        <Route path="settings/platform" element={<SettingsPlatform />} />
+        <Route path="settings/fees" element={<SettingsFees />} />
+        <Route path="settings/operations" element={<SettingsOperations />} />
+        <Route path="settings/admins" element={<SettingsAdmins />} />
+        <Route path="settings/audit" element={<SettingsAudit />} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

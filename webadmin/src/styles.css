@@ -107,19 +107,45 @@ input:disabled {
   min-height: 100vh;
 }
 
+/* The page's own column. Centred, not pinned to the sidebar: on a 1920px
+   monitor a left-aligned 860px form leaves most of the screen empty to its
+   right, which reads as a layout that ran out rather than one that chose a
+   width. The header uses the same column so titles line up with the cards
+   beneath them. */
+.adm-column {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
 .adm-content {
   padding: 28px;
-  max-width: 1600px;
 }
 
 .adm-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
   padding: 22px 28px;
   position: sticky;
   top: 0;
   z-index: 20;
+}
+
+.adm-header > .adm-column {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* A form is not a table: past about 860px the gap between a label and its
+   input turns into a hunt. Narrow pages keep that width and sit centred in
+   whatever room the column has. */
+.adm-narrow {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.adm-medium {
+  max-width: 1040px;
+  margin: 0 auto;
 }
 
 /* The drawer handle and its scrim exist only below the breakpoint. */

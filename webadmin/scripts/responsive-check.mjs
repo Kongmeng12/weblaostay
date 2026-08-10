@@ -29,13 +29,20 @@ const PAGES = [
   ['ແດຊບອຣ໌ດ', 'Daily GMV'],
   ['ການຈອງ', 'ຈັດການການຈອງໃນລະບົບ'],
   ['ລູກຄ້າ', 'ຈັດການບັນຊີລູກຄ້າ'],
-  ['ການເງິນ · Payout', 'ໂອນເງິນໃຫ້ Partner'],
+  ['ຮີວິວ & ຂໍ້ພິພາດ', 'ດູແລຮີວິວ'],
   ['ອະນຸມັດ Partner', 'ກວດສອບໃບສະໝັກ'],
   ['ທີ່ພັກ & Partner', 'Partner ໃນລະບົບ'],
-  ['ຮີວິວ & ຂໍ້ພິພາດ', 'ດູແລຮີວິວ'],
+  ['ການເງິນ · Payout', 'ໂອນເງິນໃຫ້ Partner'],
+  ['ແບນເນີ', 'ຮູບໂປຣໂມຊັນເທິງສຸດ'],
+  ['ປະກາດ', 'ຂໍ້ຄວາມແຈ້ງເຖິງລູກຄ້າ'],
+  ['ຄຳຖາມທີ່ພົບເລື້ອຍ', 'ຄຳຖາມ-ຄຳຕອບໃນໜ້າຊ່ວຍເຫຼືອ'],
+  ['ໜ້າຄົງທີ່', 'ເງື່ອນໄຂການໃຊ້ງານ'],
   ['ໂຄ້ດສ່ວນຫຼຸດ', 'ຈັດການໂຄ້ດສ່ວນຫຼຸດ'],
-  ['ເນື້ອຫາ', 'ແບນເນີໜ້າຫຼັກ'],
-  ['ຕັ້ງຄ່າ', 'ຂໍ້ມູນລະບົບ'],
+  ['ຂໍ້ມູນລະບົບ', 'ຊື່ແພລດຟອມ ແລະ ຊ່ອງທາງຕິດຕໍ່'],
+  ['ຄ່າຄອມມິຊຊັນ', 'ອັດຕາທີ່ໃຊ້ຄິດທຸກການຈອງ'],
+  ['ການດຳເນີນງານ', 'ເວລາກັນຫ້ອງ'],
+  ['ຜູ້ດູແລລະບົບ', 'ບັນຊີພະນັກງານ'],
+  ['Audit log', 'ທຸກການກະທຳສຳຄັນ'],
 ];
 
 const problems = [];
@@ -135,6 +142,16 @@ for (const device of DEVICES) {
       await page.click('.adm-burger');
       await settle(260);
     }
+    // Sidebar entries live under collapsible headings, and a closed group has
+    // no links in the DOM at all — so open everything, let React re-render,
+    // then look.
+    await page.evaluate(() => {
+      for (const header of document.querySelectorAll('nav button[aria-expanded="false"]')) {
+        header.click();
+      }
+    });
+    await settle(250);
+
     const clicked = await page.evaluate((name) => {
       const link = [...document.querySelectorAll('nav a')].find((a) => a.innerText.includes(name));
       if (!link) return false;

@@ -18,12 +18,6 @@ import {
 } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
 
-/**
- * Exactly what `PATCH /admin/settings` accepts: the editable slice of
- * `system_settings`, plus the free-form `app_settings` strings under `app`.
- */
-type EditForm = EditableSettings & { app: Record<string, string> };
-
 const ADMIN_ROLE_LABEL: Record<string, string> = {
   super_admin: 'ຜູ້ດູແລສູງສຸດ',
   finance: 'ຝ່າຍການເງິນ',
@@ -37,58 +31,357 @@ interface NewAdmin {
   adminRole: string;
 }
 
-function toForm(s: SettingsResponse): EditForm {
-  return {
-    commission_rate_app: s.system.commission_rate_app,
-    commission_rate_walkin: s.system.commission_rate_walkin,
-    service_fee_rate: s.system.service_fee_rate,
-    tax_rate: s.system.tax_rate,
-    hold_ttl_minutes: s.system.hold_ttl_minutes,
-    max_nights_per_booking: s.system.max_nights_per_booking,
-    qr_ttl_minutes: s.system.qr_ttl_minutes,
-    payout_period_days: s.system.payout_period_days,
-    login_max_attempts: s.system.login_max_attempts,
-    login_lockout_minutes: s.system.login_lockout_minutes,
-    app: { ...s.app },
-  };
-}
-
-export function Settings() {
-  const { admin, can } = useAuth();
+/**
+ * One page's worth of settings.
+ *
+ * `PATCH /admin/settings` takes every field as optional, so a page sends only
+ * the keys it owns. That is what lets these live as separate screens at all:
+ * saving the commission rates cannot quietly rewrite the contact phone number
+ * someone else is editing in another tab.
+ */
+function useSettingsSlice<T extends object>(pick: (s: SettingsResponse) => T) {
   const qc = useQueryClient();
 
-  const settings = useQuery({
+  const query = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.get<SettingsResponse>('/admin/settings'),
   });
-  // Listing and managing staff is super_admin-only, so for anyone else the
-  // request would just be a 403 in the console.
+
+  const server = query.data ? pick(query.data) : null;
+  const serverJson = server ? JSON.stringify(server) : null;
+  const [draft, setDraft] = useState<T | null>(null);
+
+  // Re-seeds whenever the server's own values change — on first load, and again
+  // after a save returns the stored figures.
+  useEffect(() => {
+    if (serverJson) setDraft(JSON.parse(serverJson) as T);
+  }, [serverJson]);
+
+  const save = useMutation({
+    mutationFn: (patch: T) => api.patch<SettingsResponse>('/admin/settings', patch),
+    onSuccess: (data) => {
+      qc.setQueryData(['settings'], data);
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+
+  return {
+    query,
+    draft,
+    setDraft,
+    save,
+    dirty: !!draft && !!serverJson && JSON.stringify(draft) !== serverJson,
+    revert: () => serverJson && setDraft(JSON.parse(serverJson) as T),
+  };
+}
+
+/** The save / cancel row every editable settings page ends with. */
+function SaveRow({
+  dirty,
+  saving,
+  saved,
+  error,
+  canEdit,
+  onSave,
+  onRevert,
+}: {
+  dirty: boolean;
+  saving: boolean;
+  saved: boolean;
+  error: unknown;
+  canEdit: boolean;
+  onSave: () => void;
+  onRevert: () => void;
+}) {
+  if (!canEdit) {
+    return (
+      <div style={{ marginTop: 18, font: f(400, 12), color: c.muted }}>
+        ຕ້ອງມີສິດ finance ຫຼື super_admin ຈຶ່ງແກ້ໄຂໄດ້
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 14,
+        flexWrap: 'wrap',
+        marginTop: 20,
+      }}
+    >
+      <Button disabled={!dirty || saving} onClick={onSave}>
+        {saving ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກການປ່ຽນແປງ'}
+      </Button>
+      {dirty && (
+        <Button variant="ghost" onClick={onRevert}>
+          ຍົກເລີກ
+        </Button>
+      )}
+      {saved && !dirty && <span style={{ font: f(600, 12), color: c.successFg }}>✓ ບັນທຶກແລ້ວ</span>}
+      {error instanceof Error && (
+        <span style={{ font: f(500, 12), color: c.dangerFg }}>{error.message}</span>
+      )}
+    </div>
+  );
+}
+
+// ── ຂໍ້ມູນລະບົບ ───────────────────────────────────────────────────────────────
+
+type PlatformSlice = { app: Record<string, string> };
+
+export function SettingsPlatform() {
+  const { can } = useAuth();
+  const canEdit = can('super_admin', 'finance');
+  const s = useSettingsSlice<PlatformSlice>((r) => ({ app: { ...r.app } }));
+
+  if (s.query.isError) {
+    return <ErrorState error={s.query.error} onRetry={() => void s.query.refetch()} />;
+  }
+
+  const set = (key: string, value: string) =>
+    s.draft && s.setDraft({ app: { ...s.draft.app, [key]: value } });
+
+  return (
+    <>
+      <Card padding={24}>
+        <CardTitle>ຂໍ້ມູນລະບົບ</CardTitle>
+        <div className="adm-pair">
+          <Field label="ຊື່ແພລດຟອມ">
+            <input
+              value={s.draft?.app.platform_name ?? ''}
+              disabled={!canEdit || !s.draft}
+              onChange={(e) => set('platform_name', e.target.value)}
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="ອີເມວຕິດຕໍ່">
+            <input
+              type="email"
+              value={s.draft?.app.contact_email ?? ''}
+              disabled={!canEdit || !s.draft}
+              onChange={(e) => set('contact_email', e.target.value)}
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="ເບີໂທຕິດຕໍ່">
+            <input
+              value={s.draft?.app.contact_phone ?? ''}
+              disabled={!canEdit || !s.draft}
+              onChange={(e) => set('contact_phone', e.target.value)}
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="ຜູ້ໃຫ້ບໍລິການຊຳລະ" hint="ຕັ້ງຢູ່ .env — ບໍ່ແກ້ຈາກທີ່ນີ້">
+            <input
+              value={s.query.data?.system.payment_provider ?? ''}
+              disabled
+              style={inputStyle}
+            />
+          </Field>
+        </div>
+
+        <SaveRow
+          dirty={s.dirty}
+          saving={s.save.isPending}
+          saved={s.save.isSuccess}
+          error={s.save.error}
+          canEdit={canEdit}
+          onSave={() => s.draft && s.save.mutate(s.draft)}
+          onRevert={s.revert}
+        />
+      </Card>
+    </>
+  );
+}
+
+// ── ຄ່າຄອມມິຊຊັນ & ການເງິນ ───────────────────────────────────────────────────
+
+type FeeSlice = Pick<
+  EditableSettings,
+  'commission_rate_app' | 'commission_rate_walkin' | 'service_fee_rate' | 'tax_rate'
+>;
+
+export function SettingsFees() {
+  const { can } = useAuth();
+  const canEdit = can('super_admin', 'finance');
+  const s = useSettingsSlice<FeeSlice>((r) => ({
+    commission_rate_app: r.system.commission_rate_app,
+    commission_rate_walkin: r.system.commission_rate_walkin,
+    service_fee_rate: r.system.service_fee_rate,
+    tax_rate: r.system.tax_rate,
+  }));
+
+  if (s.query.isError) {
+    return <ErrorState error={s.query.error} onRetry={() => void s.query.refetch()} />;
+  }
+
+  const set = (patch: Partial<FeeSlice>) => s.draft && s.setDraft({ ...s.draft, ...patch });
+
+  return (
+    <>
+      <Card padding={24}>
+        <CardTitle>ຄ່າຄອມມິຊຊັນ &amp; ການເງິນ</CardTitle>
+
+        <RateRow
+          title="ອັດຕາຄ່າຄອມມິຊຊັນ (App)"
+          hint="ຫັກຈາກແຕ່ລະການຈອງຜ່ານແອັບ"
+          value={s.draft?.commission_rate_app}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ commission_rate_app: v })}
+        />
+        <RateRow
+          title="ອັດຕາຄ່າຄອມມິຊຊັນ (Walk-in)"
+          hint="ຫັກຈາກການຈອງທີ່ Partner ບັນທຶກເອງ"
+          value={s.draft?.commission_rate_walkin}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ commission_rate_walkin: v })}
+        />
+        <RateRow
+          title="ຄ່າບໍລິການ (ລູກຄ້າຈ່າຍ)"
+          hint="ບວກເທິງຄ່າຫ້ອງ ໃນການຈອງຜ່ານແອັບ — walk-in ບໍ່ເກັບ"
+          value={s.draft?.service_fee_rate}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ service_fee_rate: v })}
+        />
+        <RateRow
+          title="ພາສີ"
+          hint="ບວກເທິງຄ່າຫ້ອງ + ຄ່າບໍລິການ"
+          value={s.draft?.tax_rate}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ tax_rate: v })}
+          last
+        />
+
+        {/* Cancellation is no longer one platform-wide rate: each property picks
+            a `cancellation_policies` row, and the penalty comes from there. */}
+        <div style={{ marginTop: 16, font: f(400, 12, 19), color: c.muted }}>
+          ຄ່າທຳນຽມຍົກເລີກຕັ້ງແຍກຕາມນະໂຍບາຍຂອງແຕ່ລະທີ່ພັກ (cancellation_policies) ບໍ່ແມ່ນອັດຕາລວມອີກຕໍ່ໄປ.
+        </div>
+
+        <SaveRow
+          dirty={s.dirty}
+          saving={s.save.isPending}
+          saved={s.save.isSuccess}
+          error={s.save.error}
+          canEdit={canEdit}
+          onSave={() => s.draft && s.save.mutate(s.draft)}
+          onRevert={s.revert}
+        />
+      </Card>
+    </>
+  );
+}
+
+// ── ການດຳເນີນງານ ─────────────────────────────────────────────────────────────
+
+type OpsSlice = Pick<
+  EditableSettings,
+  | 'hold_ttl_minutes'
+  | 'qr_ttl_minutes'
+  | 'payout_period_days'
+  | 'max_nights_per_booking'
+  | 'login_max_attempts'
+  | 'login_lockout_minutes'
+>;
+
+export function SettingsOperations() {
+  const { can } = useAuth();
+  const canEdit = can('super_admin', 'finance');
+  const s = useSettingsSlice<OpsSlice>((r) => ({
+    hold_ttl_minutes: r.system.hold_ttl_minutes,
+    qr_ttl_minutes: r.system.qr_ttl_minutes,
+    payout_period_days: r.system.payout_period_days,
+    max_nights_per_booking: r.system.max_nights_per_booking,
+    login_max_attempts: r.system.login_max_attempts,
+    login_lockout_minutes: r.system.login_lockout_minutes,
+  }));
+
+  if (s.query.isError) {
+    return <ErrorState error={s.query.error} onRetry={() => void s.query.refetch()} />;
+  }
+
+  const set = (patch: Partial<OpsSlice>) => s.draft && s.setDraft({ ...s.draft, ...patch });
+
+  return (
+    <>
+      <Card padding={24}>
+        <CardTitle>ການດຳເນີນງານ</CardTitle>
+
+        <CountRow
+          title="ເວລາຈອງຫ້ອງໄວ້ຊົ່ວຄາວ"
+          hint="ຫຼັງກົດຈອງແລ້ວ ຫ້ອງຖືກກັນໄວ້ດົນປານໃດກ່ອນຄືນສູ່ລະບົບ"
+          unit="ນາທີ"
+          value={s.draft?.hold_ttl_minutes}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ hold_ttl_minutes: v })}
+        />
+        <CountRow
+          title="ອາຍຸ QR ຊຳລະ"
+          unit="ນາທີ"
+          value={s.draft?.qr_ttl_minutes}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ qr_ttl_minutes: v })}
+        />
+        <CountRow
+          title="ຮອບໂອນເງິນ"
+          hint="ຄວາມຍາວຂອງແຕ່ລະຮອບທີ່ ‘ສ້າງຮອບໃໝ່’ ຈະສ້າງ"
+          unit="ວັນ"
+          value={s.draft?.payout_period_days}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ payout_period_days: v })}
+        />
+        <CountRow
+          title="ຈຳນວນຄືນສູງສຸດຕໍ່ການຈອງ"
+          unit="ຄືນ"
+          value={s.draft?.max_nights_per_booking}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ max_nights_per_booking: v })}
+        />
+        <CountRow
+          title="ລັອກອິນຜິດໄດ້ສູງສຸດ"
+          hint="ຜິດຄົບຈຳນວນນີ້ ບັນຊີຈະຖືກລັອກຊົ່ວຄາວ"
+          unit="ຄັ້ງ"
+          value={s.draft?.login_max_attempts}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ login_max_attempts: v })}
+        />
+        <CountRow
+          title="ໄລຍະລັອກບັນຊີ"
+          unit="ນາທີ"
+          value={s.draft?.login_lockout_minutes}
+          disabled={!canEdit || !s.draft}
+          onChange={(v) => set({ login_lockout_minutes: v })}
+          last
+        />
+
+        <SaveRow
+          dirty={s.dirty}
+          saving={s.save.isPending}
+          saved={s.save.isSuccess}
+          error={s.save.error}
+          canEdit={canEdit}
+          onSave={() => s.draft && s.save.mutate(s.draft)}
+          onRevert={s.revert}
+        />
+      </Card>
+    </>
+  );
+}
+
+// ── ຜູ້ດູແລລະບົບ ──────────────────────────────────────────────────────────────
+
+export function SettingsAdmins() {
+  const { admin, can } = useAuth();
+  const qc = useQueryClient();
   const isSuper = can('super_admin');
+  const [creating, setCreating] = useState(false);
+
   const admins = useQuery({
     queryKey: ['settings', 'admins'],
     queryFn: () => api.get<AdminRow[]>('/admin/admins'),
     enabled: isSuper,
-  });
-  const audit = useQuery({
-    queryKey: ['settings', 'audit'],
-    queryFn: () => api.get<Paged<AuditRow>>('/admin/audit-logs?limit=15'),
-  });
-
-  const [form, setForm] = useState<EditForm | null>(null);
-  const [creating, setCreating] = useState(false);
-
-  // Seed the form once the server values arrive, without clobbering edits.
-  useEffect(() => {
-    if (settings.data && !form) setForm(toForm(settings.data));
-  }, [settings.data, form]);
-
-  const save = useMutation({
-    mutationFn: (body: EditForm) => api.patch<SettingsResponse>('/admin/settings', body),
-    onSuccess: (data) => {
-      setForm(toForm(data));
-      void qc.invalidateQueries({ queryKey: ['settings'] });
-      void qc.invalidateQueries({ queryKey: ['dashboard'] });
-    },
   });
 
   const createAdmin = useMutation({
@@ -104,181 +397,12 @@ export function Settings() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['settings', 'admins'] }),
   });
 
-  if (settings.isError) {
-    return <ErrorState error={settings.error} onRetry={() => void settings.refetch()} />;
+  if (admins.isError) {
+    return <ErrorState error={admins.error} onRetry={() => void admins.refetch()} />;
   }
 
-  const canEditMoney = can('super_admin', 'finance');
-  const saved = settings.data ? toForm(settings.data) : null;
-  const dirty = !!form && !!saved && JSON.stringify(form) !== JSON.stringify(saved);
-
   return (
-    <div style={{ maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 18 }}>
-      {/* platform */}
-      <Card padding={24}>
-        <CardTitle>ຂໍ້ມູນລະບົບ</CardTitle>
-        <div className="adm-pair">
-          <Field label="ຊື່ແພລດຟອມ">
-            <input
-              value={form?.app.platform_name ?? ''}
-              disabled={!canEditMoney}
-              onChange={(e) =>
-                form && setForm({ ...form, app: { ...form.app, platform_name: e.target.value } })
-              }
-              style={inputStyle}
-            />
-          </Field>
-          <Field label="ອີເມວຕິດຕໍ່">
-            <input
-              type="email"
-              value={form?.app.contact_email ?? ''}
-              disabled={!canEditMoney}
-              onChange={(e) =>
-                form && setForm({ ...form, app: { ...form.app, contact_email: e.target.value } })
-              }
-              style={inputStyle}
-            />
-          </Field>
-          <Field label="ເບີໂທຕິດຕໍ່">
-            <input
-              value={form?.app.contact_phone ?? ''}
-              disabled={!canEditMoney}
-              onChange={(e) =>
-                form && setForm({ ...form, app: { ...form.app, contact_phone: e.target.value } })
-              }
-              style={inputStyle}
-            />
-          </Field>
-          <Field label="ຜູ້ໃຫ້ບໍລິການຊຳລະ" hint="ຕັ້ງຢູ່ .env — ບໍ່ແກ້ຈາກທີ່ນີ້">
-            <input
-              value={settings.data?.system.payment_provider ?? ''}
-              disabled
-              style={inputStyle}
-            />
-          </Field>
-        </div>
-      </Card>
-
-      {/* money */}
-      <Card padding={24}>
-        <CardTitle>ຄ່າຄອມມິຊຊັນ &amp; ການເງິນ</CardTitle>
-
-        <RateRow
-          title="ອັດຕາຄ່າຄອມມິຊຊັນ (App)"
-          hint="ຫັກຈາກແຕ່ລະການຈອງຜ່ານແອັບ"
-          value={form?.commission_rate_app}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, commission_rate_app: v })}
-        />
-        <RateRow
-          title="ອັດຕາຄ່າຄອມມິຊຊັນ (Walk-in)"
-          hint="ຫັກຈາກການຈອງທີ່ Partner ບັນທຶກເອງ"
-          value={form?.commission_rate_walkin}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, commission_rate_walkin: v })}
-        />
-        <RateRow
-          title="ຄ່າບໍລິການ (ລູກຄ້າຈ່າຍ)"
-          hint="ບວກເທິງຄ່າຫ້ອງ ໃນການຈອງຜ່ານແອັບ — walk-in ບໍ່ເກັບ"
-          value={form?.service_fee_rate}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, service_fee_rate: v })}
-        />
-        <RateRow
-          title="ພາສີ"
-          hint="ບວກເທິງຄ່າຫ້ອງ + ຄ່າບໍລິການ"
-          value={form?.tax_rate}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, tax_rate: v })}
-          last
-        />
-
-        {/* Cancellation is no longer one platform-wide rate: each property picks
-            a `cancellation_policies` row, and the penalty comes from there. */}
-        <div style={{ marginTop: 16, font: f(400, 12, 19), color: c.muted }}>
-          ຄ່າທຳນຽມຍົກເລີກຕັ້ງແຍກຕາມນະໂຍບາຍຂອງແຕ່ລະທີ່ພັກ (cancellation_policies) ບໍ່ແມ່ນອັດຕາລວມອີກຕໍ່ໄປ.
-        </div>
-
-        {canEditMoney ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 20 }}>
-            <Button
-              disabled={!dirty || save.isPending}
-              onClick={() => form && save.mutate(form)}
-            >
-              {save.isPending ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກການປ່ຽນແປງ'}
-            </Button>
-            {dirty && (
-              <Button variant="ghost" onClick={() => setForm(saved)}>
-                ຍົກເລີກ
-              </Button>
-            )}
-            {save.isSuccess && !dirty && (
-              <span style={{ font: f(600, 12), color: c.successFg }}>✓ ບັນທຶກແລ້ວ</span>
-            )}
-            {save.error instanceof Error && (
-              <span style={{ font: f(500, 12), color: c.dangerFg }}>{save.error.message}</span>
-            )}
-          </div>
-        ) : (
-          <div style={{ marginTop: 16, font: f(400, 12), color: c.muted }}>
-            ຕ້ອງມີສິດ finance ຫຼື super_admin ຈຶ່ງແກ້ໄຂໄດ້
-          </div>
-        )}
-      </Card>
-
-      {/* operations */}
-      <Card padding={24}>
-        <CardTitle>ການດຳເນີນງານ</CardTitle>
-
-        <CountRow
-          title="ເວລາຈອງຫ້ອງໄວ້ຊົ່ວຄາວ"
-          hint="ຫຼັງກົດຈອງແລ້ວ ຫ້ອງຖືກກັນໄວ້ດົນປານໃດກ່ອນຄືນສູ່ລະບົບ"
-          unit="ນາທີ"
-          value={form?.hold_ttl_minutes}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, hold_ttl_minutes: v })}
-        />
-        <CountRow
-          title="ອາຍຸ QR ຊຳລະ"
-          unit="ນາທີ"
-          value={form?.qr_ttl_minutes}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, qr_ttl_minutes: v })}
-        />
-        <CountRow
-          title="ຮອບໂອນເງິນ"
-          hint="ຄວາມຍາວຂອງແຕ່ລະຮອບທີ່ ‘ສ້າງຮອບໃໝ່’ ຈະສ້າງ"
-          unit="ວັນ"
-          value={form?.payout_period_days}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, payout_period_days: v })}
-        />
-        <CountRow
-          title="ຈຳນວນຄືນສູງສຸດຕໍ່ການຈອງ"
-          unit="ຄືນ"
-          value={form?.max_nights_per_booking}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, max_nights_per_booking: v })}
-        />
-        <CountRow
-          title="ລັອກອິນຜິດໄດ້ສູງສຸດ"
-          hint="ຜິດຄົບຈຳນວນນີ້ ບັນຊີຈະຖືກລັອກຊົ່ວຄາວ"
-          unit="ຄັ້ງ"
-          value={form?.login_max_attempts}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, login_max_attempts: v })}
-        />
-        <CountRow
-          title="ໄລຍະລັອກບັນຊີ"
-          unit="ນາທີ"
-          value={form?.login_lockout_minutes}
-          disabled={!canEditMoney}
-          onChange={(v) => form && setForm({ ...form, login_lockout_minutes: v })}
-          last
-        />
-      </Card>
-
-      {/* admins */}
+    <>
       <Card padding={24}>
         <CardTitle
           right={
@@ -305,12 +429,13 @@ export function Settings() {
               display: 'flex',
               alignItems: 'center',
               gap: 12,
+              flexWrap: 'wrap',
               padding: '14px 0',
               borderBottom: i === admins.data!.length - 1 ? 'none' : `1px solid ${c.divider}`,
             }}
           >
             <Avatar gradient={avatarFor(a.email)} label={initials(a.fullName ?? a.email)} />
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <div style={{ font: f(700, 13), color: c.text }}>
                 {a.fullName ?? a.email}
                 {a.id === admin?.id && (
@@ -348,7 +473,32 @@ export function Settings() {
         )}
       </Card>
 
-      {/* audit log */}
+      {creating && (
+        <CreateAdminDialog
+          busy={createAdmin.isPending}
+          error={createAdmin.error}
+          onClose={() => setCreating(false)}
+          onSubmit={(v) => createAdmin.mutate(v)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Audit log ────────────────────────────────────────────────────────────────
+
+export function SettingsAudit() {
+  const audit = useQuery({
+    queryKey: ['settings', 'audit'],
+    queryFn: () => api.get<Paged<AuditRow>>('/admin/audit-logs?limit=30'),
+  });
+
+  if (audit.isError) {
+    return <ErrorState error={audit.error} onRetry={() => void audit.refetch()} />;
+  }
+
+  return (
+    <>
       <Card padding={0}>
         <div
           style={{
@@ -380,6 +530,7 @@ export function Settings() {
                     background: c.bg,
                     padding: '4px 9px',
                     borderRadius: 6,
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {r.action}
@@ -416,18 +567,11 @@ export function Settings() {
           ]}
         />
       </Card>
-
-      {creating && (
-        <CreateAdminDialog
-          busy={createAdmin.isPending}
-          error={createAdmin.error}
-          onClose={() => setCreating(false)}
-          onSubmit={(v) => createAdmin.mutate(v)}
-        />
-      )}
-    </div>
+    </>
   );
 }
+
+// ── shared bits ──────────────────────────────────────────────────────────────
 
 /** A labelled numeric setting with its unit. */
 function SettingRow({
@@ -462,9 +606,9 @@ function SettingRow({
         borderBottom: last ? 'none' : `1px solid ${c.divider}`,
       }}
     >
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div style={{ font: f(600, 14), color: c.text }}>{title}</div>
-        {hint && <div style={{ font: f(400, 12), color: c.muted }}>{hint}</div>}
+        {hint && <div style={{ font: f(400, 12, 18), color: c.muted }}>{hint}</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>
         <input
