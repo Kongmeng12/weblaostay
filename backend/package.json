@@ -13,7 +13,8 @@
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "smoke": "node scripts/smoke.mjs",
-    "check:storage": "npm run build && node scripts/storage-check.mjs"
+    "check:storage": "npm run build && node scripts/storage-check.mjs",
+    "capture:api": "node scripts/capture-api.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1106.0",

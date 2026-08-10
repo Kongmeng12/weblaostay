@@ -98,6 +98,11 @@ SQL ຢູ່ `backend/prisma/migrations-v2/` ແລ່ນຕາມລຳດັ�
 3. **Ledger ສອງດ້ານ** — `ledger_entries` ບັນທຶກ charge / commission / refund / payout.
    `balance_after` ເປັນຄວາມສະດວກເທົ່ານັ້ນ — **`SUM(amount)` ຄືຄວາມຈິງ**.
 
+## ເອກະສານ
+
+- [docs/CUSTOMER_API.md](docs/CUSTOMER_API.md) — ສັນຍາ API ສຳລັບຄົນສ້າງແອັບລູກຄ້າ Flutter.
+  ທຸກຕົວຢ່າງເປັນ response ຈິງ; ສ້າງໃໝ່ດ້ວຍ `npm --prefix backend run capture:api`.
+
 ## ການທົດສອບ
 
 ເປີດ server ດ້ວຍ `npm run dev` (terminal ໜຶ່ງ) ແລ້ວ:
