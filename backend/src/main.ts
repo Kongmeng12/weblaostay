@@ -23,6 +23,9 @@ async function bootstrap(): Promise<void> {
 
   // The admin panel is a separate origin in development (Vite on :5173) and is
   // served from its own host in production, so CORS is explicit rather than open.
+  // The guest web app (:5174) and the partner Flutter app run on Chrome (:5175)
+  // are two more. Read from CORS_ORIGIN, which `--watch` does not reload: adding
+  // an origin there needs this process restarted, not just saved.
   app.enableCors({
     origin: config
       .get<string>('CORS_ORIGIN', 'http://localhost:5173')
