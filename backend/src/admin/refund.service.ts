@@ -120,6 +120,14 @@ export class RefundService {
     const refund = await this.prisma.refunds.findUnique({ where: { refund_id: refundId } });
     if (!refund) throw new NotFoundException(`ບໍ່ພົບການຄືນເງິນ #${refundId} · Refund not found`);
 
+    // The guest has already been told the money is on its way. Undoing that
+    // needs a new refund record, not a status the notification no longer matches.
+    if (refund.status === refund_status.completed) {
+      throw new BadRequestException(
+        'ຄືນເງິນນີ້ບັນທຶກວ່າສຳເລັດແລ້ວ ປ່ຽນເປັນລົ້ມເຫຼວບໍ່ໄດ້ · A completed refund cannot be marked failed',
+      );
+    }
+
     const updated = await this.prisma.refunds.update({
       where: { refund_id: refundId },
       data: {
