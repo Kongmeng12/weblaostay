@@ -117,6 +117,14 @@ export const PAYOUT_STATUS_PILL: Record<string, Pill> = {
   failed: { bg: c.dangerBg, fg: c.dangerFg, label: 'ລົ້ມເຫຼວ' },
 };
 
+/** `refund_status` — what a person did, not what an API reported. */
+export const REFUND_STATUS_PILL: Record<string, Pill> = {
+  pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍໂອນຄືນ' },
+  processing: { bg: c.infoBg, fg: c.infoFg, label: 'ກຳລັງໂອນ' },
+  completed: { bg: c.successBg, fg: c.successFg, label: 'ໂອນຄືນແລ້ວ' },
+  failed: { bg: c.dangerBg, fg: c.dangerFg, label: 'ລົ້ມເຫຼວ' },
+};
+
 /** `payment_status` */
 export const PAYMENT_STATUS_PILL: Record<string, Pill> = {
   pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍຈ່າຍ' },

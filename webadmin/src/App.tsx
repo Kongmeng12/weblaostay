@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Bookings } from './pages/Bookings';
 import { Customers } from './pages/Customers';
 import { Payout } from './pages/Payout';
+import { Refunds } from './pages/Refunds';
 import { Approvals } from './pages/Approvals';
 import { Partners } from './pages/Partners';
 import { Reviews } from './pages/Reviews';
@@ -69,6 +70,10 @@ function Root() {
         <Route
           path="payout"
           element={can('super_admin', 'finance') ? <Payout /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="refunds"
+          element={can('super_admin', 'finance') ? <Refunds /> : <Navigate to="/" replace />}
         />
         <Route path="approvals" element={<Approvals />} />
         <Route path="partners" element={<Partners />} />

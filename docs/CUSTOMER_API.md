@@ -336,7 +336,20 @@ GET /customer/payments/:id
 ```
 
 `qrPayload` ເປັນ string ມາດຕະຖານ **EMVCo** — ເອົາເຂົ້າ package ວາດ QR ໃດກໍໄດ້
-(`qr_flutter`) ໂດຍບໍ່ຕ້ອງແປງ. ຜູ້ໃຊ້ສະແກນດ້ວຍແອັບທະນາຄານ.
+(`qr_flutter`) ໂດຍບໍ່ຕ້ອງແປງ. ຜູ້ໃຊ້ສະແກນດ້ວຍແອັບທະນາຄານ **ແລ້ວຈ່າຍໄດ້ເລີຍ** —
+ບໍ່ຕ້ອງເລືອກທະນາຄານ ບໍ່ຕ້ອງເປີດໜ້າໃດ.
+
+**`POST /customer/bookings/:id/pay` ຄືນ `deepLink` ມານຳ** (ອາດເປັນ `null`):
+
+```json
+{ "id": "54", "qrPayload": "000201...", "deepLink": "onepay://qr/000201...", ... }
+```
+
+ຢູ່ມືຖື ຜູ້ໃຊ້ສະແກນຈໍຂອງຕົນເອງບໍ່ໄດ້ — ໃຫ້ມີປຸ່ມ **"ເປີດແອັບທະນາຄານ"** ທີ່ເປີດ
+`deepLink` ຢູ່ຂ້າງ QR. ຢູ່ຄອມສະແດງແຕ່ QR ພໍ.
+
+`deepLink` ມີສະເພາະຕອນສ້າງ QR ເທື່ອທຳອິດ — `GET /customer/payments/:id` ບໍ່ຄືນມັນ
+ຈຶ່ງເກັບໄວ້ຕັ້ງແຕ່ຕອນນັ້ນ.
 
 **ຕ້ອງ poll** `GET /customer/payments/:id` ທຸກ 3–5 ວິນາທີ ຈົນ `status == "paid"`.
 ບໍ່ມີ push ບອກ. ພໍ paid ແລ້ວ `bookingStatus` ຈະເປັນ `confirmed`.

@@ -26,18 +26,11 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import {
-  admin_role,
-  booking_status,
-  partner_status,
-  payout_status,
-  review_status,
-  user_role,
-  user_status,
-} from '@prisma/client';
+import { admin_role, booking_status, partner_status, payout_status, refund_status, review_status, user_role, user_status } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../common/settings.service';
 import { PayoutService } from './payout.service';
+import { RefundService } from './refund.service';
 import { BookingService } from '../booking/booking.service';
 import { PasswordService } from '../auth/password.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -118,6 +111,26 @@ class UpdateSettingsDto {
   app?: Record<string, string>;
 }
 
+class RefundQueryDto {
+  @IsOptional()
+  @IsEnum(refund_status)
+  status?: refund_status;
+}
+
+class RefundNoteDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  note?: string;
+}
+
+class RefundFailDto {
+  @IsString()
+  @MinLength(3)
+  @MaxLength(255)
+  reason!: string;
+}
+
 class AuditQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
@@ -160,6 +173,7 @@ export class AdminController {
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
     private readonly payouts: PayoutService,
+    private readonly refunds: RefundService,
     private readonly bookings: BookingService,
     private readonly passwords: PasswordService,
     private readonly notifications: NotificationsService,
@@ -712,6 +726,47 @@ export class AdminController {
   @Audit('payout_pay', 'finance', 'payouts')
   pay(@Param('id') id: string, @CurrentUser() user: AuthedUser) {
     return this.payouts.pay(BigInt(id), user.userId);
+  }
+
+  // ── refunds ───────────────────────────────────────────────────────────────
+  //
+  // Cancelling records what a guest is owed; the transfer itself happens by
+  // hand in PhaJay's portal, because their refund API returns a charge in full
+  // and a cancellation policy almost always keeps a percentage.
+
+  @Get('refunds')
+  @AdminRoles(...MONEY_ROLES)
+  listRefunds(@Query() query: RefundQueryDto) {
+    return this.refunds.list(query.status);
+  }
+
+  @Get('refunds/counts')
+  @AdminRoles(...MONEY_ROLES)
+  refundCounts() {
+    return this.refunds.counts();
+  }
+
+  /** Records that the money was sent, and tells the guest. */
+  @Patch('refunds/:id/paid')
+  @AdminRoles(...MONEY_ROLES)
+  @Audit('refund_mark_paid', 'finance', 'refunds')
+  markRefundPaid(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthedUser,
+    @Body() dto: RefundNoteDto,
+  ) {
+    return this.refunds.markPaid(BigInt(id), user.userId, dto.note);
+  }
+
+  @Patch('refunds/:id/failed')
+  @AdminRoles(...MONEY_ROLES)
+  @Audit('refund_mark_failed', 'finance', 'refunds')
+  markRefundFailed(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthedUser,
+    @Body() dto: RefundFailDto,
+  ) {
+    return this.refunds.markFailed(BigInt(id), user.userId, dto.reason);
   }
 
   @Post('payouts/pay-all')

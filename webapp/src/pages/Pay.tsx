@@ -186,6 +186,27 @@ export function PayPage() {
                   ເປີດແອັບທະນາຄານຂອງທ່ານ ແລ້ວສະແກນ QR ນີ້ — ໜ້ານີ້ຈະຢືນຢັນເອງເມື່ອຈ່າຍສຳເລັດ
                 </div>
 
+                {/* On the phone the guest is holding, the screen showing this QR
+                    is the one they would have to scan. The bank's own link is
+                    the way out of that. */}
+                {payment.data.deepLink && (
+                  <a
+                    href={payment.data.deepLink}
+                    style={{
+                      display: 'inline-block',
+                      marginTop: 14,
+                      padding: '11px 20px',
+                      borderRadius: radius.md,
+                      border: `1px solid ${c.border}`,
+                      background: '#fff',
+                      font: f(700, 13),
+                      color: c.text,
+                    }}
+                  >
+                    ເປີດແອັບທະນາຄານ
+                  </a>
+                )}
+
                 <div
                   style={{
                     display: 'flex',

@@ -14,6 +14,7 @@
     "db:studio": "prisma studio",
     "smoke": "node scripts/smoke.mjs",
     "check:storage": "npm run build && node scripts/storage-check.mjs",
+    "check:phajay": "npm run build && node scripts/phajay-check.mjs",
     "capture:api": "node scripts/capture-api.mjs"
   },
   "dependencies": {

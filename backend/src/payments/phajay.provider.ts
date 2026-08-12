@@ -1,8 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac } from 'node:crypto';
-import { buildQrPayload } from './emvco';
-import { verifyHmacCallback } from './simulated.provider';
 import type {
   CallbackResult,
   ChargeRequest,
@@ -10,24 +7,53 @@ import type {
   PaymentProvider,
 } from './payment-provider.interface';
 
+/** PhaJay's gateway. Overridable so a sandbox host can be pointed at instead. */
+const DEFAULT_BASE_URL = 'https://payment-gateway.phajay.co';
+
+/** The one callback status that means the money arrived. */
+const COMPLETED = 'PAYMENT_COMPLETED';
+
 /**
- * The real PhaJay / LAPNet adapter.
+ * The banks PhaJay can mint a QR for, and the path segment for each.
  *
- * **This file is the only place to change when the acquirer's spec arrives.**
- * Everything it needs comes from `PHAJAY_*` in `.env`; nothing else in the
- * codebase knows the provider exists. Two things are almost certainly
- * acquirer-specific and should be checked against the spec before going live:
+ * There is one endpoint per bank because the QR is not interchangeable — a
+ * BCEL payload carries `0004BCEL0106ONEPAY` and is read by the BCEL app. So a
+ * guest is shown the QR for whichever bank `PHAJAY_BANK` names.
+ */
+const BANKS = {
+  bcel: 'generate-bcel-qr',
+  jdb: 'generate-jdb-qr',
+  ldb: 'generate-ldb-qr',
+  ib: 'generate-ib-qr',
+  stb: 'generate-stb-qr',
+  m_money: 'generate-m-money-qr',
+} as const;
+
+type Bank = keyof typeof BANKS;
+
+/**
+ * PhaJay — Generate QR.
  *
- *  1. `createCharge` — whether the QR is minted locally from the merchant id
- *     (implemented here) or fetched from the acquirer's API. If it is fetched,
- *     replace the body of `createCharge` with the HTTP call; the signature and
- *     the return type stay the same.
- *  2. `verifyCallback` — the header name and signing scheme. This assumes
- *     `x-phajay-signature: <hex HMAC-SHA256 of the raw body>` using
- *     `PHAJAY_WEBHOOK_SECRET`.
+ * The guest scans and pays; there is no page to open and no bank to choose on
+ * the way. PhaJay returns the EMVCo string ready to draw, so every client that
+ * already renders a QR keeps working untouched.
  *
- * Until `PHAJAY_MERCHANT_ID` is set the provider refuses to mint a QR rather
- * than producing one that would silently fail at the bank.
+ * PhaJay also offers a hosted **Payment Link** where the guest picks their bank
+ * on PhaJay's own page. That is the right choice if you want every bank from
+ * one charge; it costs the guest two extra taps, which is why this uses the
+ * direct QR instead.
+ *
+ * The sandbox mirrors the live API one path segment along and settles without
+ * moving money, so it is used unless `NODE_ENV=production`. There is no flag to
+ * get wrong: a development machine cannot reach the live endpoints at all.
+ *
+ * ## The webhook is not signed
+ *
+ * PhaJay's callback carries no HMAC, so nothing in the body proves who sent it.
+ * `verifyCallback` therefore only *parses* — the callback is authenticated by
+ * the secret in its URL, checked before this is ever called, and settlement
+ * additionally refuses anything that does not name a still-pending payment for
+ * the amount charged.
  */
 @Injectable()
 export class PhaJayPaymentProvider implements PaymentProvider {
@@ -37,109 +63,131 @@ export class PhaJayPaymentProvider implements PaymentProvider {
   constructor(private readonly config: ConfigService) {}
 
   async createCharge(request: ChargeRequest): Promise<ChargeResult> {
-    const merchantId = this.required('PHAJAY_MERCHANT_ID');
-    const acquirerId = this.config.get<string>('PHAJAY_ACQUIRER_ID', 'la.lapnet.phajay');
-    const ttlMin = Number(this.config.get<string>('PHAJAY_QR_TTL_MIN', '15'));
-    const baseUrl = this.config.get<string>('PHAJAY_BASE_URL', '');
+    const secretKey = this.required('PHAJAY_API_KEY');
+    const bank = this.bank();
+    const baseUrl = this.optional('PHAJAY_BASE_URL', DEFAULT_BASE_URL).replace(/\/+$/, '');
+    const ttlMin = Number(this.optional('PHAJAY_QR_TTL_MIN', '15'));
+    // The sandbox is the same API one path segment along, and moves no money.
+    const live = this.config.get<string>('NODE_ENV') === 'production';
+    const segment = live ? 'payment' : 'test/payment';
 
-    const expiresAt = new Date(Date.now() + ttlMin * 60_000);
-
-    // Locally-minted static-merchant QR with a dynamic amount. If the acquirer
-    // requires a server-registered charge, do it here and use the payload and
-    // reference it returns instead.
-    const qrPayload = buildQrPayload({
-      acquirerId,
-      merchantId,
-      merchantName: this.config.get<string>('PHAJAY_MERCHANT_NAME', 'LaoStay'),
-      merchantCity: this.config.get<string>('PHAJAY_MERCHANT_CITY', 'Vientiane'),
-      amountKip: request.amountKip,
-      reference: request.reference,
-    });
-
-    if (!baseUrl) {
-      // No registration endpoint configured: the QR still works for a merchant
-      // whose acquirer reconciles by reference, but nothing has been told about
-      // this charge in advance, so say so loudly.
-      this.logger.warn(
-        'PHAJAY_BASE_URL is not set — the QR was minted locally and no charge ' +
-          'was registered with the acquirer.',
-      );
-      return { qrPayload, providerRef: null, expiresAt };
-    }
-
-    const providerRef = await this.registerCharge(baseUrl, request, expiresAt);
-    return { qrPayload, providerRef, expiresAt };
-  }
-
-  verifyCallback(rawBody: Buffer, headers: Record<string, unknown>): CallbackResult {
-    const secret = this.config.get<string>('PHAJAY_WEBHOOK_SECRET');
-    if (!secret) {
-      // Refuse rather than accept unverified money movement.
-      this.logger.error('PHAJAY_WEBHOOK_SECRET is not set; rejecting the callback');
-      return {
-        ok: false,
-        reference: null,
-        txnRef: null,
-        amountKip: null,
-        status: null,
-        reason: 'webhook secret not configured',
-      };
-    }
-    return verifyHmacCallback(rawBody, headers, secret);
-  }
-
-  /**
-   * Tells the acquirer a charge is coming, so its callback can be matched.
-   * Shape guessed from the usual pattern — confirm against the spec.
-   */
-  private async registerCharge(
-    baseUrl: string,
-    request: ChargeRequest,
-    expiresAt: Date,
-  ): Promise<string | null> {
     const body = JSON.stringify({
-      merchantId: this.required('PHAJAY_MERCHANT_ID'),
       amount: request.amountKip,
-      currency: 'LAK',
-      reference: request.reference,
-      description: request.description,
-      expiresAt: expiresAt.toISOString(),
+      description: this.describe(request.description, bank),
+      // Echoed back on the webhook. `tag1` carries our own reference, which is
+      // what settlement matches on — PhaJay's QR call has no orderNo field.
+      tag1: request.reference,
+      tag2: request.bookingId.toString(),
     });
 
-    const apiKey = this.config.get<string>('PHAJAY_API_KEY', '');
-    const secret = this.config.get<string>('PHAJAY_SECRET', '');
-    const signature = secret ? createHmac('sha256', secret).update(body).digest('hex') : '';
-
+    let json: { message?: string; transactionId?: string; qrCode?: string; link?: string };
     try {
-      const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/qr/create`, {
+      const res = await fetch(`${baseUrl}/v1/api/${segment}/${BANKS[bank]}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(apiKey ? { 'x-api-key': apiKey } : {}),
-          ...(signature ? { 'x-phajay-signature': signature } : {}),
+          // A bare header, not Basic auth — PhaJay's QR endpoints differ from
+          // their Payment Link endpoint on this.
+          secretKey,
         },
         body,
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(15_000),
       });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`${res.status} ${text.slice(0, 200)}`);
-      }
-
-      const json = (await res.json()) as { txnRef?: string; id?: string };
-      return json.txnRef ?? json.id ?? null;
+      const text = await res.text();
+      if (!res.ok) throw new Error(`${res.status} ${text.slice(0, 200)}`);
+      json = JSON.parse(text) as typeof json;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`PhaJay charge registration failed: ${message}`);
+      this.logger.error(`PhaJay ${bank} QR request failed: ${message}`);
       throw new ServiceUnavailableException(
         'ລະບົບຊຳລະບໍ່ຕອບສະໜອງ ກະລຸນາລອງໃໝ່ · The payment service is unavailable, please try again',
       );
     }
+
+    if (!json.qrCode) {
+      this.logger.error(`PhaJay returned no qrCode: ${JSON.stringify(json).slice(0, 200)}`);
+      throw new ServiceUnavailableException(
+        'ສ້າງ QR ບໍ່ໄດ້ ກະລຸນາລອງໃໝ່ · Could not create the payment QR, please try again',
+      );
+    }
+
+    return {
+      qrPayload: json.qrCode,
+      deepLink: json.link ?? null,
+      providerRef: json.transactionId ?? null,
+      expiresAt: new Date(Date.now() + ttlMin * 60_000),
+    };
+  }
+
+  /**
+   * Reads the callback. Whether to act on it is decided by the caller — see
+   * the note on this class.
+   */
+  verifyCallback(rawBody: Buffer, _headers: Record<string, unknown>): CallbackResult {
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(rawBody.toString('utf8')) as Record<string, unknown>;
+    } catch {
+      return { ...empty(), reason: 'callback body is not JSON' };
+    }
+
+    const status = str(body.status);
+    // `tag1` is where createCharge put our reference. `orderNo` is PhaJay's own
+    // field, present on the Payment Link flow — accepted so a charge created
+    // either way settles through the same path.
+    const reference = str(body.tag1) ?? str(body.orderNo);
+    if (!reference) return { ...empty(), reason: 'callback carries no reference' };
+
+    return {
+      ok: true,
+      reference,
+      txnRef: str(body.transactionId) ?? str(body.linkCode) ?? str(body.paymentId),
+      amountKip: num(body.txnAmount),
+      status: status === COMPLETED ? 'paid' : 'failed',
+      ...(status !== COMPLETED && { reason: `PhaJay reported ${status ?? 'no status'}` }),
+    };
+  }
+
+  private bank(): Bank {
+    const choice = this.optional('PHAJAY_BANK', 'bcel')
+      .toLowerCase()
+      .replace(/[^a-z_]/g, '');
+    if (choice in BANKS) return choice as Bank;
+
+    throw new ServiceUnavailableException(
+      `PHAJAY_BANK="${choice}" ບໍ່ຮູ້ຈັກ · unknown bank; use one of ${Object.keys(BANKS).join(', ')}`,
+    );
+  }
+
+  /**
+   * The line the payer sees in their banking app.
+   *
+   * BCEL rejects Lao and Thai characters, and a property name is usually Lao,
+   * so the text is reduced to ASCII for it. The booking code survives, which is
+   * the part that matters on a bank statement.
+   */
+  private describe(description: string, bank: Bank): string {
+    if (bank !== 'bcel') return description;
+
+    const ascii = description.replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
+    return ascii || 'LaoStay booking';
+  }
+
+  /**
+   * A setting, or the fallback when it is absent **or blank**.
+   *
+   * `ConfigService.get(key, fallback)` only falls back on `undefined`, and a
+   * `.env` that lists a key with nothing after the `=` gives an empty string.
+   * That is how `PHAJAY_BASE_URL=` turned into a request to the empty host.
+   */
+  private optional(key: string, fallback: string): string {
+    const value = this.config.get<string>(key);
+    return value !== undefined && value.trim() !== '' ? value.trim() : fallback;
   }
 
   private required(key: string): string {
-    const value = this.config.get<string>(key);
+    const value = this.config.get<string>(key)?.trim();
     if (!value) {
       throw new ServiceUnavailableException(
         `${key} ຍັງບໍ່ໄດ້ຕັ້ງຄ່າ · ${key} is not configured; set it in backend/.env ` +
@@ -149,3 +197,18 @@ export class PhaJayPaymentProvider implements PaymentProvider {
     return value;
   }
 }
+
+const empty = (): CallbackResult => ({
+  ok: false,
+  reference: null,
+  txnRef: null,
+  amountKip: null,
+  status: null,
+});
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+const num = (v: unknown): number | null => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+};

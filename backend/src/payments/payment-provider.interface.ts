@@ -20,9 +20,16 @@ export interface ChargeRequest {
 }
 
 export interface ChargeResult {
-  /** The EMVCo string the app renders as a QR image. */
+  /** The EMVCo string the app draws as a QR code. */
   qrPayload: string;
-  /** The provider's own id for this charge, if it issues one up front. */
+  /**
+   * A link straight into the payer's banking app, when the acquirer gives one.
+   *
+   * On a phone the payer cannot scan the screen they are holding, so the app
+   * offers this as a button beside the QR.
+   */
+  deepLink: string | null;
+  /** The provider's own id for this charge. */
   providerRef: string | null;
   expiresAt: Date;
 }
@@ -46,9 +53,12 @@ export interface PaymentProvider {
   readonly name: string;
   createCharge(request: ChargeRequest): Promise<ChargeResult>;
   /**
-   * Verifies a webhook and extracts what it says. Given the raw body bytes,
-   * because a signature computed over re-serialised JSON is worthless — key
-   * order and whitespace would differ from what the provider signed.
+   * Reads a webhook and says whether to trust it.
+   *
+   * Given the raw body bytes because a signature computed over re-serialised
+   * JSON is worthless — key order and whitespace would differ from what the
+   * provider signed. An acquirer that does not sign at all has to be defended
+   * some other way; see the note on PhaJayPaymentProvider.
    */
   verifyCallback(rawBody: Buffer, headers: Record<string, unknown>): CallbackResult;
 }

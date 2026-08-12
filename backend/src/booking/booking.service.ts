@@ -504,9 +504,12 @@ export class BookingService {
             booking_id: bookingId,
             amount: refund,
             reason: reason?.slice(0, 255) ?? defaultReason(actor.role),
-            status: refund_status.completed,
+            // Owed, not sent. PhaJay's refund API returns a charge in full and
+            // takes no amount, and a cancellation policy almost always keeps a
+            // percentage — so the money goes back by hand, from their portal.
+            // `completed` is set on the admin Refunds screen once it has.
+            status: refund_status.pending,
             processed_by: actor.id,
-            refunded_at: new Date(),
           },
           select: { refund_id: true },
         });

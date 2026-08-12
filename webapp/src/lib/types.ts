@@ -247,6 +247,11 @@ export interface Payment {
   method: string;
   /** The EMVCo string to render as a QR code. */
   qrPayload: string | null;
+  /**
+   * A link straight into the payer's banking app. Only returned by the call
+   * that creates the charge — a poll of `GET /customer/payments/:id` has null.
+   */
+  deepLink?: string | null;
   amount: number;
   status: string;
   paidAt: string | null;

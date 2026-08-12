@@ -98,6 +98,33 @@ SQL ຢູ່ `backend/prisma/migrations-v2/` ແລ່ນຕາມລຳດັ�
 3. **Ledger ສອງດ້ານ** — `ledger_entries` ບັນທຶກ charge / commission / refund / payout.
    `balance_after` ເປັນຄວາມສະດວກເທົ່ານັ້ນ — **`SUM(amount)` ຄືຄວາມຈິງ**.
 
+## ການຊຳລະ · PhaJay
+
+QR ມາຈາກ PhaJay ໂດຍກົງ (`Generate QR`) ບໍ່ແມ່ນເຮົາສ້າງເອງ — ແຂກ **ສະແກນຈ່າຍໄດ້ເລີຍ**
+ບໍ່ຕ້ອງເລືອກທະນາຄານ. ຢູ່ [phajay.provider.ts](backend/src/payments/phajay.provider.ts) ໄຟລ໌ດຽວ.
+
+| env | |
+|---|---|
+| `PHAJAY_API_KEY` | key ດຽວ ໃຊ້ໄດ້ໝົດ — ສົ່ງເປັນ header `secretKey` |
+| `PHAJAY_WEBHOOK_SECRET` | ລະຫັດລັບໃນ URL ຂອງ webhook — **ບໍ່ມີ = ປະຕິເສດທຸກ callback** |
+| `PHAJAY_BANK` | `bcel` · `jdb` · `ldb` · `ib` · `stb` · `m_money` |
+
+Sandbox ຫຼື ຂອງຈິງ ຕັດສິນດ້ວຍ `NODE_ENV` — ບໍ່ມີສະວິດໃຫ້ຕັ້ງຜິດ. ເຄື່ອງພັດທະນາແຕະເງິນຈິງບໍ່ໄດ້ເລີຍ.
+
+> ⚠️ endpoint ຂອງຈິງກັບ sandbox ຕ່າງກັນແຄ່ `/v1/api/**test**/payment/…` — ແລະ **test key
+> ຢູ່ endpoint ຈິງຫັກເງິນຈິງ** (ຈຳກັດ 999 ກີບ, 20 ຄັ້ງ/ວັນ). ຄ່າເລີ່ມຕົ້ນຈຶ່ງເປັນ sandbox.
+
+ຍັງເຫຼືອກ່ອນຮັບເງິນຈິງ: ຕັ້ງ **Webhook URL** ໃນ portal ເປັນ
+`https://<domain>/api/payments/phajay/webhook/<PHAJAY_WEBHOOK_SECRET>` (ຕ້ອງ deploy ກ່ອນ).
+
+## ຟອນ
+
+Noto Sans Lao **ມາພ້ອມກັບແອັບ** (`@fontsource/noto-sans-lao`) ບໍ່ໄດ້ໂຫຼດຈາກ Google.
+ນຳເຂົ້າຢູ່ `src/main.tsx` ຂອງແຕ່ລະເວັບ, ນ້ຳໜັກ 400–800 ໃຫ້ຕົງກັບ `f()` ໃນ `theme.ts`.
+
+ເປັນຫຍັງ: ບໍ່ຕ້ອງລໍ `fonts.googleapis.com` ຕອນເປີດຄັ້ງທຳອິດ · ບໍ່ມີຕົວອັກສອນກະພິບປ່ຽນຮູບ ·
+ໃຊ້ໄດ້ເຖິງເນັດຊ້າ. ແຕ່ລະໄຟລ໌ມີ `unicode-range` ຂອງຕົນເອງ ຈຶ່ງໂຫຼດສະເພາະທີ່ໜ້ານັ້ນໃຊ້ຈິງ.
+
 ## ເອກະສານ
 
 - [docs/CUSTOMER_API.md](docs/CUSTOMER_API.md) — ສັນຍາ API ສຳລັບຄົນສ້າງແອັບລູກຄ້າ Flutter.
@@ -118,6 +145,7 @@ npm run check      # ທຸກຢ່າງ ຮຽງກັນ — ຢຸດທ�
 # Backend
 cd backend
 npm run check:storage                    # 16 ຂໍ້, ບໍ່ຕ້ອງມີ server ຫຼື DB
+npm run check:phajay                     # 27 ຂໍ້, ບໍ່ຕ້ອງມີເນັດ ຫຼື DB
 npm run smoke                            # 112 ຂໍ້ — ຕ້ອງມີ API ແລ່ນຢູ່, ຂຽນລົງ DB ຈິງ
 
 # ເວັບລູກຄ້າ — ຂັບ browser ຈິງ
@@ -245,7 +273,7 @@ refresh token ທີ່ໃຊ້ຊ້ຳວ່າຖືກລັກ ແລ້�
 | Admin API + WebAdmin (17 ໜ້າຈໍ) | ✅ |
 | Partner API + Flutter partner app | ✅ |
 | Customer API + ເວັບລູກຄ້າ | ✅ |
-| QR PhaJay | ⬜ ໂຄດພ້ອມ — ລໍ credentials |
+| QR PhaJay | ✅ ຕໍ່ແລ້ວ — sandbox ໃຊ້ໄດ້, ລໍ webhook URL ຈິງ |
 | ສົ່ງ SMS / ອີເມວ | ⬜ **ບໍ່ມີເລີຍ** — OTP ແລະ ກູ້ລະຫັດຜ່ານໃຊ້ບໍ່ໄດ້ໃນ production |
 | ເກັບຮູບໃສ່ S3/R2 | ✅ ໂຄດພ້ອມ — ຕັ້ງ `STORAGE_PROVIDER=r2` ເມື່ອມີ bucket |
 | Deploy · CI | ⬜ **ບໍ່ເຄີຍ deploy** |

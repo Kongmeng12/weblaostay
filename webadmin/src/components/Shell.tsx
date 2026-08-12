@@ -115,6 +115,14 @@ export const NAV_GROUPS: NavGroup[] = [
         subtitle: 'ໂອນເງິນໃຫ້ Partner ລາຍສັປດາຫ໌',
         roles: ['super_admin', 'finance'],
       },
+      {
+        to: '/refunds',
+        name: 'ຄືນເງິນລູກຄ້າ',
+        emoji: '↩️',
+        title: 'ຄືນເງິນລູກຄ້າ',
+        subtitle: 'ໂອນຄືນຜ່ານ portal ຂອງ PhaJay ແລ້ວບັນທຶກທີ່ນີ້',
+        roles: ['super_admin', 'finance'],
+      },
     ],
   },
   {
@@ -213,7 +221,7 @@ export const NAV_GROUPS: NavGroup[] = [
 export const NAV: NavItem[] = [DASHBOARD, ...NAV_GROUPS.flatMap((g) => g.items)];
 
 export function Shell() {
-  const { admin, signOut } = useAuth();
+  const { admin, signOut, can } = useAuth();
   const location = useLocation();
 
   // Only meaningful below 1024px, where the sidebar is a drawer. Above it the
@@ -237,6 +245,16 @@ export function Shell() {
   const { data: counts } = useQuery({
     queryKey: ['approvals', 'counts'],
     queryFn: () => api.get<Partial<Record<string, number>>>('/admin/approvals/counts'),
+    refetchInterval: 60_000,
+  });
+
+  // Guests waiting on money nobody has sent yet. Only finance can act on it,
+  // so only finance is asked for the number.
+  const { data: refundCounts } = useQuery({
+    queryKey: ['refunds', 'counts'],
+    queryFn: () =>
+      api.get<Partial<Record<string, { count: number }>>>('/admin/refunds/counts'),
+    enabled: can('super_admin', 'finance'),
     refetchInterval: 60_000,
   });
 
@@ -336,7 +354,9 @@ export function Shell() {
           {groups.map((group) => {
             const open = !!openGroups[group.key];
             // What the heading must still say while it is closed.
-            const hidden = open ? 0 : group.items.reduce((n, i) => n + badgeFor(i, counts), 0);
+            const hidden = open
+              ? 0
+              : group.items.reduce((n, i) => n + badgeFor(i, counts, refundCounts), 0);
 
             return (
               <div key={group.key}>
@@ -385,7 +405,12 @@ export function Shell() {
                 {open && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {group.items.map((item) => (
-                      <NavRow key={item.to} item={item} badge={badgeFor(item, counts)} indent />
+                      <NavRow
+                        key={item.to}
+                        item={item}
+                        badge={badgeFor(item, counts, refundCounts)}
+                        indent
+                      />
                     ))}
                   </div>
                 )}
@@ -526,8 +551,13 @@ function matches(pathname: string, to: string): boolean {
  * that a closed group can sum what it is hiding without the rendering code
  * knowing which entries have counts.
  */
-function badgeFor(item: NavItem, counts: Partial<Record<string, number>> | undefined): number {
+function badgeFor(
+  item: NavItem,
+  counts: Partial<Record<string, number>> | undefined,
+  refunds: Partial<Record<string, { count: number }>> | undefined,
+): number {
   if (item.to === '/approvals') return counts?.pending ?? 0;
+  if (item.to === '/refunds') return refunds?.pending?.count ?? 0;
   return 0;
 }
 

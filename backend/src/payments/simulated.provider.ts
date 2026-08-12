@@ -44,6 +44,8 @@ export class SimulatedPaymentProvider implements PaymentProvider {
 
     return Promise.resolve({
       qrPayload,
+      // No bank app to hand off to when nothing is real.
+      deepLink: null,
       providerRef: 'SIM-' + randomBytes(8).toString('hex').toUpperCase(),
       expiresAt: new Date(Date.now() + ttlMin * 60_000),
     });

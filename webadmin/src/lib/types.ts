@@ -339,3 +339,34 @@ export interface AppPage {
   isActive: boolean;
   updatedAt: string | null;
 }
+
+// ── refunds ──────────────────────────────────────────────────────────────────
+
+/** `refund_status`. */
+export type RefundStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
+ * `GET /admin/refunds` — money owed back to a guest.
+ *
+ * Cancelling records the amount; the transfer is made by hand in PhaJay's
+ * portal, so `status` is what a person did, not what an API reported.
+ */
+export interface RefundRow {
+  id: string;
+  bookingCode: string;
+  property: string;
+  guest: string;
+  guestPhone: string | null;
+  guestEmail: string;
+  /** What the guest paid. The gap to `amount` is the cancellation penalty. */
+  paid: number;
+  amount: number;
+  /** PhaJay's id for the original charge — what to search for in their portal. */
+  txnRef: string | null;
+  reason: string | null;
+  status: RefundStatus;
+  requestedAt: string;
+  refundedAt: string | null;
+}
+
+export type RefundCounts = Partial<Record<RefundStatus, { count: number; amount: number }>>;

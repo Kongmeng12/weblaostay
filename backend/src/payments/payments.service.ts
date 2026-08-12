@@ -61,7 +61,9 @@ export class PaymentsService {
     const live = booking.payments.find(
       (p) => p.status === payment_status.pending && (!p.expired_at || p.expired_at > now),
     );
-    if (live) return toPaymentView(live);
+    // An existing pending charge is reused. Its deep link was handed out when
+    // it was created and is not stored, so this reply carries the QR alone.
+    if (live) return { ...toPaymentView(live), deepLink: null };
 
     const { qr_ttl_minutes } = await this.settings.get();
     const attempt = booking.payments.length + 1;
@@ -86,7 +88,10 @@ export class PaymentsService {
           txn_ref: charge.providerRef,
         },
       });
-      return toPaymentView(payment);
+      // The deep link is returned, not stored: it is only useful at the moment
+      // the QR is first shown, and a column for a value read once would need a
+      // migration to hold it.
+      return { ...toPaymentView(payment), deepLink: charge.deepLink };
     } catch (err) {
       // Someone else won the race on the unique key — return their row, which
       // is exactly what this caller wanted anyway.
@@ -94,7 +99,7 @@ export class PaymentsService {
         const won = await this.prisma.payments.findUnique({
           where: { idempotency_key: idempotencyKey },
         });
-        if (won) return toPaymentView(won);
+        if (won) return { ...toPaymentView(won), deepLink: null };
       }
       throw err;
     }
