@@ -238,6 +238,120 @@ async function main() {
 
   // ── catalogue ─────────────────────────────────────────────────────────────
   console.log('\ncatalogue');
+  // ── signing up, and the record of what was agreed to ──────────────────────
+  //
+  // The interesting part is not that sign-up works — it is that it refuses
+  // without consent, and that a row lands naming the version of each document
+  // that was live at the time. A tick box leaving no trace proves nothing.
+  console.log('\nregistration & agreements');
+  const signup = {
+    email: `smoke.guest.${Date.now()}@laostay.la`,
+    password: 'Passw0rd!23',
+    fullName: 'ສະໝັກ ທົດສອບ',
+    phone: '2055119999',
+  };
+
+  await expect('POST /auth/register refuses an unticked box', 'POST', '/auth/register', {
+    status: 400,
+    body: { ...signup, acceptedTerms: false },
+  });
+  await expect('POST /auth/register refuses a missing box', 'POST', '/auth/register', {
+    status: 400,
+    body: signup,
+  });
+
+  const registered = await expect(
+    'POST /auth/register accepts a ticked box',
+    'POST',
+    '/auth/register',
+    {
+      status: 201,
+      body: { ...signup, acceptedTerms: true },
+      check: (b) => (b?.user?.id ? null : 'no user'),
+    },
+  );
+
+  if (registered) {
+    const agreed = await sql(
+      `SELECT document_type, version FROM user_agreements WHERE user_id = $1
+        ORDER BY document_type`,
+      [registered.user.id],
+    );
+    // Sorted here rather than in SQL: Postgres orders an enum by its declared
+    // order, not alphabetically, so `ORDER BY document_type` gives terms first.
+    const kinds = agreed.map((r) => r.document_type).sort().join(',');
+    if (kinds === 'privacy,terms') ok('signing up records both agreements', kinds);
+    else bad('signing up records both agreements', `got "${kinds}"`);
+
+    // `unpublished` is a legitimate version while the legal text is still a
+    // placeholder. A blank is not.
+    if (agreed.length && agreed.every((r) => r.version)) {
+      ok('each agreement names a version', agreed[0].version);
+    } else {
+      bad('each agreement names a version', JSON.stringify(agreed));
+    }
+  }
+
+  // ── reporting a review ────────────────────────────────────────────────────
+  console.log('\nreview reports');
+  const [someReview] = await sql(`
+    SELECT r.review_id FROM reviews r
+     WHERE NOT EXISTS (
+       SELECT 1 FROM review_reports rr
+        WHERE rr.review_id = r.review_id AND rr.status = 'pending'
+     )
+     ORDER BY r.review_id LIMIT 1`);
+  if (someReview) {
+    const rid = someReview.review_id;
+    const reported = await expect('POST /reviews/:id/report', 'POST', `/reviews/${rid}/report`, {
+      status: 201,
+      token: admin.accessToken,
+      body: { reason: 'fake', detail: 'smoke test' },
+      check: (b) => (b?.status === 'pending' ? null : `status ${b?.status}`),
+    });
+
+    // Without this a host could inflate the count by pressing the button and
+    // push their own bad review to the top of the moderation queue.
+    await expect('the same person cannot report twice', 'POST', `/reviews/${rid}/report`, {
+      status: 409,
+      token: admin.accessToken,
+      body: { reason: 'spam' },
+    });
+    await expect('an unknown reason is refused', 'POST', `/reviews/${rid}/report`, {
+      status: 400,
+      token: admin.accessToken,
+      body: { reason: 'badvibes' },
+    });
+    await expect('reporting needs a login', 'POST', `/reviews/${rid}/report`, {
+      status: 401,
+      body: { reason: 'spam' },
+    });
+
+    await expect('GET /admin/review-reports lists it', 'GET',
+      '/admin/review-reports?status=pending', {
+        token: admin.accessToken,
+        check: (b) =>
+          Array.isArray(b) && b.some((r) => r.reviewId === String(rid))
+            ? null
+            : 'the new report is not in the queue',
+      });
+
+    if (reported) {
+      await expect('PATCH /admin/review-reports/:id settles it', 'PATCH',
+        `/admin/review-reports/${reported.id}`, {
+          token: admin.accessToken,
+          body: { status: 'dismissed' },
+          check: (b) => (b?.status === 'dismissed' ? null : `status ${b?.status}`),
+        });
+
+      // Settling a complaint must not silence anyone — hiding is a separate,
+      // separately audited decision on the Reviews screen.
+      const [after] = await sql('SELECT status FROM reviews WHERE review_id = $1', [rid]);
+      if (after?.status === 'published') ok('settling a report leaves the review published');
+      else bad('settling a report leaves the review published', `review is ${after?.status}`);
+    }
+  }
+
   await expect('GET /properties (no token needed)', 'GET', '/properties?limit=5');
   await expect('GET /locations/provinces', 'GET', '/locations/provinces', {
     check: (b) => (b?.length === 18 ? null : `expected 18 provinces, got ${b?.length}`),
@@ -644,6 +758,14 @@ async function main() {
     // Put it back so a re-run starts clean.
     await call('PATCH', `/partner/room-types/${rtA.id}/inventory`, {
       token: P, body: { from: day(70), to: day(72), status: 'open' },
+    });
+
+    // A walk-in is completed, not cancelled, so every run eats a room-night on
+    // these dates for good. Topping the range up first is what makes the suite
+    // re-runnable — without it the twentieth run fails with a 409 that has
+    // nothing to do with the code being tested.
+    await call('PATCH', `/partner/room-types/${rtA.id}/inventory`, {
+      token: P, body: { from: day(50), to: day(52), totalCount: 50, status: 'open' },
     });
 
     const walkIn = await expect('POST /partner/bookings/walk-in', 'POST',

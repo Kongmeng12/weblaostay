@@ -1,4 +1,5 @@
 import {
+  Equals,
   IsEmail,
   IsEnum,
   IsInt,
@@ -42,6 +43,15 @@ export class RegisterCustomerDto {
   @MinLength(6)
   @MaxLength(50)
   phone!: string;
+  /**
+   * Ticking the box. `@Equals(true)` rather than `@IsBoolean()`: an unticked
+   * box must fail here, not silently create an account with no agreement.
+   */
+  @Equals(true, {
+    message: 'ຕ້ອງຍອມຮັບເງື່ອນໄຂການໃຊ້ບໍລິການ · You must accept the terms',
+  })
+  acceptedTerms!: boolean;
+
 }
 
 /**
@@ -97,6 +107,15 @@ export class RegisterPartnerDto {
   @MinLength(4)
   @MaxLength(500)
   address!: string;
+  /**
+   * Ticking the box. `@Equals(true)` rather than `@IsBoolean()`: an unticked
+   * box must fail here, not silently create an account with no agreement.
+   */
+  @Equals(true, {
+    message: 'ຕ້ອງຍອມຮັບເງື່ອນໄຂການໃຊ້ບໍລິການ · You must accept the terms',
+  })
+  acceptedTerms!: boolean;
+
 }
 
 export class RefreshDto {

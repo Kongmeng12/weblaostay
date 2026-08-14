@@ -27,6 +27,7 @@ import {
 import type { PropertyDetail, RoomOffer, WishlistItem } from '../lib/types';
 import { useStartConversation } from './Messages';
 import { ReviewReplies } from '../components/ReviewReplies';
+import { ReportReview } from '../components/ReportReview';
 
 export function PropertyPage() {
   const { id = '' } = useParams();
@@ -348,6 +349,7 @@ export function PropertyPage() {
                   {/* The host's answer matters as much as the complaint — a
                       guest reading only half the exchange is being misled. */}
                   <ReviewReplies reviewId={r.id} />
+                  <ReportReview reviewId={r.id} />
                 </Card>
               ))}
             </div>

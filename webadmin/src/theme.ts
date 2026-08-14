@@ -143,6 +143,21 @@ export const REVIEW_STATUS_PILL: Record<string, Pill> = {
   pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍກວດ' },
 };
 
+/** `report_reason` — why somebody complained. */
+export const REPORT_REASON_PILL: Record<string, Pill> = {
+  spam: { bg: c.neutralBg, fg: c.neutralFg, label: 'ສະແປມ' },
+  offensive: { bg: c.dangerBg, fg: c.dangerFg, label: 'ຄຳຫຍາບຄາຍ' },
+  fake: { bg: c.warnBg, fg: c.warnFg, label: 'ຮີວິວປອມ' },
+  other: { bg: c.infoBg, fg: c.infoFg, label: 'ອື່ນໆ' },
+};
+
+/** `report_status` */
+export const REPORT_STATUS_PILL: Record<string, Pill> = {
+  pending: { bg: c.warnBg, fg: c.warnFg, label: 'ລໍກວດ' },
+  reviewed: { bg: c.successBg, fg: c.successFg, label: 'ຮັບເລື່ອງແລ້ວ' },
+  dismissed: { bg: c.neutralBg, fg: c.neutralFg, label: 'ຍົກຟ້ອງ' },
+};
+
 export const FALLBACK_PILL: Pill = { bg: c.neutralBg, fg: c.neutralFg, label: '—' };
 
 export function pillFor(map: Record<string, Pill>, status: string | null | undefined): Pill {

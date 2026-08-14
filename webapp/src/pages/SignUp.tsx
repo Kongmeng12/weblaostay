@@ -15,6 +15,7 @@ export function SignUpPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +26,7 @@ export function SignUpPage() {
     setError(null);
     setBusy(true);
     try {
-      await signUp({ fullName, email, phone, password });
+      await signUp({ fullName, email, phone, password, acceptedTerms });
       navigate(from, { replace: true });
     } catch (err) {
       setError(err);
@@ -100,15 +101,43 @@ export function SignUpPage() {
           />
         </Field>
 
+        {/* An explicit tick, not a line of small print saying signing up counts
+            as agreeing. The server records who accepted which version and when,
+            and that record is only worth having if the person actually chose. */}
+        <label
+          style={{
+            display: 'flex',
+            gap: 10,
+            alignItems: 'flex-start',
+            font: f(400, 12.5, 19),
+            color: c.soft,
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={acceptedTerms}
+            onChange={(e) => setAcceptedTerms(e.target.checked)}
+            required
+            style={{ width: 17, height: 17, marginTop: 1, accentColor: c.accent, flexShrink: 0 }}
+          />
+          <span>
+            ຂ້າພະເຈົ້າໄດ້ອ່ານ ແລະ ຍອມຮັບ{' '}
+            <Link to="/p/terms" target="_blank" style={{ color: c.accent, fontWeight: 600 }}>
+              ເງື່ອນໄຂການໃຊ້ບໍລິການ
+            </Link>{' '}
+            ແລະ{' '}
+            <Link to="/p/privacy" target="_blank" style={{ color: c.accent, fontWeight: 600 }}>
+              ນະໂຍບາຍຄວາມເປັນສ່ວນຕົວ
+            </Link>
+          </span>
+        </label>
+
         {error != null && <ErrorNote error={error} />}
 
-        <Button type="submit" size="lg" full disabled={busy}>
+        <Button type="submit" size="lg" full disabled={busy || !acceptedTerms}>
           {busy ? <Spinner size={17} color="#fff" /> : 'ສະໝັກ'}
         </Button>
-
-        <p style={{ font: f(400, 11.5, 18), color: c.faint, textAlign: 'center', margin: 0 }}>
-          ການສະໝັກຖືວ່າທ່ານຍອມຮັບເງື່ອນໄຂການໃຊ້ບໍລິການ ແລະ ນະໂຍບາຍຄວາມເປັນສ່ວນຕົວ
-        </p>
       </form>
     </AuthShell>
   );

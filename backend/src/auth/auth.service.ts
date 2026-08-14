@@ -8,12 +8,19 @@ import {
 } from '@nestjs/common';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, user_role, user_status, type otp_purpose } from '@prisma/client';
+import {
+  Prisma,
+  agreement_doc_type,
+  user_role,
+  user_status,
+  type otp_purpose,
+} from '@prisma/client';
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../common/settings.service';
 import { PasswordService } from './password.service';
 import { LoginGuardService } from './login-guard.service';
+import { AgreementsService, SIGNUP_DOCS } from './agreements.service';
 import {
   SMS_PROVIDER,
   laoMobile,
@@ -65,6 +72,7 @@ export class AuthService {
     private readonly settings: SettingsService,
     private readonly passwords: PasswordService,
     private readonly loginGuard: LoginGuardService,
+    private readonly agreements: AgreementsService,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
     @Inject(EMAIL_PROVIDER) private readonly email: EmailProvider,
   ) {}
@@ -145,15 +153,25 @@ export class AuthService {
 
     const password_hash = await this.passwords.hash(dto.password);
 
-    const user = await this.prisma.users.create({
-      data: {
-        role: user_role.CUSTOMER,
-        email,
-        phone: dto.phone,
-        password_hash,
-        user_profiles: { create: { full_name: dto.fullName } },
-      },
-      include: { user_profiles: true, partners: true },
+    // The account and the record of what they agreed to are one commit. An
+    // account with no agreement row would be a person we cannot show consented.
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.users.create({
+        data: {
+          role: user_role.CUSTOMER,
+          email,
+          phone: dto.phone,
+          password_hash,
+          user_profiles: { create: { full_name: dto.fullName } },
+        },
+      });
+
+      await this.agreements.record(tx, created.user_id, SIGNUP_DOCS, ip);
+
+      return tx.users.findUniqueOrThrow({
+        where: { user_id: created.user_id },
+        include: { user_profiles: true, partners: true },
+      });
     });
 
     const tokens = await this.issueTokens(user.user_id, user.email, user.role, ip, userAgent);
@@ -206,6 +224,16 @@ export class AuthService {
           status: 'draft',
         },
       });
+
+      // A partner accepts the partner agreement on top of the two everyone
+      // accepts — they are entering a commercial relationship, not just an
+      // account.
+      await this.agreements.record(
+        tx,
+        created.user_id,
+        [...SIGNUP_DOCS, agreement_doc_type.partner_agreement],
+        ip,
+      );
 
       return tx.users.findUniqueOrThrow({
         where: { user_id: created.user_id },
