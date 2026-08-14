@@ -6,11 +6,13 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  NotFoundException,
   HttpCode,
   Param,
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import {
@@ -26,7 +28,18 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { admin_role, booking_status, partner_status, payout_status, refund_status, review_status, user_role, user_status } from '@prisma/client';
+import {
+  admin_role,
+  booking_status,
+  partner_status,
+  payout_status,
+  refund_status,
+  report_status,
+  review_status,
+  user_role,
+  user_status,
+} from '@prisma/client';
+import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../common/settings.service';
 import { PayoutService } from './payout.service';
@@ -35,6 +48,7 @@ import { BookingService } from '../booking/booking.service';
 import { PasswordService } from '../auth/password.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminRoles, Audit, CurrentUser, Roles, type AuthedUser } from '../common/decorators';
+import { recordChange } from '../common/interceptors/audit-log.interceptor';
 import { MONEY_ROLES, REVENUE_STATUSES } from '../common/enums';
 import { kipOf, rateOf } from '../common/money';
 import { isoDayUtc } from '../common/dates';
@@ -129,6 +143,18 @@ class RefundFailDto {
   @MinLength(3)
   @MaxLength(255)
   reason!: string;
+}
+
+class ReviewReportQueryDto {
+  @IsOptional()
+  @IsEnum(report_status)
+  status?: report_status;
+}
+
+class HandleReportDto {
+  /** `pending` is not offered: settling a report means choosing an outcome. */
+  @IsEnum(report_status)
+  status!: report_status;
 }
 
 class AuditQueryDto extends PaginationDto {
@@ -601,12 +627,27 @@ export class AdminController {
 
   @Patch('customers/:id/status')
   @Audit('customer_status_change', 'admin', 'users')
-  async setCustomerStatus(@Param('id') id: string, @Body() dto: SetUserStatusDto) {
+  async setCustomerStatus(
+    @Param('id') id: string,
+    @Body() dto: SetUserStatusDto,
+    @Req() req: Request,
+  ) {
+    // Read before writing, so the audit row can say which way this went. An
+    // entry that only says "status changed" cannot tell a suspension from a
+    // reinstatement, which is the one thing anyone reads it to find out.
+    const before = await this.prisma.users.findUnique({
+      where: { user_id: BigInt(id) },
+      select: { status: true },
+    });
+
     const updated = await this.prisma.users.update({
       where: { user_id: BigInt(id) },
       data: { status: dto.status },
       select: { user_id: true, email: true, status: true },
     });
+
+    recordChange(req, { status: before?.status ?? null }, { status: updated.status });
+
     // Suspending someone should also end their sessions, or they stay signed in
     // until the access token expires.
     if (dto.status === user_status.suspended) {
@@ -724,8 +765,25 @@ export class AdminController {
   @Patch('payouts/:id/pay')
   @AdminRoles(...MONEY_ROLES)
   @Audit('payout_pay', 'finance', 'payouts')
-  pay(@Param('id') id: string, @CurrentUser() user: AuthedUser) {
-    return this.payouts.pay(BigInt(id), user.userId);
+  async pay(@Param('id') id: string, @CurrentUser() user: AuthedUser, @Req() req: Request) {
+    const before = await this.prisma.payouts.findUnique({
+      where: { payout_id: BigInt(id) },
+      select: { status: true, net_amount: true, partner_id: true },
+    });
+    const result = await this.payouts.pay(BigInt(id), user.userId);
+    // Money leaving the platform. What it was, what it became, and how much —
+    // an entry saying only "payout_pay" answers none of the questions anyone
+    // asks it months later.
+    recordChange(
+      req,
+      { status: before?.status ?? null },
+      {
+        status: payout_status.paid,
+        netKip: Number(before?.net_amount ?? 0),
+        partnerId: before?.partner_id?.toString() ?? null,
+      },
+    );
+    return result;
   }
 
   // ── refunds ───────────────────────────────────────────────────────────────
@@ -750,23 +808,43 @@ export class AdminController {
   @Patch('refunds/:id/paid')
   @AdminRoles(...MONEY_ROLES)
   @Audit('refund_mark_paid', 'finance', 'refunds')
-  markRefundPaid(
+  async markRefundPaid(
     @Param('id') id: string,
     @CurrentUser() user: AuthedUser,
     @Body() dto: RefundNoteDto,
+    @Req() req: Request,
   ) {
-    return this.refunds.markPaid(BigInt(id), user.userId, dto.note);
+    const before = await this.prisma.refunds.findUnique({
+      where: { refund_id: BigInt(id) },
+      select: { status: true, amount: true },
+    });
+    const result = await this.refunds.markPaid(BigInt(id), user.userId, dto.note);
+    // The amount rides along because this is the row somebody will be asked
+    // about when the money is queried, and it is the figure they will want.
+    recordChange(
+      req,
+      { status: before?.status ?? null },
+      { status: result.status, amountKip: Number(before?.amount ?? 0), note: dto.note ?? null },
+    );
+    return result;
   }
 
   @Patch('refunds/:id/failed')
   @AdminRoles(...MONEY_ROLES)
   @Audit('refund_mark_failed', 'finance', 'refunds')
-  markRefundFailed(
+  async markRefundFailed(
     @Param('id') id: string,
     @CurrentUser() user: AuthedUser,
     @Body() dto: RefundFailDto,
+    @Req() req: Request,
   ) {
-    return this.refunds.markFailed(BigInt(id), user.userId, dto.reason);
+    const before = await this.prisma.refunds.findUnique({
+      where: { refund_id: BigInt(id) },
+      select: { status: true },
+    });
+    const result = await this.refunds.markFailed(BigInt(id), user.userId, dto.reason);
+    recordChange(req, { status: before?.status ?? null }, { status: result.status, reason: dto.reason });
+    return result;
   }
 
   @Post('payouts/pay-all')
@@ -828,7 +906,7 @@ export class AdminController {
         include: {
           properties: { select: { property_name: true } },
           users: { include: { user_profiles: { select: { full_name: true } } } },
-          _count: { select: { review_reports: true } },
+          _count: { select: { review_reports: { where: { status: report_status.pending } } } },
         },
       }),
       this.prisma.reviews.count({ where }),
@@ -849,6 +927,99 @@ export class AdminController {
       total,
       query,
     );
+  }
+
+  /**
+   * Reviews people have complained about.
+   *
+   * Ordered oldest first: a complaint nobody looked at for a week is the one
+   * that matters, not the one filed a minute ago.
+   */
+  @Get('review-reports')
+  async reviewReports(@Query() query: ReviewReportQueryDto) {
+    const where = { status: query.status ?? report_status.pending };
+    const rows = await this.prisma.review_reports.findMany({
+      where,
+      orderBy: { created_at: 'asc' },
+      take: 200,
+      include: {
+        reviews: {
+          select: {
+            review_id: true,
+            title: true,
+            comment: true,
+            overall_rating: true,
+            status: true,
+            properties: { select: { property_name: true } },
+            users: { select: { user_profiles: { select: { full_name: true } } } },
+          },
+        },
+        users_review_reports_reported_byTousers: {
+          select: { email: true, role: true, user_profiles: { select: { full_name: true } } },
+        },
+      },
+    });
+
+    return rows.map((r) => {
+      const by = r.users_review_reports_reported_byTousers;
+      return {
+        id: r.report_id.toString(),
+        reviewId: r.reviews.review_id.toString(),
+        property: r.reviews.properties.property_name,
+        guest: r.reviews.users.user_profiles?.full_name ?? '—',
+        stars: rateOf(r.reviews.overall_rating),
+        title: r.reviews.title,
+        comment: r.reviews.comment,
+        reviewStatus: r.reviews.status,
+        reason: r.reason,
+        detail: r.detail,
+        status: r.status,
+        // Who complained, and in what capacity — a host objecting to a bad
+        // review reads very differently from a guest reporting abuse.
+        reportedBy: by.user_profiles?.full_name ?? by.email,
+        reportedByRole: by.role,
+        createdAt: r.created_at,
+      };
+    });
+  }
+
+  /** Counts for the filter tabs. */
+  @Get('review-reports/counts')
+  async reviewReportCounts() {
+    const rows = await this.prisma.review_reports.groupBy({ by: ['status'], _count: true });
+    return Object.fromEntries(rows.map((r) => [r.status, r._count]));
+  }
+
+  /**
+   * Settles a report.
+   *
+   * `reviewed` means the complaint was upheld and acted on; `dismissed` means
+   * it was not. Neither touches the review — hiding it is a separate, audited
+   * decision, so that a moderator cannot remove a review without that showing
+   * up as its own entry.
+   */
+  @Patch('review-reports/:id')
+  @Audit('review_report_handle', 'admin', 'review_reports')
+  async handleReviewReport(
+    @Param('id') id: string,
+    @Body() dto: HandleReportDto,
+    @CurrentUser() user: AuthedUser,
+    @Req() req: Request,
+  ) {
+    const before = await this.prisma.review_reports.findUnique({
+      where: { report_id: BigInt(id) },
+      select: { status: true },
+    });
+    if (!before) throw new NotFoundException(`ບໍ່ພົບລາຍງານ #${id} · Report not found`);
+
+    const updated = await this.prisma.review_reports.update({
+      where: { report_id: BigInt(id) },
+      data: { status: dto.status, handled_by: user.userId },
+      select: { report_id: true, status: true },
+    });
+
+    recordChange(req, { status: before.status }, { status: updated.status });
+    return { id: updated.report_id.toString(), status: updated.status };
   }
 
   /**
@@ -896,14 +1067,37 @@ export class AdminController {
   @Patch('settings')
   @AdminRoles(...MONEY_ROLES)
   @Audit('settings_update', 'admin', 'system_settings')
-  async updateSettings(@Body() dto: UpdateSettingsDto, @CurrentUser() user: AuthedUser) {
+  async updateSettings(
+    @Body() dto: UpdateSettingsDto,
+    @CurrentUser() user: AuthedUser,
+    @Req() req: Request,
+  ) {
     const { app: appPatch, ...systemPatch } = dto;
+
+    // Only the keys this request is actually changing. The whole settings
+    // object in both columns would bury the one number that moved, and the
+    // commission rate moving is exactly what somebody will come here to find.
+    //
+    // The `undefined` filter is not decoration: every optional field on the DTO
+    // class exists as an own property whether or not it was sent, so
+    // `Object.keys` alone reports the entire settings object as touched.
+    const previous = await this.settings.get();
+    const touched = (Object.keys(systemPatch) as (keyof typeof previous)[]).filter(
+      (k) => (systemPatch as Record<string, unknown>)[k as string] !== undefined,
+    );
+
     const [system, app] = await Promise.all([
       this.settings.update(systemPatch, user.userId),
       appPatch
         ? this.settings.updateAppSettings(appPatch, user.userId)
         : this.settings.appSettings(),
     ]);
+
+    recordChange(
+      req,
+      Object.fromEntries(touched.map((k) => [k, previous[k]])),
+      { ...systemPatch, ...(appPatch ? { app: appPatch } : {}) },
+    );
     return { system, app };
   }
 
@@ -1083,6 +1277,11 @@ export class AdminController {
         recordId: l.record_id?.toString() ?? null,
         // Null actor is the system: the hold sweeper, the payout generator.
         actor: l.users?.user_profiles?.full_name ?? l.users?.email ?? 'ລະບົບ',
+        // Absent on routes that never recorded them, which is most of them —
+        // the screen shows the action alone in that case rather than a blank
+        // "changed from nothing to nothing".
+        oldValues: l.old_values,
+        newValues: l.new_values,
         ip: l.ip_address,
         createdAt: l.created_at,
       })),

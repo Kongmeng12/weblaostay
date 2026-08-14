@@ -4,6 +4,7 @@ import {
   PublicReviewsController,
   ReviewImagesController,
   ReviewRepliesController,
+  ReviewReportsController,
 } from './reviews.controller';
 
 /**
@@ -14,7 +15,12 @@ import {
  * the guest's pictures — is its own thing and belongs here.
  */
 @Module({
-  controllers: [PublicReviewsController, ReviewRepliesController, ReviewImagesController],
+  controllers: [
+    PublicReviewsController,
+    ReviewRepliesController,
+    ReviewImagesController,
+    ReviewReportsController,
+  ],
   providers: [ReviewsService],
   exports: [ReviewsService],
 })

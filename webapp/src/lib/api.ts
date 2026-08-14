@@ -207,6 +207,12 @@ export interface RegisterInput {
   email: string;
   phone: string;
   password: string;
+  /**
+   * Required, and required to be `true` — the API rejects anything else. The
+   * server writes a `user_agreements` row naming the version of the terms and
+   * the privacy policy that were live at the moment of the tick.
+   */
+  acceptedTerms: boolean;
 }
 
 export function register(input: RegisterInput) {
@@ -259,3 +265,21 @@ export function qs(params: Record<string, string | number | boolean | undefined 
   const s = sp.toString();
   return s ? `?${s}` : '';
 }
+
+/** `report_reason` — why a review is being reported. */
+export type ReportReason = 'spam' | 'offensive' | 'fake' | 'other';
+
+/**
+ * Flags a review for a moderator.
+ *
+ * Nothing is hidden by this; a person decides. Reporting the same review twice
+ * while the first report is open answers 409, which the caller shows as-is —
+ * "you already reported this" is exactly what the guest needs to hear.
+ */
+export function reportReview(reviewId: string, reason: ReportReason, detail?: string) {
+  return request<{ id: string; status: string }>(`/reviews/${reviewId}/report`, {
+    method: 'POST',
+    body: { reason, ...(detail ? { detail } : {}) },
+  });
+}
+

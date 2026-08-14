@@ -87,6 +87,14 @@ export const NAV_GROUPS: NavGroup[] = [
         title: 'ຮີວິວ & ຂໍ້ພິພາດ',
         subtitle: 'ດູແລຮີວິວ ແລະ ຂໍ້ຮ້ອງເຮັຍນ',
       },
+      {
+        to: '/review-reports',
+        name: 'ລາຍງານຮີວິວ',
+        emoji: '🚩',
+        title: 'ລາຍງານຮີວິວ',
+        subtitle: 'ຮີວິວທີ່ຖືກລາຍງານ ລໍການກວດສອບ',
+        width: 'medium',
+      },
     ],
   },
   {

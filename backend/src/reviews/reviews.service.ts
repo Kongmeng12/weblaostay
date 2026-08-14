@@ -1,5 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { user_role } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { report_reason, report_status, user_role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { rateOf } from '../common/money';
@@ -227,5 +233,56 @@ export class ReviewsService {
     });
     if (!count) throw new NotFoundException('ບໍ່ພົບຮູບ · Photo not found');
     return this.thread(reviewId);
+  }
+
+  // ── reporting ─────────────────────────────────────────────────────────────
+
+  /**
+   * Flags a review for a moderator.
+   *
+   * Reporting does not hide anything. A property that dislikes a fair review
+   * could otherwise take it down by complaining, so the review stays visible
+   * and a person decides — `review_status` is only ever changed from the admin
+   * screen.
+   *
+   * Anyone signed in may report: the guest who was defamed in a reply, the host
+   * accused of something untrue, an admin who noticed it first.
+   */
+  async report(
+    reporterId: bigint,
+    reviewId: bigint,
+    reason: report_reason,
+    detail?: string,
+  ) {
+    const review = await this.prisma.reviews.findUnique({
+      where: { review_id: reviewId },
+      select: { review_id: true },
+    });
+    if (!review) throw new NotFoundException(`ບໍ່ພົບຮີວິວ #${reviewId} · Review not found`);
+
+    // One open report per person per review. Without this, a host can inflate
+    // the count by pressing the button repeatedly and push their own review to
+    // the top of the moderation queue.
+    const existing = await this.prisma.review_reports.findFirst({
+      where: { review_id: reviewId, reported_by: reporterId, status: report_status.pending },
+      select: { report_id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'ທ່ານໄດ້ລາຍງານຮີວິວນີ້ແລ້ວ ກຳລັງລໍການກວດສອບ · You have already reported this review',
+      );
+    }
+
+    const created = await this.prisma.review_reports.create({
+      data: {
+        review_id: reviewId,
+        reported_by: reporterId,
+        reason,
+        detail: detail?.slice(0, 1000) ?? null,
+      },
+      select: { report_id: true, status: true },
+    });
+
+    return { id: created.report_id.toString(), status: created.status };
   }
 }

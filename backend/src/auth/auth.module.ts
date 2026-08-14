@@ -6,11 +6,12 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { PasswordService } from './password.service';
 import { LoginGuardService } from './login-guard.service';
+import { AgreementsService } from './agreements.service';
 
 @Module({
   imports: [PassportModule.register({ defaultStrategy: 'jwt' }), JwtModule.register({})],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, PasswordService, LoginGuardService],
+  providers: [AuthService, JwtStrategy, PasswordService, LoginGuardService, AgreementsService],
   // PasswordService is exported because the admin module creates staff accounts.
   exports: [AuthService, PasswordService],
 })

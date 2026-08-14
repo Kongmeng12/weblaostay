@@ -552,6 +552,11 @@ export function SettingsAudit() {
               header: 'ເປົ້າໝາຍ',
               render: (r) => (r.table ? `${r.table}${r.recordId ? ` #${r.recordId}` : ''}` : '—'),
             },
+            {
+              key: 'change',
+              header: 'ປ່ຽນຫຍັງ',
+              render: (r) => <Change old={r.oldValues} next={r.newValues} />,
+            },
             { key: 'ip', header: 'IP', render: (r) => r.ip ?? '—' },
             {
               key: 'when',
@@ -740,5 +745,40 @@ function CreateAdminDialog({
         )}
       </div>
     </Modal>
+  );
+}
+
+
+/**
+ * The before and after of one audited action, a field per line.
+ *
+ * Only the keys that actually moved are stored, so this can afford to show
+ * every one of them. A key present on one side and not the other still reads
+ * correctly — it shows as a dash, which is what "was not set" looks like.
+ */
+function Change({
+  old,
+  next,
+}: {
+  old: Record<string, unknown> | null;
+  next: Record<string, unknown> | null;
+}) {
+  if (!old && !next) return <span style={{ color: c.faint }}>—</span>;
+
+  const keys = [...new Set([...Object.keys(old ?? {}), ...Object.keys(next ?? {})])];
+  const show = (v: unknown) =>
+    v === undefined || v === null ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+
+  return (
+    <div style={{ display: 'grid', gap: 3 }}>
+      {keys.map((k) => (
+        <div key={k} style={{ font: f(400, 11.5, 17), whiteSpace: 'nowrap' }}>
+          <span style={{ color: c.faint }}>{k} </span>
+          <span style={{ color: c.muted }}>{show(old?.[k])}</span>
+          <span style={{ color: c.faint }}> → </span>
+          <span style={{ color: c.text, fontWeight: 600 }}>{show(next?.[k])}</span>
+        </div>
+      ))}
+    </div>
   );
 }

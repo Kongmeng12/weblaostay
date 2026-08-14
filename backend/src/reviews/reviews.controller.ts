@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { user_role } from '@prisma/client';
+import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { report_reason, user_role } from '@prisma/client';
 import { ReviewsService } from './reviews.service';
 import { Audit, CurrentUser, Public, Roles, type AuthedUser } from '../common/decorators';
 
@@ -13,6 +13,18 @@ class ReplyDto {
   @IsOptional()
   @IsString()
   parentReplyId?: string;
+}
+
+class ReportReviewDto {
+  @IsEnum(report_reason, {
+    message: `ເຫດຜົນຕ້ອງເປັນ: ${Object.values(report_reason).join(' | ')}`,
+  })
+  reason!: report_reason;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  detail?: string;
 }
 
 class ReviewImageDto {
@@ -88,5 +100,28 @@ export class ReviewImagesController {
     @Param('imageId') imageId: string,
   ) {
     return this.reviews.removeImage(user.userId, BigInt(id), BigInt(imageId));
+  }
+}
+
+/**
+ * Reporting a review.
+ *
+ * Any signed-in user may report — the guest defamed in a reply, the host
+ * accused of something untrue, an admin who saw it first. Nothing is hidden by
+ * reporting; a moderator decides, from the admin screen.
+ */
+@Controller('reviews/:id/report')
+@Roles(user_role.CUSTOMER, user_role.PARTNER, user_role.ADMIN)
+export class ReviewReportsController {
+  constructor(private readonly reviews: ReviewsService) {}
+
+  @Post()
+  @Audit('review_report', 'reviews', 'review_reports')
+  report(
+    @CurrentUser() user: AuthedUser,
+    @Param('id') id: string,
+    @Body() dto: ReportReviewDto,
+  ) {
+    return this.reviews.report(user.userId, BigInt(id), dto.reason, dto.detail);
   }
 }

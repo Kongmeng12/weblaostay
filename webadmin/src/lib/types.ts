@@ -287,6 +287,13 @@ export interface AuditRow {
   recordId: string | null;
   /** Falls back to "ລະບົບ" for the sweeper and the payout generator. */
   actor: string;
+  /**
+   * What the values were and became. Null on the routes that never recorded
+   * them — most of them — so the screen shows the action alone rather than an
+   * empty change.
+   */
+  oldValues: Record<string, unknown> | null;
+  newValues: Record<string, unknown> | null;
   ip: string | null;
   createdAt: string | null;
 }
@@ -370,3 +377,29 @@ export interface RefundRow {
 }
 
 export type RefundCounts = Partial<Record<RefundStatus, { count: number; amount: number }>>;
+
+/** `report_status` */
+export type ReportStatus = 'pending' | 'reviewed' | 'dismissed';
+
+/** `report_reason` */
+export type ReportReason = 'spam' | 'offensive' | 'fake' | 'other';
+
+/** A complaint about a review, with the review it concerns. */
+export interface ReviewReportRow {
+  id: string;
+  reviewId: string;
+  property: string;
+  guest: string;
+  stars: number;
+  title: string | null;
+  comment: string | null;
+  reviewStatus: string;
+  reason: ReportReason;
+  detail: string | null;
+  status: ReportStatus;
+  reportedBy: string;
+  /** A host objecting to a bad review reads differently from a guest reporting abuse. */
+  reportedByRole: 'CUSTOMER' | 'PARTNER' | 'ADMIN';
+  createdAt: string | null;
+}
+
