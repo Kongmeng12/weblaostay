@@ -47,3 +47,15 @@ export function laoMobile(raw: string): string | null {
   // gateway.
   return /^20\d{8}$/.test(digits) ? digits : null;
 }
+
+/**
+ * The ten digits `laoMobile()` returns, written back out as `+856 20 5555
+ * 0001` — the one shape every phone number is stored and looked up in.
+ *
+ * A customer can type `020 5555 0001`, `20-5555-0001` or `+856205550001` and
+ * still land on the same account, at both register and login, because both
+ * ends of that comparison go through this same function first.
+ */
+export function formatLaoPhone(digits: string): string {
+  return `+856 ${digits.slice(0, 2)} ${digits.slice(2, 6)} ${digits.slice(6, 10)}`;
+}
