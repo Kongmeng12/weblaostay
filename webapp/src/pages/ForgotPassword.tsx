@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { requestPasswordReset, resetPassword } from '../lib/api';
 import { c, f, radius } from '../theme';
 import { Button, ErrorNote, Field, inputStyle, Spinner } from '../components/ui';
@@ -8,17 +8,22 @@ import { AuthShell } from './SignIn';
 /**
  * Ask for a reset, then use the token.
  *
- * Outside production the API returns the token in the response (`devToken`) —
- * there is no email gateway wired up yet, and the endpoint would otherwise be
- * impossible to test. In production it returns nothing and **nothing sends the
- * token**, so this flow is a dead end until an email provider exists. The note
- * at the bottom says so rather than leaving a guest waiting for a mail that is
- * never coming.
+ * The emailed link arrives as `/forgot?token=…`, so a token in the query means
+ * the guest has already asked and is coming back to finish: that skips straight
+ * to choosing a new password rather than making them ask a second time.
+ *
+ * Outside production the API also returns the token in the response
+ * (`devToken`), so the flow can be tested without waiting on a mail server.
  */
 export function ForgotPasswordPage() {
-  const [stage, setStage] = useState<'request' | 'reset' | 'done'>('request');
+  const [params] = useSearchParams();
+  const linked = params.get('token')?.trim() ?? '';
+
+  const [stage, setStage] = useState<'request' | 'reset' | 'done'>(
+    linked ? 'reset' : 'request',
+  );
   const [email, setEmail] = useState('');
-  const [token, setToken] = useState('');
+  const [token, setToken] = useState(linked);
   const [password, setPassword] = useState('');
   const [devToken, setDevToken] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -70,7 +75,7 @@ export function ForgotPasswordPage() {
     return (
       <AuthShell
         title="ຕັ້ງລະຫັດຜ່ານໃໝ່"
-        subtitle="ໃສ່ token ທີ່ໄດ້ຮັບ ພ້ອມລະຫັດຜ່ານໃໝ່"
+        subtitle={linked ? 'ເລືອກລະຫັດຜ່ານໃໝ່ຂອງທ່ານ' : 'ໃສ່ token ທີ່ໄດ້ຮັບ ພ້ອມລະຫັດຜ່ານໃໝ່'}
       >
         <form onSubmit={apply} style={{ display: 'grid', gap: 16 }}>
           {devToken && (
@@ -84,18 +89,20 @@ export function ForgotPasswordPage() {
                 color: c.warnFg,
               }}
             >
-              ໂໝດພັດທະນາ: token ຖືກຕື່ມໃຫ້ອັດຕະໂນມັດ ເພາະຍັງບໍ່ມີລະບົບສົ່ງອີເມວ
+              ໂໝດພັດທະນາ: token ຖືກຕື່ມໃຫ້ອັດຕະໂນມັດ ບໍ່ຕ້ອງລໍອີເມວ
             </div>
           )}
 
-          <Field label="Token">
-            <input
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              required
-              style={inputStyle}
-            />
-          </Field>
+          {!linked && (
+            <Field label="Token">
+              <input
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                required
+                style={inputStyle}
+              />
+            </Field>
+          )}
 
           <Field label="ລະຫັດຜ່ານໃໝ່" hint="ຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ">
             <input

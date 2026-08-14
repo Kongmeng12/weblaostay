@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -13,6 +14,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../common/settings.service';
 import { PasswordService } from './password.service';
 import { LoginGuardService } from './login-guard.service';
+import {
+  SMS_PROVIDER,
+  laoMobile,
+  type SmsProvider,
+} from '../notifications/sms-provider.interface';
+import { EMAIL_PROVIDER, type EmailProvider } from '../notifications/email-provider.interface';
+import { otpEmail, passwordResetEmail } from '../notifications/emails';
 import type {
   LoginDto,
   RegisterCustomerDto,
@@ -57,6 +65,8 @@ export class AuthService {
     private readonly settings: SettingsService,
     private readonly passwords: PasswordService,
     private readonly loginGuard: LoginGuardService,
+    @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
+    @Inject(EMAIL_PROVIDER) private readonly email: EmailProvider,
   ) {}
 
   // ── sign in ───────────────────────────────────────────────────────────────
@@ -294,9 +304,11 @@ export class AuthService {
    * Issues a one-time code.
    *
    * The code is stored hashed, like a password: a leaked table dump must not
-   * hand over live codes. In development the code is returned in the response
-   * so there is something to test with — there is no SMS gateway wired up yet,
-   * and pretending otherwise would make the endpoint untestable.
+   * hand over live codes. Off production the code is also returned in the
+   * response, so the endpoint stays testable without spending SMS credit.
+   *
+   * A phone target is texted and an email target is emailed, so one endpoint
+   * serves both sign-up paths.
    */
   async requestOtp(
     target: string,
@@ -323,6 +335,27 @@ export class AuthService {
     });
 
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+
+    // A phone number gets a text, an address gets an email. Nothing is awaited
+    // and nothing is rethrown: the answer must take the same time and say the
+    // same thing whether or not the target belongs to anyone, and a slow
+    // gateway must not become the caller's error. A failure is logged — that is
+    // where it is actionable.
+    const failed = (err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Could not send the OTP to ${target}: ${detail}`);
+    };
+
+    if (laoMobile(target)) {
+      // Deliberately plain ASCII: Wenova bills per segment, and one Lao
+      // character drops a segment from 153 characters to 67.
+      void this.sms
+        .send(target, `LaoStay code: ${code}. Valid ${otp_ttl_minutes} minutes.`)
+        .catch(failed);
+    } else if (target.includes('@')) {
+      void this.email.send(otpEmail(target, code, otp_ttl_minutes)).catch(failed);
+    }
+
     if (!isProduction) this.logger.warn(`OTP for ${target} (${purpose}): ${code}`);
 
     return { sent: true, expiresAt, ...(isProduction ? {} : { devCode: code }) };
@@ -391,9 +424,35 @@ export class AuthService {
     });
 
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+
+    // Nothing is awaited and nothing is rethrown. The response must take the
+    // same time and say the same thing whether or not the address exists, and a
+    // slow mail server must not become the caller's error. A failure is logged —
+    // that is where somebody can act on it.
+    const link = `${this.appUrl()}/forgot?token=${token}`;
+    void this.email
+      .send(passwordResetEmail(email, link, password_reset_ttl_minutes))
+      .catch((err: unknown) => {
+        const detail = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Could not email the reset link to ${email}: ${detail}`);
+      });
+
     if (!isProduction) this.logger.warn(`Password reset token for ${email}: ${token}`);
 
     return { sent: true, ...(isProduction ? {} : { devToken: token }) };
+  }
+
+  /**
+   * Where the customer app lives, for links that have to leave the API.
+   *
+   * `CORS_ORIGIN` already lists it and is already required to be right, so the
+   * first entry is used rather than adding a second variable that can disagree
+   * with it.
+   */
+  private appUrl(): string {
+    const origins = this.config.get<string>('CORS_ORIGIN') ?? '';
+    const first = origins.split(',')[0]?.trim();
+    return (first || 'http://localhost:5173').replace(/\/+$/, '');
   }
 
   async resetPassword(token: string, newPassword: string): Promise<{ ok: true }> {

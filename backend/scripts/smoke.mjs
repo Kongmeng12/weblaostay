@@ -486,10 +486,14 @@ async function main() {
     if (String(second.body?.id) === String(payment?.id)) ok('paying twice reuses the same QR');
     else bad('paying twice reuses the same QR', `got ${second.body?.id}, first ${payment?.id}`);
 
-    await expect('an unsigned webhook is rejected', 'POST', '/payments/phajay/webhook', {
-      status: 401,
-      body: { reference: 'STL-0001', txnRef: 'forged', amount: 1, status: 'paid' },
-    });
+    // PhaJay does not sign its callbacks, so the URL carries a secret only we
+    // and they know. A 404 rather than a 401 is deliberate: a wrong secret must
+    // not confirm that the endpoint is there at all.
+    const forged = { reference: 'STL-0001', txnRef: 'forged', amount: 1, status: 'paid' };
+    await expect('a webhook with no secret in the path is not found', 'POST',
+      '/payments/phajay/webhook', { status: 404, body: forged });
+    await expect('a webhook with the wrong secret is not found', 'POST',
+      '/payments/phajay/webhook/not-the-secret', { status: 404, body: forged });
 
     if (payment) {
       const [beforeSettle] = await sql(

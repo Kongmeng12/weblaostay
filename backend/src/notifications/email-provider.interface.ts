@@ -2,7 +2,7 @@
  * Injection token for the email provider.
  *
  * A `Symbol` rather than a string so nothing can collide with it, matching
- * `PAYMENT_PROVIDER` and `STORAGE_PROVIDER`.
+ * `SMS_PROVIDER` and `PAYMENT_PROVIDER`.
  */
 export const EMAIL_PROVIDER = Symbol('EMAIL_PROVIDER');
 
@@ -22,10 +22,10 @@ export interface EmailProvider {
   /**
    * Sends one message.
    *
-   * Throws if delivery could not be handed off. Callers that are answering a
-   * user request should catch: a password reset must not report failure just
-   * because the mail server was slow, and must never reveal whether an address
-   * exists.
+   * Throws if delivery could not be handed off. Callers answering a user
+   * request should catch: a password reset must report the same thing whether
+   * or not the address exists, and a slow mail server is not the user's
+   * problem.
    */
   send(email: Email): Promise<void>;
 }

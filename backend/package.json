@@ -15,7 +15,9 @@
     "smoke": "node scripts/smoke.mjs",
     "check:storage": "npm run build && node scripts/storage-check.mjs",
     "check:phajay": "npm run build && node scripts/phajay-check.mjs",
-    "capture:api": "node scripts/capture-api.mjs"
+    "capture:api": "node scripts/capture-api.mjs",
+    "check:sms": "node scripts/sms-check.mjs",
+    "admin:create": "node scripts/create-admin.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1106.0",
