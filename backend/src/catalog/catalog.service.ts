@@ -139,7 +139,21 @@ export class CatalogService {
         AND (${dto.minPrice ?? null}::bigint IS NULL OR o.from_price >= ${dto.minPrice ?? null}::bigint)
         AND (${dto.maxPrice ?? null}::bigint IS NULL OR o.from_price <= ${dto.maxPrice ?? null}::bigint)
         AND (${dto.q ?? null}::text IS NULL
-             OR p.search_vector @@ plainto_tsquery('simple', ${dto.q ?? null}::text))
+             -- Full-text match on name/description (handles multi-word,
+             -- word-order-independent queries).
+             OR p.search_vector @@ plainto_tsquery('simple', ${dto.q ?? null}::text)
+             -- search_vector is a GENERATED column derived only from this
+             -- row's own columns (a Postgres requirement for generated
+             -- columns), so it can never contain province/district names —
+             -- those live in joined tables. Match them here instead, plus a
+             -- plain substring match on the name so partial words like
+             -- "Praban" still find "Luang Prabang".
+             OR p.property_name ILIKE '%' || ${dto.q ?? null}::text || '%'
+             OR pv.province_name_lo ILIKE '%' || ${dto.q ?? null}::text || '%'
+             OR pv.province_name_en ILIKE '%' || ${dto.q ?? null}::text || '%'
+             OR d.district_name_lo ILIKE '%' || ${dto.q ?? null}::text || '%'
+             OR d.district_name_en ILIKE '%' || ${dto.q ?? null}::text || '%'
+             OR p.address_detail ILIKE '%' || ${dto.q ?? null}::text || '%')
         AND (NOT ${hasGeo}
              OR ST_DWithin(p.geog,
                   ST_SetSRID(ST_MakePoint(${dto.lng ?? 0}, ${dto.lat ?? 0}), 4326)::geography,
