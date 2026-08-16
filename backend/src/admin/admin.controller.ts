@@ -18,6 +18,7 @@ import { Type } from 'class-transformer';
 import {
   IsEmail,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsObject,
@@ -79,10 +80,31 @@ class ListCustomersDto extends PaginationDto {
   status?: user_status;
 }
 
+const REVIEW_SORTS = ['newest', 'oldest', 'highest', 'lowest'] as const;
+type ReviewSort = (typeof REVIEW_SORTS)[number];
+
 class ListReviewsDto extends PaginationDto {
   @IsOptional()
   @IsEnum(review_status)
   status?: review_status;
+
+  /** Narrows to one listing — the search box only matches by name substring. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  propertyId?: number;
+
+  /** Exact star rating, e.g. 4 matches 4.0–4.9. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  stars?: number;
+
+  @IsOptional()
+  @IsIn(REVIEW_SORTS)
+  sort?: ReviewSort;
 }
 
 class RejectDto {
@@ -877,11 +899,41 @@ export class AdminController {
     };
   }
 
+  /**
+   * Feeds the property picker on the Reviews page. Only listings that have
+   * at least one review, so moderators aren't scrolling past hundreds of
+   * empty entries — text search still covers the rest by name substring.
+   */
+  @Get('reviews/properties')
+  async reviewedProperties() {
+    const rows = await this.prisma.reviews.groupBy({
+      by: ['property_id'],
+      _count: true,
+    });
+    if (!rows.length) return [];
+
+    const properties = await this.prisma.properties.findMany({
+      where: { property_id: { in: rows.map((r) => r.property_id) } },
+      select: { property_id: true, property_name: true },
+    });
+    const nameOf = new Map(properties.map((p) => [p.property_id, p.property_name]));
+
+    return rows
+      .map((r) => ({
+        id: r.property_id.toString(),
+        property: nameOf.get(r.property_id) ?? '—',
+        count: r._count,
+      }))
+      .sort((a, b) => a.property.localeCompare(b.property));
+  }
+
   @Get('reviews')
   async reviews(@Query() query: ListReviewsDto) {
     const term = query.q?.trim();
     const where = {
       ...(query.status ? { status: query.status } : {}),
+      ...(query.propertyId ? { property_id: BigInt(query.propertyId) } : {}),
+      ...(query.stars ? { overall_rating: { gte: query.stars, lt: query.stars + 1 } } : {}),
       ...(term
         ? {
             OR: [
@@ -897,12 +949,21 @@ export class AdminController {
         : {}),
     };
 
+    const orderBy: Record<string, 'asc' | 'desc'> =
+      query.sort === 'oldest'
+        ? { created_at: 'asc' }
+        : query.sort === 'highest'
+          ? { overall_rating: 'desc' }
+          : query.sort === 'lowest'
+            ? { overall_rating: 'asc' }
+            : { created_at: 'desc' };
+
     const [rows, total] = await Promise.all([
       this.prisma.reviews.findMany({
         where,
         skip: query.skip,
         take: query.limit,
-        orderBy: { created_at: 'desc' },
+        orderBy,
         include: {
           properties: { select: { property_name: true } },
           users: { include: { user_profiles: { select: { full_name: true } } } },

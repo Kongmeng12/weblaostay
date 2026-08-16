@@ -221,6 +221,16 @@ export interface ReviewRow {
   createdAt: string | null;
 }
 
+/** `GET /admin/reviews/properties` — feeds the property filter dropdown. */
+export interface PropertyReviewCount {
+  id: string;
+  property: string;
+  count: number;
+}
+
+/** `GET /admin/reviews?sort=`. */
+export type ReviewSort = 'newest' | 'oldest' | 'highest' | 'lowest';
+
 // ── settings & audit ─────────────────────────────────────────────────────────
 
 /**

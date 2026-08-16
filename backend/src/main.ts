@@ -4,6 +4,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
+import compression from 'compression';
 import { mkdirSync } from 'node:fs';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -37,6 +38,7 @@ async function bootstrap(): Promise<void> {
   // No cross-origin resource policy fuss: this process serves JSON and the
   // uploaded photos, which the apps load from a different origin.
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
+  app.use(compression());
 
   // Uploaded property and room photos, served outside the /api prefix so the
   // URLs stored in the database stay stable if the API is ever versioned.

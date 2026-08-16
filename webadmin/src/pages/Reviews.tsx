@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
-import type { Paged, ReviewRow } from '../lib/types';
+import type { Paged, PropertyReviewCount, ReviewRow, ReviewSort } from '../lib/types';
 import { c, f, radius, avatarFor, pillFor, REVIEW_STATUS_PILL } from '../theme';
 import { laoDate, stars, initials } from '../lib/format';
 import {
@@ -20,6 +20,17 @@ import { useDebounced } from '../lib/useDebounced';
 /** `all` plus every `review_status`. */
 type Filter = 'all' | 'published' | 'flagged' | 'hidden' | 'pending';
 
+const selectStyle = {
+  padding: '10px 14px',
+  background: '#fff',
+  border: `1px solid ${c.border}`,
+  borderRadius: 11,
+  font: f(600, 12),
+  color: c.soft,
+  outline: 'none',
+  cursor: 'pointer',
+} as const;
+
 interface ReviewCounts {
   total: number;
   published: number;
@@ -32,6 +43,9 @@ interface ReviewCounts {
 export function Reviews() {
   const qc = useQueryClient();
   const [filter, setFilter] = useState<Filter>('all');
+  const [propertyId, setPropertyId] = useState('');
+  const [starFilter, setStarFilter] = useState('');
+  const [sort, setSort] = useState<ReviewSort>('newest');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
@@ -42,12 +56,25 @@ export function Reviews() {
     queryFn: () => api.get<ReviewCounts>('/admin/reviews/counts'),
   });
 
+  const properties = useQuery({
+    queryKey: ['reviews', 'properties'],
+    queryFn: () => api.get<PropertyReviewCount[]>('/admin/reviews/properties'),
+  });
+
   const list = useQuery({
-    queryKey: ['reviews', { filter, q, page }],
+    queryKey: ['reviews', { filter, propertyId, starFilter, sort, q, page }],
     queryFn: () =>
       api.get<Paged<ReviewRow>>(
         '/admin/reviews' +
-          qs({ status: filter === 'all' ? undefined : filter, q, page, limit: 12 }),
+          qs({
+            status: filter === 'all' ? undefined : filter,
+            propertyId,
+            stars: starFilter,
+            sort,
+            q,
+            page,
+            limit: 12,
+          }),
       ),
   });
 
@@ -107,15 +134,57 @@ export function Reviews() {
             { value: 'pending', label: 'ລໍກວດ', count: counts.data?.pending },
           ]}
         />
-        <SearchInput
-          value={search}
-          onChange={(v) => {
-            setSearch(v);
-            setPage(1);
-          }}
-          placeholder="ຄົ້ນຫາ ຂໍ້ຄວາມ / ຫົວຂໍ້ / ທີ່ພັກ..."
-          width={300}
-        />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            value={propertyId}
+            onChange={(e) => {
+              setPropertyId(e.target.value);
+              setPage(1);
+            }}
+            style={selectStyle}
+          >
+            <option value="">ທຸກທີ່ພັກ</option>
+            {properties.data?.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.property} ({p.count})
+              </option>
+            ))}
+          </select>
+          <select
+            value={starFilter}
+            onChange={(e) => {
+              setStarFilter(e.target.value);
+              setPage(1);
+            }}
+            style={selectStyle}
+          >
+            <option value="">ທຸກຄະແນນ</option>
+            {[5, 4, 3, 2, 1].map((n) => (
+              <option key={n} value={n}>
+                {'★'.repeat(n)} ({n})
+              </option>
+            ))}
+          </select>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as ReviewSort)}
+            style={selectStyle}
+          >
+            <option value="newest">ໃໝ່ສຸດ</option>
+            <option value="oldest">ເກົ່າສຸດ</option>
+            <option value="highest">ຄະແນນສູງສຸດ</option>
+            <option value="lowest">ຄະແນນຕ່ຳສຸດ</option>
+          </select>
+          <SearchInput
+            value={search}
+            onChange={(v) => {
+              setSearch(v);
+              setPage(1);
+            }}
+            placeholder="ຄົ້ນຫາ ຂໍ້ຄວາມ / ຫົວຂໍ້ / ທີ່ພັກ..."
+            width={260}
+          />
+        </div>
       </div>
 
       {list.isLoading ? (
