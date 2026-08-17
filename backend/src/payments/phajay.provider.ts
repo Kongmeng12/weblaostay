@@ -67,8 +67,21 @@ export class PhaJayPaymentProvider implements PaymentProvider {
     const bank = this.bank();
     const baseUrl = this.optional('PHAJAY_BASE_URL', DEFAULT_BASE_URL).replace(/\/+$/, '');
     const ttlMin = Number(this.optional('PHAJAY_QR_TTL_MIN', '15'));
-    // The sandbox is the same API one path segment along, and moves no money.
-    const live = this.config.get<string>('NODE_ENV') === 'production';
+
+    // The sandbox is the same API one path segment along, and settles nothing —
+    // its QR is well-formed but no bank app will pay it, which is the whole
+    // point and also the thing that looks like a bug when you scan one.
+    //
+    // Deliberately its own switch rather than `NODE_ENV === 'production'`:
+    // NODE_ENV also decides whether OTP codes come back in the response, whether
+    // `dev/settle` exists, and whether `db:reset` will run at all. Proving a real
+    // payment works should not require turning all of that off too. It still
+    // defaults to production so a deployed server is never accidentally in the
+    // sandbox.
+    const live = this.optional(
+      'PHAJAY_LIVE',
+      String(this.config.get<string>('NODE_ENV') === 'production'),
+    ).toLowerCase() === 'true';
     const segment = live ? 'payment' : 'test/payment';
 
     const body = JSON.stringify({
