@@ -4,6 +4,7 @@ import { PaymentsService } from './payments.service';
 import { CustomerPaymentsController, PaymentsWebhookController } from './payments.controller';
 import { SimulatedPaymentProvider } from './simulated.provider';
 import { PhaJayPaymentProvider } from './phajay.provider';
+import { PhaJaySocketService } from './phajay-socket.service';
 import { PAYMENT_PROVIDER } from './payment-provider.interface';
 import { BookingModule } from '../booking/booking.module';
 
@@ -18,6 +19,7 @@ import { BookingModule } from '../booking/booking.module';
   controllers: [CustomerPaymentsController, PaymentsWebhookController],
   providers: [
     PaymentsService,
+    PhaJaySocketService,
     SimulatedPaymentProvider,
     PhaJayPaymentProvider,
     {

@@ -201,6 +201,11 @@ export class CatalogService {
   /** Everything a property page shows: rooms, amenities, rules and reviews. */
   async findOne(propertyId: bigint, checkIn?: string, checkOut?: string) {
     const property = await this.prisma.properties.findFirst({
+      // Ten nested relations, and Prisma's default is one round trip each. The
+      // database is in Singapore at ~40ms a trip, which made this page cost
+      // 800ms of waiting and almost no work. `join` answers it in one SQL
+      // statement with LATERAL joins instead.
+      relationLoadStrategy: 'join',
       where: {
         property_id: propertyId,
         status: 'active',

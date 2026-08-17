@@ -43,17 +43,29 @@ type Bank = keyof typeof BANKS;
  * one charge; it costs the guest two extra taps, which is why this uses the
  * direct QR instead.
  *
- * The sandbox mirrors the live API one path segment along and settles without
- * moving money, so it is used unless `NODE_ENV=production`. There is no flag to
- * get wrong: a development machine cannot reach the live endpoints at all.
+ * The sandbox mirrors the live API one path segment along and settles nothing.
+ * `PHAJAY_LIVE` chooses between them; see `createCharge` for why that is its own
+ * switch and not `NODE_ENV`.
  *
- * ## The webhook is not signed
+ * ## Nothing here is signed
  *
  * PhaJay's callback carries no HMAC, so nothing in the body proves who sent it.
- * `verifyCallback` therefore only *parses* — the callback is authenticated by
- * the secret in its URL, checked before this is ever called, and settlement
- * additionally refuses anything that does not name a still-pending payment for
- * the amount charged.
+ * `verifyCallback` therefore only *parses*. What makes settlement safe is on the
+ * other side of it: the callback is authenticated by the secret in its URL, and
+ * `settle` refuses anything that does not name a still-pending payment for
+ * exactly the amount charged.
+ *
+ * ## How a payment gets back to us
+ *
+ * There is no endpoint for asking whether a transaction was paid — PhaJay
+ * documents only two ways to find out, and both end at `handleCallback`:
+ *
+ *  - the **webhook**, which needs a public URL, and
+ *  - a **Socket.IO feed** the server subscribes to outwards, which does not —
+ *    see `phajay-socket.service.ts`.
+ *
+ * Either alone is enough; both together is fine, because settling twice is a
+ * no-op.
  */
 @Injectable()
 export class PhaJayPaymentProvider implements PaymentProvider {
@@ -146,16 +158,27 @@ export class PhaJayPaymentProvider implements PaymentProvider {
     }
 
     const status = str(body.status);
-    // `tag1` is where createCharge put our reference. `orderNo` is PhaJay's own
-    // field, present on the Payment Link flow — accepted so a charge created
-    // either way settles through the same path.
+
+    // `tag1` is where `createCharge` put our booking code, and PhaJay echoes
+    // tags back untouched. `orderNo` is the Payment Link flow's own field, so a
+    // charge created either way settles through the same path.
+    //
+    // Not `exReferenceNo` or `billNumber`: those are PhaJay's identifiers, not
+    // ours, and matching a payment on them would mean having stored them first.
     const reference = str(body.tag1) ?? str(body.orderNo);
     if (!reference) return { ...empty(), reason: 'callback carries no reference' };
 
     return {
       ok: true,
       reference,
-      txnRef: str(body.transactionId) ?? str(body.linkCode) ?? str(body.paymentId),
+      // `transactionId` is guaranteed present; the rest are what different
+      // banks happen to send, kept as fallbacks rather than relied on.
+      txnRef:
+        str(body.transactionId) ??
+        str(body.exReferenceNo) ??
+        str(body.billNumber) ??
+        str(body.linkCode) ??
+        str(body.paymentId),
       amountKip: num(body.txnAmount),
       status: status === COMPLETED ? 'paid' : 'failed',
       ...(status !== COMPLETED && { reason: `PhaJay reported ${status ?? 'no status'}` }),

@@ -109,6 +109,48 @@ console.log('\nPhaJay — Generate QR\n');
   check('anything else stays in the sandbox', seen.url.includes('/test/'), seen.url);
 }
 
+// ── the switch that decides whether money is real ───────────────────────────
+// PHAJAY_LIVE is separate from NODE_ENV on purpose: NODE_ENV also governs OTP
+// codes in responses, dev/settle and the db:reset guard, and proving a payment
+// works should not require turning all of that off. Which means this one flag
+// is the only thing standing between a test and a real charge.
+{
+  const seen = stubGateway(REPLY);
+  const p = new PhaJayPaymentProvider(cfg({ PHAJAY_API_KEY: 'k', PHAJAY_LIVE: 'true' }));
+  await p.createCharge(charge);
+  check(
+    'PHAJAY_LIVE=true reaches the live endpoint from a dev machine',
+    !seen.url.includes('/test/'),
+    seen.url,
+  );
+}
+{
+  const seen = stubGateway(REPLY);
+  const p = new PhaJayPaymentProvider(
+    cfg({ PHAJAY_API_KEY: 'k', PHAJAY_LIVE: 'false', NODE_ENV: 'production' }),
+  );
+  await p.createCharge(charge);
+  check('PHAJAY_LIVE=false keeps production in the sandbox', seen.url.includes('/test/'), seen.url);
+}
+{
+  // Anything that is not exactly "true" must not spend money — a typo in .env
+  // should fail safe, not charge a guest.
+  for (const value of ['TRUE', 'yes', '1', 'on', '']) {
+    const seen = stubGateway(REPLY);
+    const p = new PhaJayPaymentProvider(cfg({ PHAJAY_API_KEY: 'k', PHAJAY_LIVE: value }));
+    await p.createCharge(charge);
+    const sandboxed = seen.url.includes('/test/');
+    // 'TRUE' is accepted — the read is case-insensitive. A blank falls back to
+    // NODE_ENV, which is undefined here, so it stays in the sandbox too.
+    const expected = value.toLowerCase() !== 'true';
+    check(
+      `PHAJAY_LIVE="${value}" → ${expected ? 'sandbox' : 'live'}`,
+      sandboxed === expected,
+      seen.url,
+    );
+  }
+}
+
 // ── picking another bank ────────────────────────────────────────────────────
 {
   const seen = stubGateway(REPLY);

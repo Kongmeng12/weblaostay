@@ -77,10 +77,10 @@ function summarise(body) {
   return '';
 }
 
-async function login(email, password) {
-  const res = await call('POST', '/auth/login', { body: { email, password } });
+async function login(identifier, password) {
+  const res = await call('POST', '/auth/login', { body: { identifier, password } });
   if (res.status !== 200) {
-    throw new Error(`login failed for ${email}: ${JSON.stringify(res.body)}`);
+    throw new Error(`login failed for ${identifier}: ${JSON.stringify(res.body)}`);
   }
   return res.body;
 }
@@ -202,7 +202,7 @@ async function main() {
   let locked = false;
   for (let i = 0; i < 8; i++) {
     const res = await call('POST', '/auth/login', {
-      body: { email: victim, password: 'wrong-on-purpose' },
+      body: { identifier: victim, password: 'wrong-on-purpose' },
     });
     if (res.status === 429) {
       locked = true;
@@ -248,7 +248,9 @@ async function main() {
     email: `smoke.guest.${Date.now()}@laostay.la`,
     password: 'Passw0rd!23',
     fullName: 'ສະໝັກ ທົດສອບ',
-    phone: '2055119999',
+    // Unique per run: phone numbers are unique per account now, so a fixed one
+    // passes once and then 409s for the life of the database.
+    phone: `20${String(Date.now()).slice(-8)}`,
   };
 
   await expect('POST /auth/register refuses an unticked box', 'POST', '/auth/register', {
@@ -880,7 +882,7 @@ async function main() {
 
   if (newAdmin) {
     const fresh = await call('POST', '/auth/login', {
-      body: { email: staffEmail, password: staffPw },
+      body: { identifier: staffEmail, password: staffPw },
     });
     if (fresh.status === 200 && fresh.body?.user?.role === 'ADMIN') {
       ok('the new admin can sign in');
@@ -899,7 +901,7 @@ async function main() {
 
     // Soft-deleted, and the sessions revoked with it.
     const after = await call('POST', '/auth/login', {
-      body: { email: staffEmail, password: staffPw },
+      body: { identifier: staffEmail, password: staffPw },
     });
     if (after.status === 401) ok('a deleted admin can no longer sign in');
     else bad('a deleted admin can no longer sign in', `got ${after.status}`);

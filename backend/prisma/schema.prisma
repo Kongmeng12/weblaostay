@@ -1,5 +1,11 @@
 generator client {
   provider = "prisma-client-js"
+
+  // Lets a query with `include` be answered by one SQL statement with LATERAL
+  // joins instead of one round trip per relation. On a database 41ms away that
+  // is the difference between 800ms and 90ms for the property page, which has
+  // ten nested includes and was paying the latency ten times over.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
