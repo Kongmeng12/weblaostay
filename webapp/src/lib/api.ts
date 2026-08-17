@@ -187,7 +187,7 @@ export interface AuthResponse {
 export async function login(email: string, password: string): Promise<AuthResponse> {
   const res = await request<AuthResponse>('/auth/login', {
     method: 'POST',
-    body: { email, password },
+    body: { identifier: email, password },
     anonymous: true,
   });
 

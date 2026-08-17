@@ -23,6 +23,7 @@ import { LoginGuardService } from './login-guard.service';
 import { AgreementsService, SIGNUP_DOCS } from './agreements.service';
 import {
   SMS_PROVIDER,
+  formatLaoPhone,
   laoMobile,
   type SmsProvider,
 } from '../notifications/sms-provider.interface';
@@ -59,7 +60,7 @@ export interface AuthResult extends TokenPair {
 /** The duration form jsonwebtoken accepts for `expiresIn` ("15m", "7d", 3600). */
 type Ttl = NonNullable<JwtSignOptions['expiresIn']>;
 
-const BAD_CREDENTIALS = 'ອີເມວ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ · Invalid credentials';
+const BAD_CREDENTIALS = 'ອີເມວ/ເບີໂທ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ · Invalid email/phone or password';
 
 @Injectable()
 export class AuthService {
@@ -80,33 +81,60 @@ export class AuthService {
   // ── sign in ───────────────────────────────────────────────────────────────
 
   async login(dto: LoginDto, ip: string, userAgent: string | null): Promise<AuthResult> {
-    const email = dto.email.trim().toLowerCase();
+    // The identifier is whatever the caller typed — an email or a phone
+    // number, in any of the shapes a customer actually types one in:
+    // `020 5555 0001`, `20-5555-0001`, `+856 20 5555 0001`. `laoMobile()`
+    // reduces all of those to the same ten digits, and `formatLaoPhone()`
+    // writes them back out in the one shape phones are stored in — the same
+    // pair `registerCustomer` runs a phone through, so the two always agree.
+    const raw = dto.identifier.trim();
+    const normalizedEmail = raw.toLowerCase();
+    const phoneDigits = laoMobile(raw);
+    const canonicalPhone = phoneDigits ? formatLaoPhone(phoneDigits) : null;
+
+    // The lockout bucket: whichever form actually identifies the account, so
+    // an attacker cannot dodge it by varying how they write the same phone.
+    const lockoutKey = canonicalPhone ?? normalizedEmail;
 
     // Lockout is checked before any password work, so a locked account costs an
     // attacker a cheap 429 rather than a hash verification.
-    await this.loginGuard.assertNotLocked(email);
+    await this.loginGuard.assertNotLocked(lockoutKey);
 
-    const user = await this.prisma.users.findUnique({
-      where: { email },
+    let user = await this.prisma.users.findFirst({
+      where: { email: normalizedEmail },
       include: { user_profiles: true, partners: true },
     });
+
+    // A phone that predates this normalization (or was simply typed with
+    // different spacing at registration) will not equal `canonicalPhone`
+    // as a string — `findUserIdByPhone` compares by digits instead, so
+    // accounts stored before this change still log in by phone.
+    if (!user && phoneDigits) {
+      const userId = await this.findUserIdByPhone(phoneDigits);
+      if (userId !== null) {
+        user = await this.prisma.users.findFirst({
+          where: { user_id: userId },
+          include: { user_profiles: true, partners: true },
+        });
+      }
+    }
 
     if (!user || user.deleted_at !== null) {
       // Same work and the same error whether the account exists or not, so the
       // response cannot be used to enumerate accounts.
       await this.passwords.wasteTime(dto.password);
-      await this.loginGuard.record(email, false, ip, userAgent);
+      await this.loginGuard.record(lockoutKey, false, ip, userAgent);
       throw new UnauthorizedException(BAD_CREDENTIALS);
     }
 
     const { ok, needsRehash } = await this.passwords.verify(dto.password, user.password_hash);
     if (!ok) {
-      await this.loginGuard.record(email, false, ip, userAgent);
+      await this.loginGuard.record(lockoutKey, false, ip, userAgent);
       throw new UnauthorizedException(BAD_CREDENTIALS);
     }
 
     if (user.status === user_status.suspended) {
-      await this.loginGuard.record(email, false, ip, userAgent);
+      await this.loginGuard.record(lockoutKey, false, ip, userAgent);
       throw new UnauthorizedException('ບັນຊີຖືກລະງັບ · This account is suspended');
     }
 
@@ -122,8 +150,8 @@ export class AuthService {
         where: { user_id: user.user_id },
         data: { last_login_at: new Date() },
       }),
-      this.loginGuard.record(email, true, ip, userAgent),
-      this.loginGuard.clearFailures(email),
+      this.loginGuard.record(lockoutKey, true, ip, userAgent),
+      this.loginGuard.clearFailures(lockoutKey),
       this.prisma.audit_logs.create({
         data: {
           user_id: user.user_id,
@@ -150,6 +178,18 @@ export class AuthService {
   ): Promise<AuthResult> {
     const email = dto.email.trim().toLowerCase();
     await this.assertEmailFree(email);
+
+    // Stored as `+856 20 5555 0001` regardless of how the customer typed it
+    // in, so a later login by phone finds the same row no matter which of
+    // `020 5555 0001` / `20-5555-0001` / `+856205550001` they use.
+    const phoneDigits = laoMobile(dto.phone);
+    if (!phoneDigits) {
+      throw new BadRequestException(
+        'ເບີໂທຕ້ອງເປັນເບີມືຖືລາວ ເລີ່ມຕົ້ນດ້ວຍ 20 · Phone must be a Lao mobile number starting with 20',
+      );
+    }
+    const phone = formatLaoPhone(phoneDigits);
+    await this.assertPhoneFree(phoneDigits);
 
     const password_hash = await this.passwords.hash(dto.password);
 
@@ -346,14 +386,19 @@ export class AuthService {
     const code = randomInt(100_000, 999_999).toString();
     const expiresAt = new Date(Date.now() + otp_ttl_minutes * 60_000);
 
-    const user = await this.prisma.users.findFirst({
-      where: { OR: [{ email: target.toLowerCase() }, { phone: target }] },
-      select: { user_id: true },
-    });
+    const phoneDigits = laoMobile(target);
+    const userId = phoneDigits
+      ? await this.findUserIdByPhone(phoneDigits)
+      : (
+          await this.prisma.users.findFirst({
+            where: { email: target.toLowerCase() },
+            select: { user_id: true },
+          })
+        )?.user_id ?? null;
 
     await this.prisma.otp_verifications.create({
       data: {
-        user_id: user?.user_id ?? null,
+        user_id: userId,
         target,
         purpose,
         code_hash: hashToken(code),
@@ -389,7 +434,18 @@ export class AuthService {
     return { sent: true, expiresAt, ...(isProduction ? {} : { devCode: code }) };
   }
 
-  async verifyOtp(target: string, purpose: otp_purpose, code: string): Promise<{ verified: true }> {
+  /**
+   * Verifying a `reset_password` OTP additionally mints a short-lived
+   * `password_reset_tokens` row and returns it as `resetToken` — the same
+   * credential the emailed reset link carries, just handed back directly
+   * instead of mailed. `POST /auth/password/reset` accepts either one
+   * unchanged, since it only ever looked at the token's hash.
+   */
+  async verifyOtp(
+    target: string,
+    purpose: otp_purpose,
+    code: string,
+  ): Promise<{ verified: true; resetToken?: string }> {
     const otp = await this.prisma.otp_verifications.findFirst({
       where: { target, purpose, verified_at: null },
       orderBy: { created_at: 'desc' },
@@ -411,6 +467,8 @@ export class AuthService {
       throw new BadRequestException('ລະຫັດ OTP ບໍ່ຖືກຕ້ອງ · Incorrect code');
     }
 
+    let resetToken: string | undefined;
+
     await this.prisma.$transaction(async (tx) => {
       await tx.otp_verifications.update({
         where: { otp_id: otp.otp_id },
@@ -422,9 +480,43 @@ export class AuthService {
           data: { is_verified: true },
         });
       }
+
+      if (otp.purpose === 'reset_password') {
+        // `requestOtp` resolves `target` to a user up front and stores it as
+        // `otp.user_id` — but that lookup can miss (unknown target), so it is
+        // repeated here rather than assumed. No user means no token, and the
+        // caller still just sees `{ verified: true }` — the response must not
+        // reveal whether the target has an account.
+        const targetPhoneDigits = laoMobile(target);
+        let userId = otp.user_id;
+        if (userId === null) {
+          userId = targetPhoneDigits
+            ? await this.findUserIdByPhone(targetPhoneDigits)
+            : (
+                await tx.users.findFirst({
+                  where: { email: target.toLowerCase() },
+                  select: { user_id: true },
+                })
+              )?.user_id ?? null;
+        }
+        const user = userId !== null ? { user_id: userId } : null;
+
+        if (user) {
+          const { password_reset_ttl_minutes } = await this.settings.get();
+          const token = randomBytes(32).toString('hex');
+          await tx.password_reset_tokens.create({
+            data: {
+              user_id: user.user_id,
+              token_hash: hashToken(token),
+              expires_at: new Date(Date.now() + password_reset_ttl_minutes * 60_000),
+            },
+          });
+          resetToken = token;
+        }
+      }
     });
 
-    return { verified: true };
+    return { verified: true, ...(resetToken ? { resetToken } : {}) };
   }
 
   // ── password reset ────────────────────────────────────────────────────────
@@ -543,6 +635,53 @@ export class AuthService {
       select: { user_id: true },
     });
     if (taken) throw new ConflictException('ອີເມວນີ້ມີບັນຊີແລ້ວ · That email is already registered');
+  }
+
+  /**
+   * `phone` has no unique constraint at the DB level, so nothing stops a
+   * second account being created with the same number unless it is checked
+   * here — and if it happened, phone login could not tell the two accounts
+   * apart (`findFirst` would just return whichever was created first).
+   */
+  private async assertPhoneFree(phoneDigits: string): Promise<void> {
+    const taken = await this.findUserIdByPhone(phoneDigits);
+    if (taken !== null) {
+      throw new ConflictException('ເບີໂທນີ້ມີບັນຊີແລ້ວ · That phone number is already registered');
+    }
+  }
+
+  /**
+   * Finds a user by phone without trusting the stored string's formatting.
+   *
+   * `phone` is only ever *written* in one shape (`formatLaoPhone`), but
+   * anything registered before that normalization existed — or written by
+   * a path that skipped it — can be stored some other way. Comparing
+   * `phone` to a formatted string directly would silently miss those rows,
+   * which is exactly the "phone login stopped working" failure mode this
+   * guards against — a naive `contains` on a substring of the digits has
+   * the same problem, since the stored value's own spacing (`+856 20 9999
+   * 1234`) can split the digits an app-side substring search is looking
+   * for.
+   *
+   * So the normalizing happens in the query itself: every non-digit is
+   * stripped from `phone` in SQL, then the same "drop a leading `856`,
+   * then a leading trunk `0`" reduction `laoMobile()` does in TypeScript is
+   * repeated in SQL, so the two stay equivalent by construction. If that
+   * reduction ever changes, it has to change in both places.
+   */
+  private async findUserIdByPhone(phoneDigits: string): Promise<bigint | null> {
+    const rows = await this.prisma.$queryRaw<{ user_id: bigint }[]>`
+      SELECT user_id FROM users
+      WHERE (
+        CASE
+          WHEN regexp_replace(phone, '\\D', '', 'g') LIKE '856%'
+            THEN regexp_replace(substring(regexp_replace(phone, '\\D', '', 'g') FROM 4), '^0', '')
+          ELSE regexp_replace(regexp_replace(phone, '\\D', '', 'g'), '^0', '')
+        END
+      ) = ${phoneDigits}
+      LIMIT 1
+    `;
+    return rows[0]?.user_id ?? null;
   }
 
   private async issueTokens(

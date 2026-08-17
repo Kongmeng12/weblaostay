@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -13,10 +14,16 @@ import {
 import { Type } from 'class-transformer';
 import { otp_purpose, property_type } from '@prisma/client';
 
+/** Loose enough for `+856 20 5555 0001`, `020 5555 0001`, `2055550001`, ... */
+const PHONE_PATTERN = /^\+?[0-9][0-9\s-]{5,19}$/;
+const PHONE_MESSAGE = 'ເບີໂທບໍ່ຖືກຕ້ອງ · Invalid phone number';
+
 export class LoginDto {
-  @IsEmail({}, { message: 'ອີເມວບໍ່ຖືກຕ້ອງ · Invalid email' })
+  /** Email or phone — whichever the account was found by. */
+  @IsString()
+  @MinLength(4, { message: 'ອີເມວ ຫຼື ເບີໂທບໍ່ຖືກຕ້ອງ · Invalid email or phone' })
   @MaxLength(255)
-  email!: string;
+  identifier!: string;
 
   @IsString()
   @MinLength(8, { message: 'ລະຫັດຜ່ານຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ · Minimum 8 characters' })
@@ -40,7 +47,7 @@ export class RegisterCustomerDto {
   fullName!: string;
 
   @IsString()
-  @MinLength(6)
+  @Matches(PHONE_PATTERN, { message: PHONE_MESSAGE })
   @MaxLength(50)
   phone!: string;
   /**
