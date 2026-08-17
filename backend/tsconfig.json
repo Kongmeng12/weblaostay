@@ -11,6 +11,11 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "incremental": true,
+    // Kept inside outDir so nest-cli's deleteOutDir wipes it along with the
+    // JS it describes — left outside, the cache survives a dist/ wipe and
+    // tells tsc "nothing changed," so it skips re-emitting into the now-empty
+    // dist/ and `node dist/main` fails with MODULE_NOT_FOUND.
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "skipLibCheck": true,
     "strictNullChecks": true,
     "noImplicitAny": true,
