@@ -4,3 +4,9 @@ dist/
 *.log
 .DS_Store
 scripts/_capture.json
+
+# TypeScript's incremental build cache. Machine-specific, rewritten by every
+# build, and it conflicts on every merge — backend/.gitignore already listed it
+# but the files were committed before that, and .gitignore does not apply to
+# something already tracked.
+*.tsbuildinfo
