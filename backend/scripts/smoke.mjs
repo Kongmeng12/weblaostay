@@ -1313,19 +1313,47 @@ async function main() {
   await expect('GET /content/faqs is public and grouped', 'GET', '/content/faqs', {
     check: (b) => (Array.isArray(b) && b[0]?.items?.length ? null : 'not grouped'),
   });
-  await expect('GET /content/pages lists only live pages', 'GET', '/content/pages', {
-    check: (b) => {
-      if (!Array.isArray(b)) return 'not an array';
-      // The three legal pages ship inactive with placeholder text on purpose.
-      const legal = b.filter((p) => ['terms', 'privacy', 'partner_agreement'].includes(p.slug));
-      return legal.length ? `inactive legal pages served: ${legal.map((p) => p.slug)}` : null;
-    },
-  });
-  await expect('an inactive page 404s rather than serving a placeholder', 'GET',
-    '/content/pages/terms', { status: 404 });
   await expect('an active page is served', 'GET', '/content/pages/about', {
     check: (b) => (b?.slug === 'about' ? null : JSON.stringify(b)),
   });
+
+  // Whether a page is published is state an admin can change, so this proves
+  // it by changing it rather than by leaning on which slugs the migration
+  // happens to seed as drafts. That coupling used to be the assertion, and it
+  // turned "the legal pages are finally written and published" into a failing
+  // smoke test.
+  const aboutBefore = (await call('GET', '/admin/content/pages', { token: A }))?.body?.find(
+    (p) => p.slug === 'about',
+  );
+  if (!aboutBefore) {
+    bad('the about page exists to test publishing with', 'not found via /admin/content/pages');
+  } else {
+    await call('POST', '/admin/content/pages', {
+      token: A,
+      body: { slug: 'about', title: aboutBefore.title, content: aboutBefore.content ?? '', isActive: false },
+    });
+    await expect('an unpublished page 404s rather than serving a draft', 'GET',
+      '/content/pages/about', { status: 404 });
+    await expect('GET /content/pages lists only live pages', 'GET', '/content/pages', {
+      check: (b) =>
+        !Array.isArray(b) ? 'not an array'
+        : b.some((p) => p.slug === 'about') ? 'an unpublished page is listed'
+        : null,
+    });
+
+    await call('POST', '/admin/content/pages', {
+      token: A,
+      body: {
+        slug: 'about',
+        title: aboutBefore.title,
+        content: aboutBefore.content ?? '',
+        isActive: aboutBefore.isActive,
+      },
+    });
+    await expect('republishing brings the page back', 'GET', '/content/pages/about', {
+      check: (b) => (b?.slug === 'about' ? null : JSON.stringify(b)),
+    });
+  }
 
   await expect('a customer cannot edit content', 'POST', '/admin/content/faqs', {
     token: CFRESH, status: 403, body: { question: 'ບໍ່ຄວນໄດ້', answer: 'ບໍ່ຄວນໄດ້' },
@@ -1359,17 +1387,41 @@ async function main() {
     body: { title: 'broken', targetType: 'property', targetId: '99999999' },
   });
 
+  // Pages have no delete route on purpose, so this cannot use a throwaway slug
+  // and must borrow a real one — which means putting it back. It did not, once,
+  // and left the live About page reading "<p>smoke</p>" to every visitor until
+  // someone noticed.
   const page = await expect('POST /admin/content/pages upserts by slug', 'POST',
     '/admin/content/pages', {
       token: A,
       status: 201,
-      body: { slug: 'about', title: 'ກ່ຽວກັບ LaoStay', content: '<p>smoke</p>', isActive: true },
+      body: {
+        slug: 'about',
+        title: aboutBefore?.title ?? 'ກ່ຽວກັບ LaoStay',
+        content: `${aboutBefore?.content ?? ''}\nsmoke`,
+        isActive: true,
+      },
       check: (b) => (b?.slug === 'about' ? null : JSON.stringify(b)),
     });
   if (page) {
     const [{ n }] = await sql(`SELECT count(*)::int n FROM app_pages WHERE page_slug = 'about'`);
     if (n === 1) ok('the upsert did not create a second "about"');
     else bad('the upsert did not create a second "about"', `${n} rows`);
+
+    if (aboutBefore) {
+      await call('POST', '/admin/content/pages', {
+        token: A,
+        body: {
+          slug: 'about',
+          title: aboutBefore.title,
+          content: aboutBefore.content ?? '',
+          isActive: aboutBefore.isActive,
+        },
+      });
+      const restored = (await call('GET', '/content/pages/about', {})).body;
+      if (restored?.content === (aboutBefore.content ?? '')) ok('the about page was put back as it was found');
+      else bad('the about page was put back as it was found', `content is now ${restored?.content?.length} chars`);
+    }
   }
 
   await expect('a bad slug is refused', 'POST', '/admin/content/pages', {

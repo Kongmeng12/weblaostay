@@ -6,7 +6,10 @@
  */
 import puppeteer from 'puppeteer-core';
 
-const BASE = 'http://localhost:5174';
+// Overridable so the same pass can be pointed at the deployed site, where the
+// SPA and the API share an origin, as well as at the dev server that proxies
+// /api. `SMOKE_BASE` does the same job for the API smoke test.
+const BASE = process.env.BROWSE_BASE ?? 'http://localhost:5174';
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 const problems = [];
@@ -34,13 +37,26 @@ await page.setViewport({ width: 1280, height: 1000 });
 page.on('console', (msg) => {
   // Chrome logs its own "Failed to load resource: 404" for a fetch the page
   // handled on purpose. It carries no URL, so it is dropped whole while a
-  // deliberate 404 is armed.
+  // deliberate 404 is armed. The reason phrase is matched loosely because
+  // HTTP/2 does not carry one: the deployed site says "404 ()" where the
+  // dev server says "404 (Not Found)".
   if (msg.type() !== 'error') return;
-  if (expected404.size && /404 \(Not Found\)/.test(msg.text())) return;
+  if (expected404.size && /\b404\b/.test(msg.text())) return;
+  // "Failed to load resource" carries no URL and is always the echo of a
+  // request the two handlers below already report, with the address attached.
+  // Keeping both means every foreign-origin failure is counted twice, once
+  // unidentifiably.
+  if (msg.text().startsWith('Failed to load resource')) return;
   note('console', msg.text().slice(0, 200));
 });
 page.on('pageerror', (err) => note('pageerror', String(err.message).slice(0, 200)));
-page.on('requestfailed', (req) => note('requestfailed', `${req.url()} ${req.failure()?.errorText}`));
+page.on('requestfailed', (req) => {
+  // Only this app's own requests. Cloudflare injects its analytics beacon into
+  // every response from the deployed site, and it cannot load here — reporting
+  // that on every run would bury the failures this check exists to find.
+  if (!req.url().startsWith(BASE)) return;
+  note('requestfailed', `${req.url()} ${req.failure()?.errorText}`);
+});
 page.on('response', async (res) => {
   if (!res.url().includes('/api/') || res.status() < 400) return;
   const path = new URL(res.url()).pathname;
@@ -169,16 +185,30 @@ if (pageLinks.length) {
   check('the static page shows when it was last edited', staticPage.includes('ແກ້ໄຂລ່າສຸດ'));
 }
 
-// The legal pages ship inactive on purpose. A guest must be told the page is
-// not there rather than shown an empty "Terms of Service".
-expected404.add('/api/content/pages/terms');
-await page.goto(`${BASE}/p/terms`, { waitUntil: 'networkidle2' });
+// A slug that will never exist, so the not-found path stays covered now that
+// the legal pages are published.
+expected404.add('/api/content/pages/no-such-page');
+await page.goto(`${BASE}/p/no-such-page`, { waitUntil: 'networkidle2' });
 await settle(600);
-const draft = await text();
+const missing = await text();
 expected404.clear();
-check('an unpublished page says so instead of rendering empty', draft.includes('ກັບໜ້າຫຼັກ'));
-check('no link in the footer points at the unpublished page',
-  !pageLinks.some((l) => l.href === '/p/terms'));
+check('a page that does not exist says so instead of rendering empty', missing.includes('ກັບໜ້າຫຼັກ'));
+
+// SignUp.tsx links to these two unconditionally, so either of them being a
+// draft puts a 404 in front of everyone who tries to register. They were
+// exactly that for a while, which is what these checks are here to catch.
+for (const slug of ['terms', 'privacy']) {
+  check(`the footer links to /p/${slug}`, pageLinks.some((l) => l.href === `/p/${slug}`));
+
+  await page.goto(`${BASE}/p/${slug}`, { waitUntil: 'networkidle2' });
+  await settle(500);
+  const body = await text();
+  check(`/p/${slug} is published and has a body`,
+    body.includes('ແກ້ໄຂລ່າສຸດ') && body.length > 800, `${body.length} chars`);
+  // Content.tsx renders the body as plain text, so markup in the database
+  // reaches the reader as literal angle brackets rather than formatting.
+  check(`/p/${slug} shows text rather than markup`, !body.includes('<p>'));
+}
 
 await browser.close();
 

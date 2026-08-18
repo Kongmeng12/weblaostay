@@ -8,6 +8,11 @@ import { c, f, radius } from '../theme';
  * ASCII string, so byte mode at a fixed error-correction level covers it, and
  * a payment screen should not be one npm advisory away from being unable to
  * take money.
+ *
+ * The price of that is that nothing else checks this code, and it once shipped
+ * with a reversed generator polynomial — every symbol drew perfectly and none
+ * of them scanned. `npm run check:qr` is what stands in for the dependency's
+ * test suite now; run it after touching anything below the encoding banner.
  */
 export function QrCode({ value, size = 236 }: { value: string; size?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -138,13 +143,23 @@ const LOG = new Uint8Array(256);
 
 const mul = (a: number, b: number) => (a === 0 || b === 0 ? 0 : EXP[LOG[a] + LOG[b]]);
 
+/**
+ * The divisor polynomial, the product of (x − α^i) for i below `degree`.
+ *
+ * Coefficients run highest power first, which is the order `rsRemainder` reads
+ * them in. Multiplying by (x + α^i) carries each coefficient *up* a power and
+ * scales it into the next one down — putting the scale on the same index and
+ * the plain carry on the next builds the polynomial backwards, which still
+ * looks plausible because it stays monic-length and every EC byte is still a
+ * byte. Nothing catches that but a decoder.
+ */
 function rsGenerator(degree: number): number[] {
   let poly = [1];
   for (let i = 0; i < degree; i++) {
     const next = new Array<number>(poly.length + 1).fill(0);
     for (let j = 0; j < poly.length; j++) {
-      next[j] ^= mul(poly[j], EXP[i]);
-      next[j + 1] ^= poly[j];
+      next[j] ^= poly[j];
+      next[j + 1] ^= mul(poly[j], EXP[i]);
     }
     poly = next;
   }

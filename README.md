@@ -261,7 +261,8 @@ refresh token ທີ່ໃຊ້ຊ້ຳວ່າຖືກລັກ ແລ້�
 ຄ່າທັງໝົດອະທິບາຍໄວ້ໃນ [.env.example](backend/.env.example).
 
 > `local` ໃນ production **deploy ຫຼາຍ instance ບໍ່ໄດ້** ແລະ ຮູບຫາຍເມື່ອ container ຖືກສ້າງໃໝ່ —
-> boot ຈະ log ເປັນ ERROR ເຕືອນໄວ້. ແລະ backup ຕ້ອງລວມໂຟນເດີ `uploads/` ນຳ ເພາະ dump ຂອງ DB ບໍ່ມີມັນ.
+> boot ຈະ log ເປັນ ERROR ເຕືອນໄວ້. backup ຕ້ອງລວມໂຟນເດີ `uploads/` ນຳ ເພາະ dump ຂອງ DB ບໍ່ມີມັນ:
+> `npm --prefix backend run backup` ເຮັດໃຫ້ແລ້ວ ແລະ `deploy/install-backup.ps1` ຕັ້ງໃຫ້ແລ່ນທຸກຄືນ.
 
 ## ຂອບເຂດປັດຈຸບັນ
 
@@ -273,10 +274,10 @@ refresh token ທີ່ໃຊ້ຊ້ຳວ່າຖືກລັກ ແລ້�
 | Admin API + WebAdmin (17 ໜ້າຈໍ) | ✅ |
 | Partner API + Flutter partner app | ✅ |
 | Customer API + ເວັບລູກຄ້າ | ✅ |
-| QR PhaJay | ✅ ຕໍ່ແລ້ວ — sandbox ໃຊ້ໄດ້, ລໍ webhook URL ຈິງ |
-| ສົ່ງ SMS / ອີເມວ | ⬜ **ບໍ່ມີເລີຍ** — OTP ແລະ ກູ້ລະຫັດຜ່ານໃຊ້ບໍ່ໄດ້ໃນ production |
+| QR PhaJay | ✅ ຕໍ່ແລ້ວ — webhook URL ພ້ອມແລ້ວ, ລໍລົງທະບຽນໃນ portal ແລະ key ຈິງ |
+| ສົ່ງ SMS / ອີເມວ | ✅ ຕັ້ງຄ່າແລ້ວ (Wenova + SMTP) — ຍັງບໍ່ໄດ້ທົດສອບສົ່ງຈິງ |
 | ເກັບຮູບໃສ່ S3/R2 | ✅ ໂຄດພ້ອມ — ຕັ້ງ `STORAGE_PROVIDER=r2` ເມື່ອມີ bucket |
-| Deploy · CI | ⬜ **ບໍ່ເຄີຍ deploy** |
+| Deploy · CI | ✅ phaphak.com ຜ່ານ Cloudflare Tunnel — ເບິ່ງ [deploy/](deploy/README.md). CI ຍັງບໍ່ມີ |
 | Coupon · ໂປຣໂມຊັນ | ⬜ ມີແຕ່ schema — `discountAmount` ຍັງເປັນ 0 |
 | ແຈ້ງເຕືອນຈາກ template (`NotificationsService`) | ✅ |
 | ແຊັດ — API · ເວັບລູກຄ້າ · Flutter partner | ✅ |

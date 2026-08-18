@@ -10,3 +10,9 @@ scripts/_capture.json
 # but the files were committed before that, and .gitignore does not apply to
 # something already tracked.
 *.tsbuildinfo
+
+# Database dumps and photo copies written by deploy/backup.ps1. These are real
+# customer rows — emails, phone numbers, password hashes, payments, sessions.
+# They belong on disk and in an offsite copy, never in the repository.
+deploy/backups/
+deploy/logs/

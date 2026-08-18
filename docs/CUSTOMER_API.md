@@ -571,15 +571,20 @@ GET /reviews/:id          (public)
 | `GET /content/home` | `{ banners: [...], announcements: [...] }` |
 | `GET /content/faqs` | ຈັດກຸ່ມແລ້ວ `[{ category, items: [{id, question, answer}] }]` |
 | `GET /content/pages` | slug ທີ່ເຜີຍແຜ່ແລ້ວ |
-| `GET /content/pages/:slug` | `terms` · `privacy` · `about` |
+| `GET /content/pages/:slug` | `terms` · `privacy` · `partner_agreement` · `about` |
 
 Server ກັ່ນຕອງ **ວັນທີ່** ໃຫ້ແລ້ວ — banner ທີ່ໝົດອາຍຸຈະບໍ່ຖືກສົ່ງມາ ແອັບບໍ່ຕ້ອງກວດ.
 
 `banners[].targetType` ເປັນ `property` `promotion` ຫຼື `url`. **ຮອງຮັບແຕ່ `property`**
 (ໄປໜ້າ `targetId`) — ອີກສອງອັນຍັງໃຊ້ບໍ່ໄດ້, ໃຫ້ສະແດງເປັນຮູບເສີຍໆ ບໍ່ຕ້ອງກົດໄດ້.
 
-ໜ້າ `terms` ແລະ `privacy` **ຍັງບໍ່ໄດ້ເຜີຍແຜ່** ຈະໄດ້ 404. ຢ່າໃສ່ລິ້ງຕາຍຕົວ —
-ໃຫ້ອ່ານຈາກ `GET /content/pages` ແລ້ວສະແດງສະເພາະທີ່ມີ.
+`content` ເປັນ **ຂໍ້ຄວາມທຳມະດາ ບໍ່ແມ່ນ HTML** — ໃຫ້ສະແດງດ້ວຍ `pre-wrap` ຫຼື ທຽບເທົ່າ.
+ຢ່າ render ເປັນ HTML: ເນື້ອຫາມາຈາກ CMS ແລະ ບໍ່ໄດ້ຖືກ sanitize.
+
+ໜ້າ `terms` `privacy` `partner_agreement` **ເຜີຍແຜ່ແລ້ວ**. ເຖິງຢ່າງນັ້ນ ໃນ
+ຖານຂໍ້ມູນໃໝ່ (`db:reset`) ມັນຈະກັບເປັນຮ່າງອີກ ແລະ ຈະໄດ້ 404 ຈົນກວ່າຈະແລ່ນ
+`backend/scripts/seed-pages.mjs`. ສະນັ້ນສຳລັບລິ້ງໃນ footer ຫຼື ເມນູ ໃຫ້ອ່ານຈາກ
+`GET /content/pages` ແລ້ວສະແດງສະເພາະທີ່ມີ.
 
 ---
 

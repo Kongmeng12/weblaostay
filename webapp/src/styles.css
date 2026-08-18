@@ -114,3 +114,27 @@ img {
     transform: rotate(360deg);
   }
 }
+
+/* The stay picker (DateRangePicker). Two months side by side where there is
+   room; on a phone the second is dropped rather than squeezed, because paging
+   a month at a time is the familiar gesture there anyway. */
+.laostay-cal-sheet {
+  min-width: 300px;
+  max-width: min(640px, calc(100vw - 32px));
+}
+.laostay-cal-months {
+  display: grid;
+  /* Capped, not stretched: a month spread across a 1120px row puts each day so
+     far from its weekday heading that the grid stops reading as a calendar. */
+  grid-template-columns: repeat(2, minmax(0, 290px));
+  justify-content: center;
+  gap: 28px;
+}
+@media (max-width: 720px) {
+  .laostay-cal-months {
+    grid-template-columns: minmax(0, 330px);
+  }
+  .laostay-cal-second {
+    display: none;
+  }
+}

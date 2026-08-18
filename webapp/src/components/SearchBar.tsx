@@ -2,9 +2,9 @@ import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { c, f, radius } from '../theme';
-import { addDaysIso, todayIso } from '../lib/format';
 import type { Province } from '../lib/types';
 import { Button } from './ui';
+import { DateRangePicker } from './DateRangePicker';
 
 export interface SearchCriteria {
   q: string;
@@ -43,19 +43,13 @@ export function SearchBar({
     staleTime: 60 * 60 * 1000,
   });
 
-  const set = <K extends keyof SearchCriteria>(key: K, v: SearchCriteria[K]) =>
-    setDraft((d) => {
-      const next = { ...d, [key]: v };
-      // Check-out must follow check-in. Rather than rejecting the guest's tap,
-      // push the other end along — that is what they meant.
-      if (key === 'checkIn' && next.checkOut && next.checkOut <= (v as string)) {
-        next.checkOut = addDaysIso(v as string, 1);
-      }
-      if (key === 'checkIn' && v && !next.checkOut) {
-        next.checkOut = addDaysIso(v as string, 1);
-      }
-      return next;
-    });
+  // The two dates are not set through this — `DateRangePicker` owns both ends
+  // together, which is the only way it can refuse a departure before the
+  // arrival instead of quietly correcting one.
+  const set = <K extends Exclude<keyof SearchCriteria, 'checkIn' | 'checkOut'>>(
+    key: K,
+    v: SearchCriteria[K],
+  ) => setDraft((d) => ({ ...d, [key]: v }));
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -101,25 +95,15 @@ export function SearchBar({
         </select>
       </Cell>
 
-      <Cell label="ເຂົ້າພັກ">
-        <input
-          type="date"
-          value={draft.checkIn}
-          min={todayIso()}
-          onChange={(e) => set('checkIn', e.target.value)}
-          style={cellInput}
+      {/* Takes the whole row: a two-month calendar has nowhere to open inside
+          a 150px grid cell, and the arrival and departure belong together. */}
+      <div style={{ gridColumn: '1 / -1' }}>
+        <DateRangePicker
+          checkIn={draft.checkIn}
+          checkOut={draft.checkOut}
+          onChange={({ checkIn, checkOut }) => setDraft((d) => ({ ...d, checkIn, checkOut }))}
         />
-      </Cell>
-
-      <Cell label="ອອກ">
-        <input
-          type="date"
-          value={draft.checkOut}
-          min={draft.checkIn ? addDaysIso(draft.checkIn, 1) : addDaysIso(todayIso(), 1)}
-          onChange={(e) => set('checkOut', e.target.value)}
-          style={cellInput}
-        />
-      </Cell>
+      </div>
 
       <Cell label="ຜູ້ເຂົ້າພັກ">
         <select

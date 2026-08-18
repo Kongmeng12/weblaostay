@@ -118,9 +118,20 @@ export class SettingsService {
   /**
    * Upserts the given keys. Only keys already known to `PlatformSettings` are
    * written, so a typo in a request body cannot create a setting nothing reads.
+   *
+   * The `!= null` half is load-bearing, not tidiness. Every optional field on
+   * the settings DTO exists as an own property once class-transformer has
+   * built the instance, whether or not the request carried it, so `keys` alone
+   * reports the whole settings object as touched — and `String(undefined)` is
+   * the string `"undefined"`. Saving one field on one settings screen used to
+   * write that literal over every other row; `get()` then failed to parse them
+   * and fell back to the defaults, which is why it looked like nothing was
+   * wrong. The controller already filters the same way before writing its
+   * audit entry (`admin.controller.ts`, `updateSettings`); this is the copy
+   * that guards the database.
    */
   async update(patch: Partial<PlatformSettings>, adminUserId: bigint): Promise<PlatformSettings> {
-    const entries = Object.entries(patch).filter(([k]) => k in DEFAULTS);
+    const entries = Object.entries(patch).filter(([k, v]) => k in DEFAULTS && v != null);
     if (!entries.length) return this.get();
 
     await this.prisma.$transaction(

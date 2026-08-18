@@ -4,12 +4,12 @@ const LAO_MONTHS_SHORT = [
   'ກ.ຄ.', 'ສ.ຫ.', 'ກ.ຍ.', 'ຕ.ລ.', 'ພ.ຈ.', 'ທ.ວ.',
 ];
 
-const LAO_MONTHS_LONG = [
+export const LAO_MONTHS_LONG = [
   'ມັງກອນ', 'ກຸມພາ', 'ມີນາ', 'ເມສາ', 'ພຶດສະພາ', 'ມິຖຸນາ',
   'ກໍລະກົດ', 'ສິງຫາ', 'ກັນຍາ', 'ຕຸລາ', 'ພະຈິກ', 'ທັນວາ',
 ];
 
-const LAO_WEEKDAYS = ['ອາ', 'ຈ', 'ອ', 'ພ', 'ພຫ', 'ສຸ', 'ສ'];
+export const LAO_WEEKDAYS = ['ອາ', 'ຈ', 'ອ', 'ພ', 'ພຫ', 'ສຸ', 'ສ'];
 
 /** `₭1,350,000` */
 export function kip(amount: number | null | undefined): string {

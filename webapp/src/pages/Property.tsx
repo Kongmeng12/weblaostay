@@ -12,7 +12,8 @@ import {
   PROPERTY_TYPE_LABEL,
   BED_TYPE_LABEL,
 } from '../theme';
-import { addDaysIso, kip, laoDate, nightsBetween, stars, todayIso } from '../lib/format';
+import { addDaysIso, kip, laoDate, nightsBetween, stars } from '../lib/format';
+import { DateRangePicker } from '../components/DateRangePicker';
 import {
   Button,
   Card,
@@ -71,7 +72,11 @@ export function PropertyPage() {
 
   function setDates(next: { checkIn?: string; checkOut?: string; guests?: number }) {
     const merged = { checkIn, checkOut, guests, ...next };
-    if (next.checkIn && (!merged.checkOut || merged.checkOut <= next.checkIn)) {
+    // Only guess a departure when the caller did not name one. `DateRangePicker`
+    // sends both ends together and deliberately sends an empty check-out
+    // between the two taps — filling that in would collapse the range it is
+    // still drawing.
+    if (next.checkOut === undefined && next.checkIn && (!merged.checkOut || merged.checkOut <= next.checkIn)) {
       merged.checkOut = addDaysIso(next.checkIn, 1);
     }
     setParams(
@@ -193,18 +198,15 @@ export function PropertyPage() {
             gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
           }}
         >
-          <DateCell
-            label="ເຂົ້າພັກ"
-            value={checkIn}
-            min={todayIso()}
-            onChange={(v) => setDates({ checkIn: v })}
-          />
-          <DateCell
-            label="ອອກ"
-            value={checkOut}
-            min={checkIn ? addDaysIso(checkIn, 1) : addDaysIso(todayIso(), 1)}
-            onChange={(v) => setDates({ checkOut: v })}
-          />
+          {/* Both ends in one calendar — see DateRangePicker. It spans the row
+              so the two months have somewhere to open. */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <DateRangePicker
+              checkIn={checkIn}
+              checkOut={checkOut}
+              onChange={(range) => setDates(range)}
+            />
+          </div>
           <label>
             <span style={{ font: f(700, 11.5), color: c.muted, display: 'block', marginBottom: 6 }}>
               ຜູ້ເຂົ້າພັກ
@@ -487,33 +489,6 @@ const dateInput: React.CSSProperties = {
   color: c.text,
   outline: 'none',
 };
-
-function DateCell({
-  label,
-  value,
-  min,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  min: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <label>
-      <span style={{ font: f(700, 11.5), color: c.muted, display: 'block', marginBottom: 6 }}>
-        {label}
-      </span>
-      <input
-        type="date"
-        value={value}
-        min={min}
-        onChange={(e) => onChange(e.target.value)}
-        style={dateInput}
-      />
-    </label>
-  );
-}
 
 function Rule({ label, value }: { label: string; value: string }) {
   return (

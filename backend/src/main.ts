@@ -5,7 +5,10 @@ import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import compression from 'compression';
-import { mkdirSync } from 'node:fs';
+import express from 'express';
+import type { NextFunction, Request, Response } from 'express';
+import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { UPLOAD_ROOT, UPLOAD_URL_PREFIX } from './uploads/storage.interface';
@@ -56,6 +59,66 @@ async function bootstrap(): Promise<void> {
       maxAge: '30d',
       index: false,
     });
+  }
+
+  // The two web apps, served by this same process.
+  //
+  // Deliberately not on Pages or any other host. Both SPAs call the API at the
+  // relative `/api`, and `local-disk.storage.ts` writes the relative
+  // `/uploads/<key>` into the database as a photo's public URL — so one origin
+  // has to answer all three. Splitting them would mean rewriting every photo
+  // URL already stored.
+  //
+  // `ADMIN_HOST` picks the back office by Host header; everything else gets the
+  // guest site. Leave it unset, or leave an app unbuilt, and that app is simply
+  // not served — the API still is, which is what development wants.
+  const dist = (key: string, name: string): string =>
+    config.get<string>(key)?.trim() || join(__dirname, '..', '..', name, 'dist');
+
+  const spa = (dir: string) => {
+    // `index: false` so the shell is never served by the static handler: a
+    // fresh deploy changes index.html while the hashed assets beside it do not,
+    // and a cached shell would ask for the previous build's chunks.
+    const files = express.static(dir, { index: false, maxAge: '1h' });
+    const shell = join(dir, 'index.html');
+
+    return (req: Request, res: Response, next: NextFunction): void => {
+      files(req, res, () => {
+        // A miss is not a 404 — the SPA owns its own routing, so `/property/42`
+        // has no file behind it and still has to be answered with the shell.
+        if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+        res.sendFile(shell, (err: unknown) => {
+          if (err) next(err);
+        });
+      });
+    };
+  };
+
+  const adminHost = config.get<string>('ADMIN_HOST')?.trim().toLowerCase();
+  const guestDir = dist('WEBAPP_DIST', 'webapp');
+  const adminDir = dist('WEBADMIN_DIST', 'webadmin');
+
+  const guestSite = existsSync(join(guestDir, 'index.html')) ? spa(guestDir) : null;
+  const adminSite = adminHost && existsSync(join(adminDir, 'index.html')) ? spa(adminDir) : null;
+
+  if (guestSite || adminSite) {
+    // Registered before Nest mounts its controllers — `listen()` does that —
+    // so the API's own prefixes are stepped over explicitly rather than relied
+    // on to have matched first. `/uploads` is skipped even when the photos are
+    // in a bucket and nothing serves it here: a missing photo must 404, not
+    // come back as the guest site's HTML with status 200.
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      const path = req.path;
+      if (path === '/api' || path.startsWith('/api/')) return next();
+      if (path === UPLOAD_URL_PREFIX || path.startsWith(`${UPLOAD_URL_PREFIX}/`)) return next();
+
+      const site = adminSite && req.hostname.toLowerCase() === adminHost ? adminSite : guestSite;
+      if (!site) return next();
+      site(req, res, next);
+    });
+
+    const served = [guestSite && 'webapp', adminSite && `webadmin (${adminHost})`].filter(Boolean);
+    new Logger('Bootstrap').log(`Serving ${served.join(' and ')}`);
   }
 
   app.useGlobalPipes(
