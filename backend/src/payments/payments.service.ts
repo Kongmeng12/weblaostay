@@ -188,20 +188,30 @@ export class PaymentsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // The `payment.status === paid` check above reads outside this
+      // transaction, so two callbacks arriving close together (a provider
+      // webhook retry racing a manual settle, say) can both sail past it
+      // before either has written `paid`. This update is the real guard:
+      // `status: { not: paid }` only matches while unpaid, and Postgres
+      // holds the row lock until commit, so the second transaction's update
+      // blocks, then re-checks the condition and matches zero rows.
+      const updated = await tx.payments.updateMany({
+        where: { payment_id: payment.payment_id, status: { not: payment_status.paid } },
+        data: {
+          status: payment_status.paid,
+          paid_at: new Date(),
+          txn_ref: result.txnRef ?? payment.txn_ref,
+        },
+      });
+      if (updated.count === 0) {
+        return { accepted: true, duplicate: true, paymentId: payment.payment_id.toString() };
+      }
+
       const booking = await tx.bookings.findUniqueOrThrow({
         where: { booking_id: payment.booking_id },
         include: {
           booking_items: true,
           properties: { select: { partner_id: true, property_name: true } },
-        },
-      });
-
-      await tx.payments.update({
-        where: { payment_id: payment.payment_id },
-        data: {
-          status: payment_status.paid,
-          paid_at: new Date(),
-          txn_ref: result.txnRef ?? payment.txn_ref,
         },
       });
 
