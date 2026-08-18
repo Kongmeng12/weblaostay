@@ -105,9 +105,13 @@ export class PhaJayPaymentProvider implements PaymentProvider {
       tag2: request.bookingId.toString(),
     });
 
-    let json: { message?: string; transactionId?: string; qrCode?: string; link?: string };
+    // `fetch` on this host occasionally throws a bare "fetch failed" with no
+    // HTTP response at all — a dropped/stale connection, not PhaJay saying
+    // no. That is worth one silent retry; a real answer from PhaJay (any
+    // status code) is not, so only a throw from `fetch` itself loops here.
+    let res: Response;
     try {
-      const res = await fetch(`${baseUrl}/v1/api/${segment}/${BANKS[bank]}`, {
+      res = await this.fetchWithRetry(`${baseUrl}/v1/api/${segment}/${BANKS[bank]}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -116,9 +120,17 @@ export class PhaJayPaymentProvider implements PaymentProvider {
           secretKey,
         },
         body,
-        signal: AbortSignal.timeout(15_000),
       });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`PhaJay ${bank} QR request failed: ${message}`);
+      throw new ServiceUnavailableException(
+        'ລະບົບຊຳລະບໍ່ຕອບສະໜອງ ກະລຸນາລອງໃໝ່ · The payment service is unavailable, please try again',
+      );
+    }
 
+    let json: { message?: string; transactionId?: string; qrCode?: string; link?: string };
+    try {
       const text = await res.text();
       if (!res.ok) throw new Error(`${res.status} ${text.slice(0, 200)}`);
       json = JSON.parse(text) as typeof json;
@@ -183,6 +195,27 @@ export class PhaJayPaymentProvider implements PaymentProvider {
       status: status === COMPLETED ? 'paid' : 'failed',
       ...(status !== COMPLETED && { reason: `PhaJay reported ${status ?? 'no status'}` }),
     };
+  }
+
+  /**
+   * One retry, after a short pause, and only when `fetch` itself throws.
+   *
+   * The timeout is applied here rather than passed in by the caller so each
+   * attempt gets its own fresh `AbortSignal` — a signal built once outside
+   * this method and reused would already be most of the way to firing by
+   * the time a retry started, cutting its budget short for no reason.
+   */
+  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+    const attempt = () => fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
+    try {
+      return await attempt();
+    } catch (err) {
+      this.logger.warn(
+        `PhaJay request failed once, retrying: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return attempt();
+    }
   }
 
   private bank(): Bank {
