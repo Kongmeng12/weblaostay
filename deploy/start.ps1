@@ -33,11 +33,17 @@ if (-not (Test-Path (Join-Path $backend 'dist\main.js'))) {
 # with the API running and nothing serving it, which is exactly what happened.
 $cloudflared = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
 if (-not $cloudflared) {
-  $fallback = Join-Path $env:LOCALAPPDATA 'cloudflared\cloudflared.exe'
-  if (Test-Path $fallback) { $cloudflared = $fallback }
+  # Where different install methods put it: LOCALAPPDATA (some manual
+  # installs), Program Files (x86) (winget, as of the 2026.8.x package).
+  $candidates = @(
+    (Join-Path $env:LOCALAPPDATA 'cloudflared\cloudflared.exe'),
+    "${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe",
+    "$env:ProgramFiles\cloudflared\cloudflared.exe"
+  )
+  $cloudflared = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
 if (-not $cloudflared) {
-  throw "cloudflared was not found on PATH or in $env:LOCALAPPDATA\cloudflared. Nothing was started."
+  throw "cloudflared was not found on PATH, in $env:LOCALAPPDATA\cloudflared, or in Program Files. Nothing was started."
 }
 
 Start-Process -FilePath 'node' -ArgumentList 'dist/main' `
@@ -59,10 +65,33 @@ foreach ($i in 1..30) {
 if (-not $ready) { throw "The API did not answer /api/health within 30s — see deploy\logs\api.err.log" }
 Write-Host "API is up." -ForegroundColor Green
 
-Start-Process -FilePath $cloudflared -ArgumentList 'tunnel', 'run', 'laostay' `
-  -WorkingDirectory $PSScriptRoot -WindowStyle Hidden `
-  -RedirectStandardOutput (Join-Path $logs 'tunnel.log') `
-  -RedirectStandardError  (Join-Path $logs 'tunnel.err.log')
+# Two machines can run this tunnel as independent connectors — Cloudflare
+# load-balances between them, and DNS already points at the tunnel ID itself,
+# not at either machine. The one that originally ran `tunnel-setup.ps1` has
+# the tunnel's credentials JSON in ~/.cloudflared and runs normally; any other
+# machine logged into the same account has no such file (it was never copied,
+# on purpose — that's the whole point of a token) and instead asks Cloudflare
+# for a fresh run token each start.
+$CfDir       = Join-Path $env:USERPROFILE '.cloudflared'
+$tunnelInfo  = & $cloudflared tunnel list --output json | ConvertFrom-Json | Where-Object { $_.name -eq 'laostay' }
+if (-not $tunnelInfo) {
+  throw "Tunnel 'laostay' not found for the logged-in Cloudflare account. Run 'cloudflared tunnel login' then deploy\tunnel-setup.ps1."
+}
+$credFile = Join-Path $CfDir "$($tunnelInfo.id).json"
+
+if (Test-Path $credFile) {
+  Start-Process -FilePath $cloudflared -ArgumentList 'tunnel', 'run', 'laostay' `
+    -WorkingDirectory $PSScriptRoot -WindowStyle Hidden `
+    -RedirectStandardOutput (Join-Path $logs 'tunnel.log') `
+    -RedirectStandardError  (Join-Path $logs 'tunnel.err.log')
+} else {
+  $token = & $cloudflared tunnel token laostay
+  if (-not $token) { throw "Could not obtain a run token for tunnel 'laostay'." }
+  Start-Process -FilePath $cloudflared -ArgumentList 'tunnel', 'run', '--token', $token `
+    -WorkingDirectory $PSScriptRoot -WindowStyle Hidden `
+    -RedirectStandardOutput (Join-Path $logs 'tunnel.log') `
+    -RedirectStandardError  (Join-Path $logs 'tunnel.err.log')
+}
 Write-Host "Tunnel starting."
 
 Write-Host ""

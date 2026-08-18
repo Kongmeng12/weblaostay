@@ -23,7 +23,33 @@ if (-not (Test-Path (Join-Path $backend 'dist\main.js'))) {
 }
 
 $node = (Get-Command node).Source
-$cfd  = (Get-Command cloudflared).Source
+$cfd  = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
+if (-not $cfd) {
+  $candidates = @(
+    (Join-Path $env:LOCALAPPDATA 'cloudflared\cloudflared.exe'),
+    "${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe",
+    "$env:ProgramFiles\cloudflared\cloudflared.exe"
+  )
+  $cfd = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+if (-not $cfd) { throw "cloudflared was not found on PATH, in $env:LOCALAPPDATA\cloudflared, or in Program Files." }
+
+# Same two auth paths as start.ps1: the machine that ran tunnel-setup.ps1 has
+# the tunnel's credentials JSON and runs normally; any other machine logged
+# into the same account has no such file and runs on a token instead — see
+# start.ps1's comment for why that's on purpose, not a workaround.
+$tunnelInfo = & $cfd tunnel list --output json | ConvertFrom-Json | Where-Object { $_.name -eq 'laostay' }
+if (-not $tunnelInfo) {
+  throw "Tunnel 'laostay' not found for the logged-in Cloudflare account. Run 'cloudflared tunnel login' then deploy\tunnel-setup.ps1."
+}
+$credFile   = Join-Path (Join-Path $env:USERPROFILE '.cloudflared') "$($tunnelInfo.id).json"
+$tunnelArgs = if (Test-Path $credFile) {
+  'tunnel run laostay'
+} else {
+  $token = & $cfd tunnel token laostay
+  if (-not $token) { throw "Could not obtain a run token for tunnel 'laostay'." }
+  "tunnel run --token $token"
+}
 
 # ExecutionTimeLimit 0 = never kill it for running too long, which is the whole
 # point. RestartCount is per-day and generous: a database that is briefly
@@ -46,7 +72,7 @@ $tasks = @(
   @{
     Name = 'LaoStay Tunnel'
     Exe  = $cfd
-    Args = 'tunnel run laostay'
+    Args = $tunnelArgs
     Dir  = $PSScriptRoot
   }
 )
