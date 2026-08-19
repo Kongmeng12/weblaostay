@@ -40,7 +40,20 @@ async function bootstrap(): Promise<void> {
 
   // No cross-origin resource policy fuss: this process serves JSON and the
   // uploaded photos, which the apps load from a different origin.
-  app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
+  //
+  // The referrer policy is loosened from helmet's `no-referrer` default for
+  // the map on the property page: OpenStreetMap's tile usage policy asks that
+  // callers identify themselves, and with no referrer at all their operators
+  // cannot tell us apart from a scraper. `strict-origin-when-cross-origin`
+  // sends `https://phaphak.com/` and nothing more — the tile server learns who
+  // is asking, and never which property a guest happens to be looking at.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: false,
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    }),
+  );
   app.use(compression());
 
   // Uploaded property and room photos, served outside the /api prefix so the

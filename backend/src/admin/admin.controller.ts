@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsIn,
@@ -30,6 +31,7 @@ import {
   MinLength,
 } from 'class-validator';
 import {
+  Prisma,
   admin_role,
   booking_status,
   partner_status,
@@ -66,6 +68,46 @@ class ListPartnersDto extends PaginationDto {
   @Type(() => Number)
   @IsInt()
   provinceId?: number;
+}
+
+class ListPropertiesDto extends PaginationDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  provinceId?: number;
+
+  /** Only the ones with no pin yet — the queue this screen exists to empty. */
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  missingLocation?: boolean;
+}
+
+/**
+ * A property's pin.
+ *
+ * Both halves are required together. `properties.geog` is a generated column
+ * derived from the pair, so writing one without the other silently yields NULL
+ * and takes the property out of distance search without any error to notice —
+ * the partner-facing DTO allows exactly that, and this one will not.
+ *
+ * The bounds are Laos, not the globe. `@IsLatitude()` alone would accept a pin
+ * dropped in the Atlantic, which validates cleanly and is simply wrong; a
+ * mis-typed sign or swapped pair is the realistic mistake here and this is
+ * what catches it.
+ */
+class SetLocationDto {
+  @Type(() => Number)
+  @IsNumber()
+  @Min(13.5)
+  @Max(22.6)
+  lat!: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(100)
+  @Max(108)
+  lng!: number;
 }
 
 class ListBookingsAdminDto extends PaginationDto {
@@ -540,6 +582,91 @@ export class AdminController {
    * Where the partners are. Declared before `partners/:id`-shaped routes would
    * be, so "provinces" is never read as an id.
    */
+  // ── property locations ────────────────────────────────────────────────────
+  //
+  // The one thing an admin can change about a property. Everything else about
+  // it belongs to the partner who owns it and is edited from their own app;
+  // coordinates are here because nothing in that app ever asks for them, so
+  // without this screen every property outside the demo seed has no pin and
+  // never gets one.
+
+  @Get('properties')
+  async properties(@Query() query: ListPropertiesDto) {
+    const where = {
+      deleted_at: null,
+      ...(query.provinceId ? { province_id: query.provinceId } : {}),
+      ...(query.q
+        ? { property_name: { contains: query.q.trim(), mode: 'insensitive' as const } }
+        : {}),
+      // Either coordinate being null means no pin: `geog` is generated from
+      // the pair and needs both.
+      ...(query.missingLocation ? { OR: [{ latitude: null }, { longitude: null }] } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.properties.findMany({
+        where,
+        skip: query.skip,
+        take: query.limit,
+        // Unpinned first: this list is a worklist, not a catalogue.
+        orderBy: [{ latitude: { sort: 'asc', nulls: 'first' } }, { property_name: 'asc' }],
+        select: {
+          property_id: true,
+          property_name: true,
+          property_type: true,
+          status: true,
+          address_detail: true,
+          latitude: true,
+          longitude: true,
+          provinces: { select: { province_name_lo: true } },
+          districts: { select: { district_name_lo: true } },
+          partners: { select: { business_name: true } },
+        },
+      }),
+      this.prisma.properties.count({ where }),
+    ]);
+
+    return paged(
+      rows.map((p) => ({
+        id: p.property_id.toString(),
+        name: p.property_name,
+        type: p.property_type,
+        status: p.status,
+        partner: p.partners.business_name,
+        province: p.provinces?.province_name_lo ?? null,
+        district: p.districts?.district_name_lo ?? null,
+        address: p.address_detail,
+        lat: p.latitude ? Number(p.latitude.toString()) : null,
+        lng: p.longitude ? Number(p.longitude.toString()) : null,
+      })),
+      total,
+      query,
+    );
+  }
+
+  @Patch('properties/:id/location')
+  @Audit('property_location_update', 'admin', 'properties')
+  async setPropertyLocation(@Param('id') id: string, @Body() dto: SetLocationDto) {
+    const propertyId = BigInt(id);
+    const found = await this.prisma.properties.findFirst({
+      where: { property_id: propertyId, deleted_at: null },
+      select: { property_id: true },
+    });
+    if (!found) throw new NotFoundException('ບໍ່ພົບທີ່ພັກ · Property not found');
+
+    const updated = await this.prisma.properties.update({
+      where: { property_id: propertyId },
+      data: { latitude: new Prisma.Decimal(dto.lat), longitude: new Prisma.Decimal(dto.lng) },
+      select: { property_id: true, latitude: true, longitude: true },
+    });
+
+    return {
+      id: updated.property_id.toString(),
+      lat: updated.latitude ? Number(updated.latitude.toString()) : null,
+      lng: updated.longitude ? Number(updated.longitude.toString()) : null,
+    };
+  }
+
   @Get('partners/provinces')
   async partnersByProvince() {
     const rows = await this.prisma.$queryRaw<

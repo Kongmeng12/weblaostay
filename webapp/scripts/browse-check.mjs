@@ -133,6 +133,44 @@ check('property page shows the cancellation policy', detail.includes('ນະໂ�
 check('property page shows house rules', detail.includes('ກົດລະບຽບທີ່ພັກ'));
 check('booking bar prompts for a room', detail.includes('ເລືອກຫ້ອງເພື່ອຈອງ'));
 
+// The location block. It renders whether or not the property has coordinates,
+// so the section itself is always expected; the map only when there is a pin
+// to put on it. Tiles come from a third party, and the requestfailed handler
+// above deliberately ignores foreign origins — so a dead tile server would go
+// unnoticed unless something checks that a tile actually arrived.
+const location = await page.evaluate(async () => {
+  const block = document.querySelector('[data-testid="location"]');
+  if (!block) return { found: false };
+  const map = block.querySelector('[data-testid="property-map"]');
+  if (!map) return { found: true, map: false, link: !!block.querySelector('a[href*="google.com/maps"]') };
+
+  // Leaflet appends tiles as it loads them; give the first one a moment.
+  const loaded = async () => {
+    for (let i = 0; i < 40; i++) {
+      const tiles = [...map.querySelectorAll('img.leaflet-tile')];
+      if (tiles.some((t) => t.complete && t.naturalWidth > 0)) return tiles.length;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return 0;
+  };
+  return {
+    found: true,
+    map: true,
+    tiles: await loaded(),
+    attribution: (map.querySelector('.leaflet-control-attribution')?.textContent ?? '').includes(
+      'OpenStreetMap',
+    ),
+    link: !!block.querySelector('a[href*="google.com/maps"]'),
+  };
+});
+
+check('the property page shows a location block', location.found);
+check('the location block links out to Google Maps', location.link, location.map ? 'with a pin' : 'address only');
+if (location.map) {
+  check('the map loads its tiles', location.tiles > 0, `${location.tiles} tile(s)`);
+  check('the map credits OpenStreetMap', location.attribution);
+}
+
 // Selecting a room arms the booking button.
 const rooms = await page.$$('[data-room-id]');
 const bookable = await page.$('[data-room-bookable="true"]');

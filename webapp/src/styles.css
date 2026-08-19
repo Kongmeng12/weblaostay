@@ -87,6 +87,40 @@ img {
   .laostay-split > .laostay-aside {
     position: static !important;
   }
+  /* Opt-in reordering for the one case where the panel is not a summary of the
+     content but a prerequisite for it: on the property page the guest picks
+     dates before a room, so once the columns stack the panel has to come
+     first. The three pages that show a booking summary do not set this. */
+  .laostay-split.laostay-aside-first > .laostay-aside {
+    order: -1;
+  }
+}
+
+/* The mirror of .laostay-mobile-only: content that only earns its space once
+   there are two columns. On the property page the sidebar's price and booking
+   button are exactly what the bottom bar already shows on a phone, and
+   repeating them there just pushed the rooms further down. */
+.laostay-desktop-only {
+  display: none;
+}
+@media (min-width: 861px) {
+  .laostay-desktop-only {
+    display: block;
+  }
+}
+
+/* Shown only once the layout has collapsed to a single column. The property
+   page's bottom booking bar duplicates the sidebar panel, and above 860px it
+   would sit on top of it. */
+/* !important because StickyBar sets `display: flex` inline, and an inline
+   style beats a stylesheet rule no matter how specific. */
+.laostay-mobile-only {
+  display: none !important;
+}
+@media (max-width: 860px) {
+  .laostay-mobile-only {
+    display: flex !important;
+  }
 }
 
 /* A horizontal strip that scrolls without showing a bar — photo carousels. */
@@ -137,4 +171,17 @@ img {
   .laostay-cal-second {
     display: none;
   }
+}
+
+/* Leaflet ships 30x30 zoom buttons. They are as much a tap target as anything
+   else on the page, so they get the same floor. The attribution links stay at
+   their default size: they are licence small print, not navigation, and every
+   map on the web shows them that way. */
+.leaflet-touch .leaflet-bar a,
+.leaflet-bar a {
+  /* !important because leaflet.css arrives in the lazily-loaded map chunk,
+     after this file, and would otherwise win on equal specificity. */
+  width: 44px !important;
+  height: 44px !important;
+  line-height: 44px !important;
 }

@@ -116,6 +116,21 @@ export interface CustomerSummary {
 
 // ── partners & approvals ─────────────────────────────────────────────────────
 
+/** A property as the location screen lists it. */
+export interface PropertyRow {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  partner: string;
+  province: string | null;
+  district: string | null;
+  address: string | null;
+  /** Null until someone drops a pin — see the Properties page. */
+  lat: number | null;
+  lng: number | null;
+}
+
 export interface PartnerRow {
   id: string;
   businessName: string;

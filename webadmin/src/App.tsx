@@ -10,6 +10,7 @@ import { Payout } from './pages/Payout';
 import { Refunds } from './pages/Refunds';
 import { Approvals } from './pages/Approvals';
 import { Partners } from './pages/Partners';
+import { Properties } from './pages/Properties';
 import { Reviews } from './pages/Reviews';
 import { ReviewReports } from './pages/ReviewReports';
 import { Promos } from './pages/Promos';
@@ -78,6 +79,7 @@ function Root() {
         />
         <Route path="approvals" element={<Approvals />} />
         <Route path="partners" element={<Partners />} />
+        <Route path="properties" element={<Properties />} />
         <Route path="reviews" element={<Reviews />} />
         <Route path="review-reports" element={<ReviewReports />} />
         <Route path="promos" element={<Promos />} />

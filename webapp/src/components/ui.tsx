@@ -1,5 +1,72 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { c, f, radius, shadow } from '../theme';
+import { c, f, radius, shadow, space, type as t, MAX_WIDTH } from '../theme';
+
+// ── page shell ───────────────────────────────────────────────────────────────
+
+/**
+ * How wide a page's content column is allowed to get.
+ *
+ * `wide` is the catalogue and anything with a grid. `narrow` is for reading —
+ * a single column of prose at 1120px runs to well over a hundred characters a
+ * line, which is why the help and static pages already clamped themselves.
+ * `form` is a single stack of inputs.
+ */
+const PAGE_WIDTH = { wide: MAX_WIDTH, narrow: 720, form: 620 } as const;
+
+/**
+ * The page container, in one place.
+ *
+ * Thirteen of the fifteen pages used to repeat `maxWidth` + `margin: '0 auto'`
+ * + a padding string inline, and between them they had ten different paddings
+ * for the same job — so no two screens started at the same height or ended with
+ * the same breathing room. The 18px horizontal gutter is kept because it was
+ * the one value every page already agreed on.
+ */
+export function Page({
+  width = 'wide',
+  children,
+  style,
+}: {
+  width?: keyof typeof PAGE_WIDTH;
+  children: ReactNode;
+  style?: CSSProperties;
+}) {
+  return (
+    <div
+      style={{
+        maxWidth: PAGE_WIDTH[width],
+        margin: '0 auto',
+        padding: `${space[5]}px 18px ${space[7]}px`,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The `<h1>` a page opens with, plus an optional action on the same line.
+ *
+ * Ten pages wrote this by hand with five different bottom margins, so the
+ * distance from title to content changed as you moved around the app.
+ */
+export function PageTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'space-between',
+        gap: space[3],
+        marginBottom: space[5],
+      }}
+    >
+      <h1 style={{ font: t.h1, color: c.text, margin: 0 }}>{children}</h1>
+      {right}
+    </div>
+  );
+}
 
 // ── buttons ──────────────────────────────────────────────────────────────────
 
@@ -12,7 +79,7 @@ const BUTTON_PADDING: Record<ButtonSize, string> = {
   lg: '15px 24px',
 };
 
-const BUTTON_FONT: Record<ButtonSize, number> = { sm: 12.5, md: 13.5, lg: 15 };
+const BUTTON_FONT: Record<ButtonSize, number> = { sm: 12, md: 13, lg: 15 };
 
 export function Button({
   children,
@@ -113,7 +180,7 @@ export function Section({
           marginBottom: 12,
         }}
       >
-        <h2 style={{ font: f(800, 18), color: c.text, margin: 0 }}>{title}</h2>
+        <h2 style={{ font: t.h2, color: c.text, margin: 0 }}>{title}</h2>
         {right}
       </div>
       {children}
@@ -130,7 +197,7 @@ export function Pill({ bg, fg, children }: { bg: string; fg: string; children: R
         color: fg,
         padding: '4px 10px',
         borderRadius: 999,
-        font: f(700, 11.5),
+        font: t.caption,
         whiteSpace: 'nowrap',
       }}
     >
@@ -147,7 +214,7 @@ export const inputStyle: CSSProperties = {
   background: '#fff',
   border: `1px solid ${c.border}`,
   borderRadius: radius.md,
-  font: f(500, 14),
+  font: t.body,
   color: c.text,
   outline: 'none',
 };
@@ -165,16 +232,16 @@ export function Field({
 }) {
   return (
     <label style={{ display: 'block' }}>
-      <span style={{ font: f(700, 12.5), color: c.text, display: 'block', marginBottom: 7 }}>
+      <span style={{ font: t.label, color: c.text, display: 'block', marginBottom: space[1] }}>
         {label}
       </span>
       {children}
       {error ? (
-        <span style={{ font: f(500, 11.5), color: c.dangerFg, display: 'block', marginTop: 5 }}>
+        <span style={{ font: t.caption, color: c.dangerFg, display: 'block', marginTop: space[1] }}>
           {error}
         </span>
       ) : hint ? (
-        <span style={{ font: f(400, 11.5), color: c.muted, display: 'block', marginTop: 5 }}>
+        <span style={{ font: t.caption, color: c.muted, display: 'block', marginTop: space[1] }}>
           {hint}
         </span>
       ) : null}
@@ -209,7 +276,7 @@ export function Loading({ label = 'ກຳລັງໂຫຼດ...' }: { label?: 
         justifyContent: 'center',
         gap: 12,
         padding: '56px 20px',
-        font: f(500, 13.5),
+        font: t.bodySm,
         color: c.muted,
       }}
     >
@@ -251,7 +318,7 @@ export function ErrorNote({ error, onRetry }: { error: unknown; onRetry?: () => 
             background: 'none',
             border: 'none',
             color: c.dangerFg,
-            font: f(700, 12.5),
+            font: t.label,
             cursor: 'pointer',
             padding: 0,
             textDecoration: 'underline',
@@ -373,7 +440,7 @@ export function Stars({ value, count }: { value: number; count?: number }) {
     return <span style={{ font: f(500, 12), color: c.faint }}>ຍັງບໍ່ມີຮີວິວ</span>;
   }
   return (
-    <span style={{ font: f(600, 12.5), color: c.soft }}>
+    <span style={{ font: t.label, color: c.soft }}>
       <span style={{ color: c.star }}>★</span> {value.toFixed(1)}
       <span style={{ color: c.faint }}> ({count})</span>
     </span>
@@ -383,9 +450,16 @@ export function Stars({ value, count }: { value: number; count?: number }) {
 // ── layout ───────────────────────────────────────────────────────────────────
 
 /** A bar pinned to the bottom of the viewport — the booking call to action. */
-export function StickyBar({ children }: { children: ReactNode }) {
+export function StickyBar({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <div
+      className={className}
       style={{
         position: 'sticky',
         bottom: 0,
@@ -497,7 +571,7 @@ export function MoneyRow({
     >
       <span style={{ font: f(strong ? 700 : 400, strong ? 14 : 13), color: strong ? c.text : c.muted }}>
         {label}
-        {note && <span style={{ font: f(400, 11.5), color: c.faint }}> · {note}</span>}
+        {note && <span style={{ font: t.caption, color: c.faint }}> · {note}</span>}
       </span>
       <span
         style={{

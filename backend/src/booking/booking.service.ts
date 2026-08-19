@@ -330,6 +330,12 @@ export class BookingService {
         province: booking.properties.provinces?.province_name_lo ?? null,
         district: booking.properties.districts?.district_name_lo ?? null,
         address: booking.properties.address_detail,
+        // A guest holding a confirmed booking is the person most likely to
+        // need directions, so the trip screen gets the pin as well as the
+        // written address. Decimal has to be stringified before Number or the
+        // precision the column was chosen for is lost.
+        lat: booking.properties.latitude ? Number(booking.properties.latitude.toString()) : null,
+        lng: booking.properties.longitude ? Number(booking.properties.longitude.toString()) : null,
         phone: booking.properties.phone,
         host: booking.properties.partners.business_name,
         photo: booking.properties.property_images[0]?.image_url ?? null,

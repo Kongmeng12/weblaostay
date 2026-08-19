@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
-import { c, f, radius, MAX_WIDTH } from '../theme';
+import { c, f, radius, space, type as t, TAP, MAX_WIDTH } from '../theme';
 import { Section, Skeleton } from '../components/ui';
 import { PropertyCard } from '../components/PropertyCard';
 import { SearchBar, blankCriteria, type SearchCriteria } from '../components/SearchBar';
@@ -51,24 +51,44 @@ export function HomePage() {
       <section
         style={{
           background: `linear-gradient(150deg, ${c.darkSoft}, ${c.dark} 70%)`,
-          padding: '52px 18px 78px',
+          padding: `${space[5]}px 18px ${space[6]}px`,
         }}
       >
         <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto' }}>
-          <h1 style={{ font: f(800, 34, 44), color: '#fff', margin: '0 0 12px', maxWidth: 560 }}>
+          {/* Fluid rather than fixed: 34px is right on a laptop and wraps the
+              headline onto three lines of a 390px phone, taking the hero past
+              280px tall before a guest has seen anything bookable. */}
+          <h1
+            style={{
+              font: f(800, 34, 44),
+              fontSize: 'clamp(24px, 5.2vw, 34px)',
+              lineHeight: 1.28,
+              color: '#fff',
+              margin: `0 0 ${space[2]}px`,
+              maxWidth: 560,
+            }}
+          >
             ຈອງທີ່ພັກທົ່ວລາວ
           </h1>
-          <p style={{ font: f(400, 15, 25), color: c.onDark, margin: '0 0 30px', maxWidth: 500 }}>
+          <p
+            style={{
+              font: t.body,
+              fontSize: 'clamp(13.5px, 2.6vw, 15px)',
+              color: c.onDark,
+              margin: 0,
+              maxWidth: 500,
+            }}
+          >
             ໂຮມສະເຕ, ເຮືອນພັກ, ຣີສອດ ແລະ ວິນລ່າ — ຈ່າຍດ້ວຍ QR ຜ່ານແອັບທະນາຄານ
           </p>
         </div>
       </section>
 
-      <div style={{ maxWidth: MAX_WIDTH, margin: '-46px auto 0', padding: '0 18px' }}>
+      <div style={{ maxWidth: MAX_WIDTH, margin: `-${space[6]}px auto 0`, padding: '0 18px' }}>
         <SearchBar value={blankCriteria()} onSearch={search} />
       </div>
 
-      <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: '38px 18px 0' }}>
+      <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: `${space[6]}px 18px 0` }}>
         {cms.data?.announcements.map((a) => (
           <div
             key={a.id}
@@ -81,7 +101,7 @@ export function HomePage() {
               marginBottom: 12,
             }}
           >
-            <div style={{ font: f(700, 13.5), color: c.infoFg }}>{a.title}</div>
+            <div style={{ font: t.bodySm, color: c.infoFg }}>{a.title}</div>
             {a.content && (
               <div style={{ font: f(400, 12.5, 20), color: c.soft, marginTop: 3 }}>{a.content}</div>
             )}
@@ -103,37 +123,6 @@ export function HomePage() {
           </div>
         )}
 
-        <Section title="ຈຸດໝາຍຍອດນິຍົມ">
-          {provinces.isLoading ? (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {Array.from({ length: 8 }, (_, i) => (
-                <Skeleton key={i} height={40} width={120} />
-              ))}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {withStock.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => navigate('/search' + qs({ provinceId: p.id }))}
-                  style={{
-                    padding: '10px 16px',
-                    background: c.bg,
-                    border: `1px solid ${c.border}`,
-                    borderRadius: 999,
-                    font: f(600, 13),
-                    color: c.text,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {p.name}
-                  <span style={{ color: c.faint }}> · {p.propertyCount}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </Section>
-
         <Section
           title="ຄະແນນສູງສຸດ"
           right={
@@ -142,7 +131,9 @@ export function HomePage() {
               style={{
                 background: 'none',
                 border: 'none',
-                font: f(700, 13),
+                minHeight: TAP,
+                padding: `0 ${space[2]}px`,
+                font: t.label,
                 color: c.accent,
                 cursor: 'pointer',
               }}
@@ -164,6 +155,38 @@ export function HomePage() {
                   <PropertyCard key={item.id} item={item} to={`/property/${item.id}`} />
                 ))}
           </div>
+        </Section>
+
+        <Section title="ຈຸດໝາຍຍອດນິຍົມ">
+          {provinces.isLoading ? (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {Array.from({ length: 8 }, (_, i) => (
+                <Skeleton key={i} height={40} width={120} />
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {withStock.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => navigate('/search' + qs({ provinceId: p.id }))}
+                  style={{
+                    minHeight: TAP,
+                    padding: `0 ${space[4]}px`,
+                    background: c.bg,
+                    border: `1px solid ${c.border}`,
+                    borderRadius: 999,
+                    font: t.label,
+                    color: c.text,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {p.name}
+                  <span style={{ color: c.faint }}> · {p.propertyCount}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </Section>
 
         <Section title="ຈອງແນວໃດ">
@@ -263,7 +286,7 @@ function Step({ n, title, body }: { n: number; title: string; body: string }) {
         {n}
       </div>
       <div style={{ font: f(700, 15), color: c.text, marginBottom: 5 }}>{title}</div>
-      <div style={{ font: f(400, 13, 21), color: c.muted }}>{body}</div>
+      <div style={{ font: t.bodySm, color: c.muted }}>{body}</div>
     </div>
   );
 }

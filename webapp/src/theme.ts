@@ -56,7 +56,60 @@ export const font = "'Noto Sans Lao', system-ui, -apple-system, sans-serif";
 export const f = (weight: number, size: number, lineHeight?: number): string =>
   `${weight} ${size}px${lineHeight ? `/${lineHeight}px` : ''} ${font}`;
 
-export const radius = { sm: 8, md: 12, lg: 18, xl: 26 } as const;
+export const radius = { sm: 8, md: 12, lg: 18, pill: 999 } as const;
+
+/**
+ * The spacing scale. Every gap, padding and margin should be one of these.
+ *
+ * It exists because the app had no scale at all and drifted badly: 55 distinct
+ * padding values, 24 margin shorthands, and clusters like 8/9/11/12/13/14px
+ * that no eye can tell apart but that together stop anything from lining up.
+ * Steps are far enough apart to read as deliberate.
+ */
+export const space = {
+  1: 4,
+  2: 8,
+  3: 12,
+  4: 16,
+  5: 24,
+  6: 32,
+  7: 48,
+  8: 64,
+} as const;
+
+/**
+ * The type scale, size and line height together.
+ *
+ * The pairing is the point. 82% of this app's `f()` calls used to pass no line
+ * height at all, leaving the browser's ~1.2 — which is too tight for Lao, where
+ * vowels and tone marks stack above and below the base character and collide
+ * with the line above. Every entry here reserves room for them.
+ *
+ * Eight steps replace the 22 sizes the app had accumulated, including three at
+ * half-pixel values that only ever blurred.
+ */
+export const type = {
+  display: f(800, 34, 46),
+  h1: f(800, 26, 36),
+  h2: f(800, 20, 28),
+  h3: f(700, 16, 24),
+  body: f(400, 15, 24),
+  bodySm: f(400, 13.5, 22),
+  label: f(600, 13, 20),
+  caption: f(400, 12, 18),
+} as const;
+
+/**
+ * Breakpoints, readable from JS as well as CSS.
+ *
+ * `lg` and `md` are the two the stylesheet already used as bare numbers; naming
+ * them here means a component can reason about the same thresholds instead of
+ * guessing at them.
+ */
+export const bp = { sm: 560, md: 720, lg: 860, xl: 1120 } as const;
+
+/** The smallest a touch target may be — Apple HIG and WCAG 2.5.5 agree on 44. */
+export const TAP = 44;
 
 /** The widest the content ever gets; the page centres inside it. */
 export const MAX_WIDTH = 1120;

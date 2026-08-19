@@ -11,7 +11,7 @@ import {
   PAYMENT_STATUS_PILL,
   pillFor,
 } from '../theme';
-import { countdown, kip, laoDateFull, laoDateTime } from '../lib/format';
+import { countdown, kip, laoDateFull, laoDateTime, mapsUrl } from '../lib/format';
 import {
   Button,
   Card,
@@ -61,6 +61,11 @@ export function TripDetailPage() {
   const b = query.data!;
   const pill = pillFor(BOOKING_STATUS_PILL, b.status);
   const remaining = b.status === 'pending' ? countdown(b.holdExpiresAt) : null;
+  const directions = mapsUrl(
+    { lat: b.property.lat, lng: b.property.lng, name: b.property.name, address: b.property.address },
+    b.property.district,
+    b.property.province,
+  );
 
   // The API refuses to cancel a stay that is over or already cancelled, so the
   // button is not offered for those. A stay in progress is the property's call.
@@ -129,6 +134,10 @@ export function TripDetailPage() {
                   .join(' · ') || '—'
               }
             />
+            {/* The one row a guest actually opens on the way there. */}
+            {directions && (
+              <Row label="ເສັ້ນທາງ" value="ເປີດໃນ Google Maps" href={directions} />
+            )}
             <Row label="ຫ້ອງ" value={b.roomType?.name ?? '—'} />
             {b.roomType && b.roomType.quantity > 1 && (
               <Row label="ຈຳນວນຫ້ອງ" value={`${b.roomType.quantity} ຫ້ອງ`} />

@@ -1,7 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
-import { c, f, MAX_WIDTH } from '../theme';
+import { c, type as t, MAX_WIDTH, TAP } from '../theme';
 import { nightsBetween } from '../lib/format';
 import { Button, Empty, ErrorNote, Loading, Skeleton } from '../components/ui';
 import { PropertyCard } from '../components/PropertyCard';
@@ -96,7 +96,7 @@ export function SearchPage() {
           margin: '22px 0 16px',
         }}
       >
-        <div style={{ font: f(400, 13), color: c.muted }}>
+        <div style={{ font: t.bodySm, color: c.muted }}>
           {query.isLoading ? (
             'ກຳລັງຄົ້ນຫາ...'
           ) : (
@@ -111,11 +111,12 @@ export function SearchPage() {
           value={sort}
           onChange={(e) => apply({ sort: e.target.value })}
           style={{
+            minHeight: TAP,
             padding: '9px 12px',
             background: '#fff',
             border: `1px solid ${c.border}`,
             borderRadius: 12,
-            font: f(600, 12.5),
+            font: t.caption,
             color: c.soft,
             cursor: 'pointer',
           }}
@@ -163,7 +164,7 @@ export function SearchPage() {
               >
                 ກ່ອນໜ້າ
               </Button>
-              <span style={{ font: f(600, 13), color: c.muted }}>
+              <span style={{ font: t.label, color: c.muted }}>
                 {page} / {query.data.pages}
               </span>
               <Button

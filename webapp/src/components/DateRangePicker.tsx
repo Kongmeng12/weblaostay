@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { c, f, radius, shadow } from '../theme';
+import { c, f, radius, shadow, space, TAP } from '../theme';
 import { LAO_MONTHS_LONG, LAO_WEEKDAYS, laoDate, nightsBetween, todayIso } from '../lib/format';
 
 /**
@@ -116,9 +116,9 @@ export function DateRangePicker({
       <div style={head}>
         <NavButton label="‹" onClick={() => setCursor(prevMonth(cursor))} disabled={cursor <= monthOf(today)} />
         <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
-          <div style={{ font: f(800, 13.5), color: c.text }}>
+          <div style={{ font: f(800, 13, 20), color: c.text }}>
             {!checkIn || picking === 'in' ? 'ເລືອກວັນເຂົ້າພັກ' : 'ເລືອກວັນອອກ'}
-            {nights > 0 && <span style={{ font: f(600, 12), color: c.muted }}> · {nights} ຄືນ</span>}
+            {nights > 0 && <span style={{ font: f(600, 12, 18), color: c.muted }}> · {nights} ຄືນ</span>}
           </div>
         </div>
         <NavButton label="›" onClick={() => setCursor(nextMonth(cursor))} />
@@ -142,7 +142,7 @@ export function DateRangePicker({
       </div>
 
       <div style={foot}>
-        <span style={{ font: f(600, 12.5), color: checkIn ? c.text : c.faint }}>{summary}</span>
+        <span style={{ font: f(600, 13, 20), color: checkIn ? c.text : c.faint }}>{summary}</span>
         {(checkIn || checkOut) && (
           <button type="button" onClick={clear} style={footButton}>
             ລຶບວັນທີ
@@ -155,10 +155,7 @@ export function DateRangePicker({
   // ── open on the page ───────────────────────────────────────────────────────
   if (inline) {
     return (
-      <div style={panel}>
-        <div style={{ font: f(700, 11.5), color: c.muted, marginBottom: 8 }}>ວັນເຂົ້າພັກ — ວັນອອກ</div>
-        {calendar}
-      </div>
+      <div style={panel}>{calendar}</div>
     );
   }
 
@@ -173,10 +170,10 @@ export function DateRangePicker({
         }}
         style={trigger}
       >
-        <span style={{ font: f(700, 11.5), color: c.muted, display: 'block', marginBottom: 2 }}>
+        <span style={{ font: f(700, 12, 18), color: c.muted, display: 'block', marginBottom: 2 }}>
           ວັນເຂົ້າພັກ — ວັນອອກ
         </span>
-        <span style={{ font: f(600, 13.5), color: checkIn ? c.text : c.faint }}>{summary}</span>
+        <span style={{ font: f(600, 13, 20), color: checkIn ? c.text : c.faint }}>{summary}</span>
       </button>
 
       {open && (
@@ -215,7 +212,7 @@ function Month({
 
   return (
     <div className={className} style={{ minWidth: 0 }}>
-      <div style={{ font: f(700, 13), color: c.text, textAlign: 'center', marginBottom: 8 }}>
+      <div style={{ font: f(700, 13), color: c.text, textAlign: 'center', marginBottom: space[1] }}>
         {LAO_MONTHS_LONG[m]} {year}
       </div>
 
@@ -291,13 +288,13 @@ function NavButton({
       onClick={onClick}
       disabled={disabled}
       style={{
-        width: 32,
-        height: 32,
-        borderRadius: 999,
+        width: TAP,
+        height: TAP,
+        borderRadius: radius.pill,
         border: `1px solid ${c.border}`,
         background: c.surface,
         color: disabled ? c.faint : c.text,
-        font: f(700, 16),
+        font: f(700, 16, 24),
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.5 : 1,
         lineHeight: 1,
@@ -348,7 +345,7 @@ const panel: React.CSSProperties = {
   background: c.surface,
   border: `1px solid ${c.border}`,
   borderRadius: radius.md,
-  padding: 14,
+  padding: space[3],
 };
 
 const trigger: React.CSSProperties = {
@@ -378,17 +375,17 @@ const sheet: React.CSSProperties = {
 const head: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 8,
-  marginBottom: 12,
+  gap: space[2],
+  marginBottom: space[2],
 };
 
 const foot: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  gap: 12,
-  marginTop: 10,
-  paddingTop: 10,
+  gap: space[3],
+  marginTop: space[2],
+  paddingTop: space[2],
   borderTop: `1px solid ${c.divider}`,
 };
 
@@ -396,7 +393,7 @@ const footButton: React.CSSProperties = {
   background: 'none',
   border: 'none',
   padding: '4px 2px',
-  font: f(700, 12.5),
+  font: f(700, 13, 20),
   color: c.accent,
   cursor: 'pointer',
   flexShrink: 0,
@@ -410,18 +407,22 @@ const weekRow: React.CSSProperties = {
 
 const weekCell: React.CSSProperties = {
   textAlign: 'center',
-  font: f(700, 11),
+  font: f(700, 12, 18),
   padding: '2px 0',
 };
 
 const dayGrid: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(7, 1fr)',
-  gap: '2px 0',
+  gap: 0,
 };
 
 const dayCell: React.CSSProperties = {
-  height: 36,
+  // 44 is the floor Apple's HIG and WCAG 2.5.5 both set for a touch target,
+  // and a date cell is the smallest thing anyone taps in this app. It costs
+  // about 50px of height over the old 36, paid for by the chrome trimmed
+  // around the grid rather than by making the days harder to hit.
+  height: TAP,
   border: 'none',
   padding: 0,
   outline: 'none',

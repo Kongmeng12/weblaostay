@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { c, f, radius } from '../theme';
+import { c, radius, space, type as t } from '../theme';
 import type { Province } from '../lib/types';
 import { Button } from './ui';
 import { DateRangePicker } from './DateRangePicker';
@@ -95,16 +95,6 @@ export function SearchBar({
         </select>
       </Cell>
 
-      {/* Takes the whole row: a two-month calendar has nowhere to open inside
-          a 150px grid cell, and the arrival and departure belong together. */}
-      <div style={{ gridColumn: '1 / -1' }}>
-        <DateRangePicker
-          checkIn={draft.checkIn}
-          checkOut={draft.checkOut}
-          onChange={({ checkIn, checkOut }) => setDraft((d) => ({ ...d, checkIn, checkOut }))}
-        />
-      </div>
-
       <Cell label="ຜູ້ເຂົ້າພັກ">
         <select
           value={draft.guests}
@@ -119,9 +109,21 @@ export function SearchBar({
         </select>
       </Cell>
 
-      <Button type="submit" size="lg" style={{ height: 46 }}>
-        ຄົ້ນຫາ
-      </Button>
+      {/* Takes the whole row: a two-month calendar has nowhere to open inside
+          a 150px grid cell, and the arrival and departure belong together. */}
+      <div style={{ gridColumn: '1 / -1' }}>
+        <DateRangePicker
+          checkIn={draft.checkIn}
+          checkOut={draft.checkOut}
+          onChange={({ checkIn, checkOut }) => setDraft((d) => ({ ...d, checkIn, checkOut }))}
+        />
+      </div>
+
+      <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
+        <Button type="submit" size="lg" style={{ height: 46, minWidth: 160 }}>
+          ຄົ້ນຫາ
+        </Button>
+      </div>
     </form>
   );
 }
@@ -133,7 +135,7 @@ const cellInput: React.CSSProperties = {
   background: c.bg,
   border: `1px solid ${c.border}`,
   borderRadius: radius.md,
-  font: f(600, 13.5),
+  font: t.bodySm,
   color: c.text,
   outline: 'none',
 };
@@ -141,7 +143,7 @@ const cellInput: React.CSSProperties = {
 function Cell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: 'block', minWidth: 0 }}>
-      <span style={{ font: f(700, 11.5), color: c.muted, display: 'block', marginBottom: 6 }}>
+      <span style={{ font: t.label, color: c.muted, display: 'block', marginBottom: space[1] }}>
         {label}
       </span>
       {children}

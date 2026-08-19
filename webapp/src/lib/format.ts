@@ -155,3 +155,27 @@ export function countdown(until: string | null | undefined): string | null {
   const total = Math.floor(ms / 1000);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
+
+/**
+ * A Google Maps link for a place, whatever we happen to know about it.
+ *
+ * Coordinates win when we have them: a pin is unambiguous, and the app on a
+ * phone opens straight into directions. Falling back to the written address
+ * hands Google a search rather than a point, which is worse but still useful —
+ * and the alternative, hiding the link whenever a property has no coordinates,
+ * would hide it from every property that was not part of the demo seed.
+ *
+ * `?api=1` is the documented, stable form of the URL; the older `maps?q=`
+ * shapes still work but are not promised to.
+ */
+export function mapsUrl(
+  place: { lat?: number | null; lng?: number | null; address?: string | null; name?: string | null },
+  ...fallbackParts: (string | null | undefined)[]
+): string | null {
+  const base = 'https://www.google.com/maps/search/?api=1&query=';
+  if (typeof place.lat === 'number' && typeof place.lng === 'number') {
+    return `${base}${place.lat},${place.lng}`;
+  }
+  const words = [place.name, place.address, ...fallbackParts].filter(Boolean).join(' ');
+  return words ? `${base}${encodeURIComponent(words)}` : null;
+}

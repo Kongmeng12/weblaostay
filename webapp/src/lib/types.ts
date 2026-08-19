@@ -206,6 +206,8 @@ export interface BookingDetail {
     province: string | null;
     district: string | null;
     address: string | null;
+    lat: number | null;
+    lng: number | null;
     phone: string | null;
     host: string;
   };

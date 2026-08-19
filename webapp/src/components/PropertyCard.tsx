@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { c, f, radius, shadow, PROPERTY_TYPE_LABEL } from '../theme';
+import { c, f, radius, shadow, PROPERTY_TYPE_LABEL, type as t } from '../theme';
 import { kip } from '../lib/format';
 import { Photo, Stars } from './ui';
 import type { PropertyListing } from '../lib/types';
@@ -28,7 +28,7 @@ export function PropertyCard({ item, to }: { item: PropertyListing; to: string }
             background: 'rgba(255,255,255,.94)',
             padding: '4px 10px',
             borderRadius: 999,
-            font: f(700, 11),
+            font: t.caption,
             color: c.soft,
           }}
         >
@@ -43,7 +43,7 @@ export function PropertyCard({ item, to }: { item: PropertyListing; to: string }
               background: 'rgba(43,30,22,.78)',
               padding: '4px 10px',
               borderRadius: 999,
-              font: f(700, 11),
+              font: t.caption,
               color: '#fff',
             }}
           >
@@ -55,7 +55,7 @@ export function PropertyCard({ item, to }: { item: PropertyListing; to: string }
       <div style={{ padding: 14 }}>
         <div
           style={{
-            font: f(700, 15),
+            font: t.h3,
             color: c.text,
             marginBottom: 3,
             overflow: 'hidden',
@@ -66,7 +66,7 @@ export function PropertyCard({ item, to }: { item: PropertyListing; to: string }
           {item.name}
         </div>
 
-        <div style={{ font: f(400, 12.5), color: c.muted, marginBottom: 8 }}>
+        <div style={{ font: t.caption, color: c.muted, marginBottom: 8 }}>
           {[item.district, item.province].filter(Boolean).join(', ') || '—'}
         </div>
 
@@ -87,21 +87,21 @@ export function PropertyCard({ item, to }: { item: PropertyListing; to: string }
               Without them, all we can promise is the cheapest room's rate. */}
           {item.staySubtotal !== null && item.nights ? (
             <div>
-              <span style={{ font: f(800, 17), color: c.accent }}>{kip(item.staySubtotal)}</span>
-              <span style={{ font: f(400, 12), color: c.muted }}> / {item.nights} ຄືນ</span>
+              <span style={{ font: f(800, 16, 24), color: c.accent }}>{kip(item.staySubtotal)}</span>
+              <span style={{ font: t.caption, color: c.muted }}> / {item.nights} ຄືນ</span>
             </div>
           ) : (
             <div>
-              <span style={{ font: f(400, 12), color: c.muted }}>ເລີ່ມຕົ້ນ </span>
-              <span style={{ font: f(800, 17), color: c.accent }}>
+              <span style={{ font: t.caption, color: c.muted }}>ເລີ່ມຕົ້ນ </span>
+              <span style={{ font: f(800, 16, 24), color: c.accent }}>
                 {kip(item.fromPricePerNight)}
               </span>
-              <span style={{ font: f(400, 12), color: c.muted }}> / ຄືນ</span>
+              <span style={{ font: t.caption, color: c.muted }}> / ຄືນ</span>
             </div>
           )}
 
           {item.availableRoomTypes > 0 && item.staySubtotal !== null && (
-            <span style={{ font: f(600, 11.5), color: c.successFg }}>
+            <span style={{ font: t.caption, color: c.successFg }}>
               ວ່າງ {item.availableRoomTypes} ແບບ
             </span>
           )}

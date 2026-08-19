@@ -116,6 +116,13 @@ export const NAV_GROUPS: NavGroup[] = [
         subtitle: 'Partner ໃນລະບົບ',
       },
       {
+        to: '/properties',
+        name: 'ພິກັດທີ່ພັກ',
+        emoji: '📍',
+        title: 'ພິກັດທີ່ພັກ',
+        subtitle: 'ວາງໝຸດໃຫ້ແຜນທີ່ ແລະ ການຄົ້ນຫາຕາມໄລຍະທາງ',
+      },
+      {
         to: '/payout',
         name: 'ການເງິນ · Payout',
         emoji: '💰',

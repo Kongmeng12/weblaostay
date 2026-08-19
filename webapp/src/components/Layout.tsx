@@ -2,7 +2,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import { c, f, radius, MAX_WIDTH } from '../theme';
+import { c, f, radius, MAX_WIDTH, space, TAP, type as t } from '../theme';
 import { initials } from '../lib/format';
 import { usePublishedPages } from '../pages/Content';
 import type { NotificationFeed } from '../lib/types';
@@ -51,7 +51,10 @@ export function Layout() {
             gap: 18,
           }}
         >
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <Link
+            to="/"
+            style={{ display: 'flex', alignItems: 'center', minHeight: TAP, gap: space[2] }}
+          >
             <div
               style={{
                 width: 32,
@@ -60,13 +63,13 @@ export function Layout() {
                 background: c.accent,
                 display: 'grid',
                 placeItems: 'center',
-                font: f(800, 17),
+                font: t.h3,
                 color: '#fff',
               }}
             >
               L
             </div>
-            <span style={{ font: f(800, 17), color: c.text }}>LaoStay</span>
+            <span style={{ font: t.h3, color: c.text }}>LaoStay</span>
           </Link>
 
           <nav style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -107,7 +110,9 @@ export function Layout() {
                   style={{
                     background: 'none',
                     border: 'none',
-                    font: f(600, 12.5),
+                    minHeight: TAP,
+                    padding: `0 ${space[2]}px`,
+                    font: t.caption,
                     color: c.muted,
                     cursor: 'pointer',
                   }}
@@ -120,8 +125,11 @@ export function Layout() {
                 to="/signin"
                 state={{ from: location.pathname + location.search }}
                 style={{
-                  marginLeft: 8,
-                  padding: '9px 16px',
+                  marginLeft: space[2],
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  minHeight: TAP,
+                  padding: `0 ${space[4]}px`,
                   borderRadius: radius.md,
                   background: c.accent,
                   color: '#fff',
@@ -135,7 +143,12 @@ export function Layout() {
         </div>
       </header>
 
-      <main style={{ flex: 1, width: '100%', maxWidth: MAX_WIDTH, margin: '0 auto' }}>
+      {/* Deliberately unclamped. Every page sets its own width through `Page`,
+          so a max-width here bought nothing — except that it also trapped the
+          home page's hero band, which is meant to run edge to edge like the
+          footer does and instead sat as a 1084px rectangle floating in white
+          on any screen wider than that. */}
+      <main style={{ flex: 1, width: '100%' }}>
         <Outlet />
       </main>
 
@@ -159,29 +172,38 @@ export function Layout() {
           }}
         >
           <div>
-            <div style={{ font: f(800, 15), color: '#fff', marginBottom: 4 }}>LaoStay</div>
-            <div style={{ font: f(400, 12) }}>ຈອງທີ່ພັກທົ່ວລາວ</div>
+            <div style={{ font: t.h3, color: '#fff', marginBottom: 4 }}>LaoStay</div>
+            <div style={{ font: t.caption }}>ຈອງທີ່ພັກທົ່ວລາວ</div>
           </div>
 
           {/* Only pages the admin has actually published — the index leaves out
               anything still a draft, so no link here can lead to a 404. */}
-          <nav style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <Link to="/help" style={{ font: f(600, 12.5), color: c.onDark }}>
+          <nav style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+            <Link to="/help" style={footLink}>
               ຊ່ວຍເຫຼືອ
             </Link>
             {pages.map((p) => (
-              <Link key={p.slug} to={`/p/${p.slug}`} style={{ font: f(600, 12.5), color: c.onDark }}>
+              <Link key={p.slug} to={`/p/${p.slug}`} style={footLink}>
                 {p.title}
               </Link>
             ))}
           </nav>
 
-          <div style={{ font: f(400, 11.5) }}>© 2026 LaoStay · ສະຫງວນລິຂະສິດ</div>
+          <div style={{ font: t.caption }}>© 2026 LaoStay · ສະຫງວນລິຂະສິດ</div>
         </div>
       </footer>
     </div>
   );
 }
+
+/** Footer links need the same 44px reach as anything else a thumb goes for. */
+const footLink: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: TAP,
+  font: t.caption,
+  color: c.onDark,
+};
 
 function HeaderLink({
   to,
@@ -196,9 +218,12 @@ function HeaderLink({
     <NavLink
       to={to}
       style={({ isActive }) => ({
-        padding: '8px 12px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        minHeight: TAP,
+        padding: `0 ${space[3]}px`,
         borderRadius: radius.md,
-        font: f(600, 13),
+        font: t.label,
         color: isActive ? c.accentDark : c.soft,
         background: isActive ? c.accentSoft : 'transparent',
         position: 'relative',
