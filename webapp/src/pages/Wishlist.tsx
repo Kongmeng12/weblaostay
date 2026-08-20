@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { c, f, radius, MAX_WIDTH, PROPERTY_TYPE_LABEL } from '../theme';
+import { c, radius, PROPERTY_TYPE_LABEL, type as t } from '../theme';
 import { kip } from '../lib/format';
-import { Button, Empty, ErrorNote, Photo, Skeleton, Stars } from '../components/ui';
+import { Button, Empty, ErrorNote, Page, PageTitle, Photo, Skeleton, Stars } from '../components/ui';
 import type { WishlistItem } from '../lib/types';
 
 export function WishlistPage() {
@@ -20,8 +20,8 @@ export function WishlistPage() {
   });
 
   return (
-    <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: '28px 18px 48px' }}>
-      <h1 style={{ font: f(800, 24), color: c.text, margin: '0 0 20px' }}>ທີ່ພັກທີ່ມັກ</h1>
+    <Page width="wide">
+      <PageTitle>ທີ່ພັກທີ່ມັກ</PageTitle>
 
       {query.isError && <ErrorNote error={query.error} onRetry={() => void query.refetch()} />}
 
@@ -62,11 +62,11 @@ export function WishlistPage() {
               <div style={{ padding: 14 }}>
                 <Link
                   to={`/property/${item.propertyId}`}
-                  style={{ font: f(700, 15), color: c.text, display: 'block', marginBottom: 3 }}
+                  style={{ font: t.h3, color: c.text, display: 'block', marginBottom: 3 }}
                 >
                   {item.name}
                 </Link>
-                <div style={{ font: f(400, 12.5), color: c.muted, marginBottom: 8 }}>
+                <div style={{ font: t.caption, color: c.muted, marginBottom: 8 }}>
                   {[PROPERTY_TYPE_LABEL[item.type] ?? item.type, item.province]
                     .filter(Boolean)
                     .join(' · ')}
@@ -84,7 +84,7 @@ export function WishlistPage() {
                     gap: 10,
                   }}
                 >
-                  <span style={{ font: f(700, 15), color: c.accent }}>
+                  <span style={{ font: t.h3, color: c.accent }}>
                     {/* Null when the property has no active room type to quote. */}
                     {item.fromPricePerNight === null ? 'ຍັງບໍ່ມີລາຄາ' : kip(item.fromPricePerNight)}
                   </span>
@@ -94,7 +94,7 @@ export function WishlistPage() {
                     style={{
                       background: 'none',
                       border: 'none',
-                      font: f(600, 12),
+                      font: t.caption,
                       color: c.muted,
                       cursor: 'pointer',
                       padding: 0,
@@ -119,6 +119,6 @@ export function WishlistPage() {
           }
         />
       )}
-    </div>
+    </Page>
   );
 }

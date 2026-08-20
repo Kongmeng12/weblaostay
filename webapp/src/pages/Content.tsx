@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { c, f, radius } from '../theme';
+import { c, f, radius, type as t } from '../theme';
 import { laoDateFull } from '../lib/format';
 import { ErrorNote, Loading } from '../components/ui';
 import type { AppPage, FaqGroup } from '../lib/types';
@@ -33,18 +33,18 @@ export function HelpPage() {
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '30px 18px 56px' }}>
-      <h1 style={{ font: f(800, 26), color: c.text, margin: '0 0 6px' }}>ຊ່ວຍເຫຼືອ</h1>
+      <h1 style={{ font: t.h1, color: c.text, margin: '0 0 6px' }}>ຊ່ວຍເຫຼືອ</h1>
       <p style={{ font: f(400, 13.5, 22), color: c.muted, margin: '0 0 26px' }}>
         ຄຳຖາມທີ່ຖືກຖາມເລື້ອຍທີ່ສຸດ. ຍັງບໍ່ພົບຄຳຕອບ? ທັກຫາທີ່ພັກໄດ້ໂດຍກົງຈາກໜ້າການຈອງ.
       </p>
 
       {!groups.length && (
-        <div style={{ font: f(400, 13), color: c.muted }}>ຍັງບໍ່ມີຄຳຖາມທີ່ພົບເລື້ອຍ</div>
+        <div style={{ font: t.bodySm, color: c.muted }}>ຍັງບໍ່ມີຄຳຖາມທີ່ພົບເລື້ອຍ</div>
       )}
 
       {groups.map((group) => (
         <section key={group.category} style={{ marginBottom: 28 }}>
-          <h2 style={{ font: f(700, 16), color: c.text, margin: '0 0 10px' }}>{group.category}</h2>
+          <h2 style={{ font: t.h3, color: c.text, margin: '0 0 10px' }}>{group.category}</h2>
           <div style={{ display: 'grid', gap: 8 }}>
             {group.items.map((item) => (
               <Faq key={item.id} question={item.question} answer={item.answer} />
@@ -126,7 +126,7 @@ export function StaticPage() {
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '40px 18px' }}>
         <ErrorNote error={query.error} onRetry={() => void query.refetch()} />
         <div style={{ marginTop: 18 }}>
-          <Link to="/" style={{ font: f(600, 13) }}>
+          <Link to="/" style={{ font: t.label }}>
             ← ກັບໜ້າຫຼັກ
           </Link>
         </div>
@@ -140,7 +140,7 @@ export function StaticPage() {
     <article style={{ maxWidth: 700, margin: '0 auto', padding: '30px 18px 56px' }}>
       <h1 style={{ font: f(800, 26, 36), color: c.text, margin: '0 0 8px' }}>{page.title}</h1>
       {page.updatedAt && (
-        <div style={{ font: f(400, 12), color: c.faint, marginBottom: 24 }}>
+        <div style={{ font: t.caption, color: c.faint, marginBottom: 24 }}>
           ແກ້ໄຂລ່າສຸດ {laoDateFull(page.updatedAt)}
         </div>
       )}

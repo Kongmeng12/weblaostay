@@ -100,7 +100,7 @@ export function Layout() {
                     color: c.accentDark,
                     display: 'grid',
                     placeItems: 'center',
-                    font: f(700, 13),
+                    font: t.label,
                   }}
                 >
                   {initials(user.fullName ?? user.email)}
@@ -133,7 +133,7 @@ export function Layout() {
                   borderRadius: radius.md,
                   background: c.accent,
                   color: '#fff',
-                  font: f(700, 13),
+                  font: t.label,
                 }}
               >
                 ເຂົ້າສູ່ລະບົບ

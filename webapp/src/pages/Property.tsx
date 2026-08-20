@@ -270,7 +270,7 @@ export function PropertyPage() {
                   />
                 )}
                 {p.rules.note && (
-                  <p style={{ font: f(400, 13, 21), color: c.muted, margin: '6px 0 0' }}>
+                  <p style={{ font: t.bodySm, color: c.muted, margin: '6px 0 0' }}>
                     {p.rules.note}
                   </p>
                 )}
@@ -315,14 +315,14 @@ export function PropertyPage() {
                       flexWrap: 'wrap',
                     }}
                   >
-                    <span style={{ font: f(700, 13.5), color: c.text }}>{r.guest}</span>
-                    <span style={{ font: f(600, 13), color: c.star }}>{stars(r.stars)}</span>
+                    <span style={{ font: t.bodySm, color: c.text }}>{r.guest}</span>
+                    <span style={{ font: t.label, color: c.star }}>{stars(r.stars)}</span>
                     <span style={{ font: t.caption, color: c.faint }}>
                       · {laoDate(r.createdAt)}
                     </span>
                   </div>
                   {r.title && (
-                    <div style={{ font: f(700, 13.5), color: c.text, marginBottom: 4 }}>
+                    <div style={{ font: t.bodySm, color: c.text, marginBottom: 4 }}>
                       {r.title}
                     </div>
                   )}
@@ -426,7 +426,7 @@ export function PropertyPage() {
             <>
               <div
                 style={{
-                  font: f(700, 13.5),
+                  font: t.bodySm,
                   color: c.text,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -435,14 +435,14 @@ export function PropertyPage() {
               >
                 {room.name}
               </div>
-              <div style={{ font: f(400, 12), color: c.muted }}>
+              <div style={{ font: t.caption, color: c.muted }}>
                 {room.stayTotal !== null
                   ? `${kip(room.stayTotal)} · ${nights} ຄືນ`
                   : `${kip(room.basePrice)} / ຄືນ`}
               </div>
             </>
           ) : (
-            <div style={{ font: f(500, 13), color: c.muted }}>ເລືອກຫ້ອງເພື່ອຈອງ</div>
+            <div style={{ font: t.label, color: c.muted }}>ເລືອກຫ້ອງເພື່ອຈອງ</div>
           )}
         </div>
 
@@ -500,7 +500,7 @@ function LocationSection({ property }: { property: PropertyDetail }) {
               display: 'inline-flex',
               alignItems: 'center',
               minHeight: TAP,
-              font: f(600, 13),
+              font: t.label,
               color: c.accent,
               textDecoration: 'none',
             }}
@@ -599,7 +599,7 @@ const dateInput: React.CSSProperties = {
   background: '#fff',
   border: `1px solid ${c.border}`,
   borderRadius: radius.md,
-  font: f(600, 13.5),
+  font: t.bodySm,
   color: c.text,
   outline: 'none',
 };
@@ -607,8 +607,8 @@ const dateInput: React.CSSProperties = {
 function Rule({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-      <span style={{ font: f(400, 13), color: c.muted }}>{label}</span>
-      <span style={{ font: f(600, 13), color: c.text }}>{value}</span>
+      <span style={{ font: t.bodySm, color: c.muted }}>{label}</span>
+      <span style={{ font: t.label, color: c.text }}>{value}</span>
     </div>
   );
 }

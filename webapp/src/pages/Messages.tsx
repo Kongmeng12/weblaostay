@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
-import { c, f, radius } from '../theme';
+import { c, f, radius, type as typ } from '../theme';
 import { laoAgo, laoTime } from '../lib/format';
-import { Button, Empty, ErrorNote, Loading, Skeleton } from '../components/ui';
+import { Button, Empty, ErrorNote, Loading, Page, PageTitle, Skeleton } from '../components/ui';
 import type { ChatMessage, Conversation } from '../lib/types';
 
 /** How often an open thread asks for anything newer than its cursor. */
@@ -19,8 +19,8 @@ export function MessagesPage() {
   });
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '28px 18px 48px' }}>
-      <h1 style={{ font: f(800, 24), color: c.text, margin: '0 0 20px' }}>ຂໍ້ຄວາມ</h1>
+    <Page width="narrow">
+      <PageTitle>ຂໍ້ຄວາມ</PageTitle>
 
       {query.isError && <ErrorNote error={query.error} onRetry={() => void query.refetch()} />}
 
@@ -59,15 +59,15 @@ export function MessagesPage() {
                     {t.property}
                   </span>
                   {t.bookingCode && (
-                    <span style={{ font: f(400, 11.5), color: c.faint }}>{t.bookingCode}</span>
+                    <span style={{ font: typ.caption, color: c.faint }}>{t.bookingCode}</span>
                   )}
-                  <span style={{ marginLeft: 'auto', font: f(400, 11), color: c.faint }}>
+                  <span style={{ marginLeft: 'auto', font: typ.caption, color: c.faint }}>
                     {laoAgo(t.lastMessageAt)}
                   </span>
                 </div>
                 <div
                   style={{
-                    font: f(400, 12.5),
+                    font: typ.caption,
                     color: t.unread ? c.text : c.muted,
                     fontStyle: t.lastMessage === null ? 'italic' : undefined,
                     overflow: 'hidden',
@@ -92,7 +92,7 @@ export function MessagesPage() {
                     borderRadius: 10,
                     background: c.accent,
                     color: '#fff',
-                    font: f(700, 11),
+                    font: typ.caption,
                     display: 'grid',
                     placeItems: 'center',
                   }}
@@ -115,7 +115,7 @@ export function MessagesPage() {
           }
         />
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -228,16 +228,16 @@ export function ThreadPage() {
       }}
     >
       <div style={{ marginBottom: 14 }}>
-        <Link to="/messages" style={{ font: f(600, 13), color: c.muted }}>
+        <Link to="/messages" style={{ font: typ.label, color: c.muted }}>
           ← ຂໍ້ຄວາມທັງໝົດ
         </Link>
-        <h1 style={{ font: f(800, 20), color: c.text, margin: '10px 0 2px' }}>
+        <h1 style={{ font: typ.h2, color: c.text, margin: '10px 0 2px' }}>
           {thread.data?.property ?? '—'}
         </h1>
         {thread.data?.propertyId && (
           <Link
             to={`/property/${thread.data.propertyId}`}
-            style={{ font: f(600, 12.5) }}
+            style={{ font: typ.caption }}
           >
             ເບິ່ງໜ້າທີ່ພັກ →
           </Link>
@@ -246,7 +246,7 @@ export function ThreadPage() {
 
       <div style={{ flex: 1, display: 'grid', gap: 6, alignContent: 'start', paddingBottom: 16 }}>
         {messages.length === 0 && (
-          <div style={{ font: f(400, 13), color: c.muted, textAlign: 'center', padding: 30 }}>
+          <div style={{ font: typ.bodySm, color: c.muted, textAlign: 'center', padding: 30 }}>
             ຍັງບໍ່ມີຂໍ້ຄວາມ — ຖາມສິ່ງທີ່ຢາກຮູ້ໄດ້ເລີຍ
           </div>
         )}
@@ -299,7 +299,7 @@ export function ThreadPage() {
             color: c.neutralFg,
             padding: 14,
             borderRadius: radius.md,
-            font: f(500, 12.5),
+            font: typ.caption,
             textAlign: 'center',
             marginBottom: 18,
           }}
@@ -330,7 +330,7 @@ export function ThreadPage() {
               background: c.bg,
               border: `1px solid ${c.border}`,
               borderRadius: radius.md,
-              font: f(400, 14),
+              font: typ.body,
               color: c.text,
             }}
           />

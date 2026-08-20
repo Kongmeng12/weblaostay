@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import { c, f, radius } from '../theme';
-import { Button, Card, ErrorNote, Field, Loading, Pill, Spinner, inputStyle } from '../components/ui';
+import { c, f, radius, type as t } from '../theme';
+import { Button, Card, ErrorNote, Field, Loading, Page, PageTitle, Pill, Spinner, inputStyle } from '../components/ui';
 import type { CustomerProfile } from '../lib/types';
 
 export function AccountPage() {
@@ -60,15 +60,15 @@ export function AccountPage() {
   const p = query.data!;
 
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', padding: '28px 18px 48px' }}>
-      <h1 style={{ font: f(800, 24), color: c.text, margin: '0 0 20px' }}>ບັນຊີຂອງຂ້ອຍ</h1>
+    <Page width="form">
+      <PageTitle>ບັນຊີຂອງຂ້ອຍ</PageTitle>
 
       <div style={{ display: 'grid', gap: 16 }}>
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <div>
               <div style={{ font: f(800, 17), color: c.text }}>{p.fullName ?? p.email}</div>
-              <div style={{ font: f(400, 13), color: c.muted }}>{p.email}</div>
+              <div style={{ font: t.bodySm, color: c.muted }}>{p.email}</div>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <Pill bg={c.infoBg} fg={c.infoFg}>
@@ -98,7 +98,7 @@ export function AccountPage() {
 
         <Card>
           <form onSubmit={submit} style={{ display: 'grid', gap: 16 }}>
-            <div style={{ font: f(800, 15), color: c.text }}>ຂໍ້ມູນຕິດຕໍ່</div>
+            <div style={{ font: t.h3, color: c.text }}>ຂໍ້ມູນຕິດຕໍ່</div>
 
             <Field label="ຊື່ ແລະ ນາມສະກຸນ">
               <input
@@ -128,15 +128,15 @@ export function AccountPage() {
                 {save.isPending ? <Spinner size={15} color="#fff" /> : 'ບັນທຶກ'}
               </Button>
               {saved && (
-                <span style={{ font: f(600, 12.5), color: c.successFg }}>✓ ບັນທຶກແລ້ວ</span>
+                <span style={{ font: t.caption, color: c.successFg }}>✓ ບັນທຶກແລ້ວ</span>
               )}
             </div>
           </form>
         </Card>
 
         <Card>
-          <div style={{ font: f(800, 15), color: c.text, marginBottom: 6 }}>ອອກຈາກລະບົບ</div>
-          <p style={{ font: f(400, 12.5, 20), color: c.muted, margin: '0 0 14px' }}>
+          <div style={{ font: t.h3, color: c.text, marginBottom: 6 }}>ອອກຈາກລະບົບ</div>
+          <p style={{ font: t.caption, color: c.muted, margin: '0 0 14px' }}>
             ອອກຈາກອຸປະກອນນີ້ — ການຈອງຂອງທ່ານຍັງຢູ່ຄືເກົ່າ
           </p>
           <Button variant="outline" onClick={() => void signOut()}>
@@ -144,7 +144,7 @@ export function AccountPage() {
           </Button>
         </Card>
       </div>
-    </div>
+    </Page>
   );
 }
 
@@ -159,8 +159,8 @@ function Stat({ label, value }: { label: string; value: number }) {
         textAlign: 'center',
       }}
     >
-      <div style={{ font: f(800, 20), color: c.text }}>{value}</div>
-      <div style={{ font: f(400, 11), color: c.muted, marginTop: 2 }}>{label}</div>
+      <div style={{ font: t.h2, color: c.text }}>{value}</div>
+      <div style={{ font: t.caption, color: c.muted, marginTop: 2 }}>{label}</div>
     </div>
   );
 }

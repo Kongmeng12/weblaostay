@@ -2,15 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import {
-  c,
-  f,
-  radius,
-  MAX_WIDTH,
-  BOOKING_STATUS_PILL,
-  PAYMENT_STATUS_PILL,
-  pillFor,
-} from '../theme';
+import { c, f, radius, space, BOOKING_STATUS_PILL, PAYMENT_STATUS_PILL, pillFor, type as t } from '../theme';
 import { countdown, kip, laoDateFull, laoDateTime, mapsUrl } from '../lib/format';
 import {
   Button,
@@ -20,6 +12,8 @@ import {
   Loading,
   Modal,
   MoneyRow,
+  Page,
+  PageTitle,
   Pill,
   Spinner,
   inputStyle,
@@ -72,30 +66,27 @@ export function TripDetailPage() {
   const canCancel = !['cancelled', 'completed', 'no_show', 'staying'].includes(b.status);
 
   return (
-    <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: '28px 18px 48px' }}>
-      <Link to="/trips" style={{ font: f(600, 13), color: c.muted }}>
+    <Page width="wide">
+      <Link to="/trips" style={{ font: t.label, color: c.muted }}>
         ← ການເດີນທາງທັງໝົດ
       </Link>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          flexWrap: 'wrap',
-          margin: '14px 0 20px',
-        }}
+      <PageTitle
+        right={
+          <span style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+            <Pill bg={pill.bg} fg={pill.fg}>
+              {pill.label}
+            </Pill>
+            {b.source === 'walk_in' && (
+              <Pill bg={c.infoBg} fg={c.infoFg}>
+                ຈອງທີ່ໜ້າຮ້ານ
+              </Pill>
+            )}
+          </span>
+        }
       >
-        <h1 style={{ font: f(800, 24), color: c.text, margin: 0 }}>{b.code}</h1>
-        <Pill bg={pill.bg} fg={pill.fg}>
-          {pill.label}
-        </Pill>
-        {b.source === 'walk_in' && (
-          <Pill bg={c.infoBg} fg={c.infoFg}>
-            ຈອງທີ່ໜ້າຮ້ານ
-          </Pill>
-        )}
-      </div>
+        {b.code}
+      </PageTitle>
 
       {b.status === 'pending' && (
         <div
@@ -124,7 +115,7 @@ export function TripDetailPage() {
       <div className="laostay-split">
         <div style={{ display: 'grid', gap: 16 }}>
           <Card>
-            <div style={{ font: f(800, 15), color: c.text, marginBottom: 12 }}>ທີ່ພັກ</div>
+            <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>ທີ່ພັກ</div>
             <Row label="ຊື່" value={b.property.name} />
             <Row
               label="ທີ່ຢູ່"
@@ -151,14 +142,14 @@ export function TripDetailPage() {
               />
             )}
             <div style={{ marginTop: 12 }}>
-              <Link to={`/property/${b.property.id}`} style={{ font: f(600, 12.5) }}>
+              <Link to={`/property/${b.property.id}`} style={{ font: t.caption }}>
                 ເບິ່ງໜ້າທີ່ພັກ →
               </Link>
             </div>
           </Card>
 
           <Card>
-            <div style={{ font: f(800, 15), color: c.text, marginBottom: 12 }}>ການເຂົ້າພັກ</div>
+            <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>ການເຂົ້າພັກ</div>
             <Row label="ເຂົ້າພັກ" value={laoDateFull(b.checkIn)} />
             <Row label="ອອກ" value={laoDateFull(b.checkOut)} />
             <Row label="ຈຳນວນຄືນ" value={`${b.nights} ຄືນ`} />
@@ -169,7 +160,7 @@ export function TripDetailPage() {
 
           {b.payments.length > 0 && (
             <Card>
-              <div style={{ font: f(800, 15), color: c.text, marginBottom: 12 }}>ການຊຳລະ</div>
+              <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>ການຊຳລະ</div>
               {b.payments.map((p) => {
                 const pp = pillFor(PAYMENT_STATUS_PILL, p.status);
                 return (
@@ -188,7 +179,7 @@ export function TripDetailPage() {
                       <Pill bg={pp.bg} fg={pp.fg}>
                         {pp.label}
                       </Pill>
-                      <div style={{ font: f(400, 11.5), color: c.faint, marginTop: 5 }}>
+                      <div style={{ font: t.caption, color: c.faint, marginTop: 5 }}>
                         {p.paidAt ? laoDateTime(p.paidAt) : 'ຍັງບໍ່ຈ່າຍ'}
                       </div>
                     </div>
@@ -202,7 +193,7 @@ export function TripDetailPage() {
 
         <div className="laostay-aside" style={{ position: 'sticky', top: 84, display: 'grid', gap: 14 }}>
           <Card>
-            <div style={{ font: f(800, 15), color: c.text, marginBottom: 12 }}>ຍອດເງິນ</div>
+            <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>ຍອດເງິນ</div>
             <MoneyRow label="ຄ່າຫ້ອງ" amount={kip(b.subtotal)} />
             {b.serviceFee > 0 && <MoneyRow label="ຄ່າບໍລິການ" amount={kip(b.serviceFee)} />}
             {b.tax > 0 && <MoneyRow label="ພາສີ" amount={kip(b.tax)} />}
@@ -238,7 +229,7 @@ export function TripDetailPage() {
 
           {b.cancellation && (
             <Card>
-              <div style={{ font: f(800, 15), color: c.text, marginBottom: 10 }}>ການຍົກເລີກ</div>
+              <div style={{ font: t.h3, color: c.text, marginBottom: 10 }}>ການຍົກເລີກ</div>
               {b.cancellation.reason && (
                 <Row label="ເຫດຜົນ" value={b.cancellation.reason} />
               )}
@@ -301,7 +292,7 @@ export function TripDetailPage() {
           }}
         />
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -343,7 +334,7 @@ function CancelDialog({
         <MoneyRow label="ຄ່າທຳນຽມຍົກເລີກ" amount={kip(result.penalty)} />
         <div style={{ borderTop: `1px solid ${c.divider}`, margin: '8px 0' }} />
         <MoneyRow label="ຈະຄືນເງິນໃຫ້ທ່ານ" amount={kip(result.refund)} strong />
-        <p style={{ font: f(400, 12.5, 20), color: c.muted, marginTop: 14 }}>
+        <p style={{ font: t.caption, color: c.muted, marginTop: 14 }}>
           ເງິນຈະຄືນເຂົ້າບັນຊີເດີມພາຍໃນ 3–7 ວັນລັດຖະການ
         </p>
       </Modal>
@@ -428,7 +419,7 @@ function ReviewDialog({
       }
     >
       <div style={{ marginBottom: 18 }}>
-        <span style={{ font: f(700, 12.5), color: c.text, display: 'block', marginBottom: 8 }}>
+        <span style={{ font: t.label, color: c.text, display: 'block', marginBottom: 8 }}>
           ໃຫ້ຄະແນນ
         </span>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -487,13 +478,13 @@ function ReviewDialog({
 function Row({ label, value, href }: { label: string; value: string; href?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '4px 0' }}>
-      <span style={{ font: f(400, 13), color: c.muted, flex: 'none' }}>{label}</span>
+      <span style={{ font: t.bodySm, color: c.muted, flex: 'none' }}>{label}</span>
       {href ? (
-        <a href={href} style={{ font: f(600, 13), textAlign: 'right' }}>
+        <a href={href} style={{ font: t.label, textAlign: 'right' }}>
           {value}
         </a>
       ) : (
-        <span style={{ font: f(600, 13), color: c.text, textAlign: 'right' }}>{value}</span>
+        <span style={{ font: t.label, color: c.text, textAlign: 'right' }}>{value}</span>
       )}
     </div>
   );

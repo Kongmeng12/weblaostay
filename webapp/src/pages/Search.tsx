@@ -1,9 +1,9 @@
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
-import { c, type as t, MAX_WIDTH, TAP } from '../theme';
+import { c, type as t, TAP } from '../theme';
 import { nightsBetween } from '../lib/format';
-import { Button, Empty, ErrorNote, Loading, Skeleton } from '../components/ui';
+import { Button, Empty, ErrorNote, Loading, Page, Skeleton } from '../components/ui';
 import { PropertyCard } from '../components/PropertyCard';
 import { SearchBar, blankCriteria, type SearchCriteria } from '../components/SearchBar';
 import type { SearchResult } from '../lib/types';
@@ -14,6 +14,9 @@ const SORTS = [
   { value: 'price_desc', label: 'ລາຄາສູງ → ຕ່ຳ' },
   { value: 'reviews', label: 'ຮີວິວຫຼາຍສຸດ' },
 ] as const;
+
+/** Offered only when the search carries coordinates — see `nearMe`. */
+const DISTANCE_SORT = { value: 'distance', label: 'ໃກ້ຂ້ອຍທີ່ສຸດ' } as const;
 
 /**
  * Search results.
@@ -28,11 +31,20 @@ export function SearchPage() {
   const criteria: SearchCriteria = {
     q: params.get('q') ?? '',
     provinceId: params.get('provinceId') ?? '',
+    districtId: params.get('districtId') ?? '',
+    type: params.get('type') ?? '',
+    minPrice: params.get('minPrice') ?? '',
+    maxPrice: params.get('maxPrice') ?? '',
     checkIn: params.get('checkIn') ?? '',
     checkOut: params.get('checkOut') ?? '',
     guests: Number(params.get('guests') ?? 2),
+    lat: params.get('lat') ?? '',
+    lng: params.get('lng') ?? '',
   };
-  const sort = params.get('sort') ?? 'rating';
+  const nearMe = !!criteria.lat && !!criteria.lng;
+  // Distance only means something once there is a point to measure from, so
+  // the option appears with the coordinates and the sort follows them.
+  const sort = params.get('sort') ?? (nearMe ? 'distance' : 'rating');
   const page = Number(params.get('page') ?? 1);
 
   // Both dates or neither — one alone cannot describe a stay, and the API
@@ -48,6 +60,11 @@ export function SearchPage() {
           qs({
             q: criteria.q,
             provinceId: criteria.provinceId,
+            districtId: criteria.districtId,
+            type: criteria.type,
+            minPrice: criteria.minPrice,
+            maxPrice: criteria.maxPrice,
+            ...(nearMe ? { lat: criteria.lat, lng: criteria.lng } : {}),
             guests: criteria.guests,
             ...(hasRange ? { checkIn: criteria.checkIn, checkOut: criteria.checkOut } : {}),
             sort,
@@ -59,11 +76,26 @@ export function SearchPage() {
 
   function apply(next: Partial<SearchCriteria & { sort: string; page: number }>) {
     const merged = { ...criteria, sort, page: 1, ...next };
+
+    // Turning "near me" on or off changes what the results should be ordered
+    // by, and the sort already in the URL would otherwise win over the default
+    // — a guest who asked for nearby places would get them back by rating.
+    const nowNear = !!merged.lat && !!merged.lng;
+    if (next.sort === undefined) {
+      if (nowNear && !nearMe) merged.sort = 'distance';
+      if (!nowNear && sort === 'distance') merged.sort = 'rating';
+    }
     setParams(
       new URLSearchParams(
         Object.entries({
           q: merged.q,
           provinceId: merged.provinceId,
+          districtId: merged.districtId,
+          type: merged.type,
+          minPrice: merged.minPrice,
+          maxPrice: merged.maxPrice,
+          lat: merged.lat,
+          lng: merged.lng,
           checkIn: merged.checkIn,
           checkOut: merged.checkOut,
           guests: String(merged.guests),
@@ -83,7 +115,7 @@ export function SearchPage() {
     });
 
   return (
-    <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: '20px 18px 40px' }}>
+    <Page width="wide">
       <SearchBar value={criteria} onSearch={(next) => apply(next)} compact />
 
       <div
@@ -121,7 +153,7 @@ export function SearchPage() {
             cursor: 'pointer',
           }}
         >
-          {SORTS.map((s) => (
+          {[...(nearMe ? [DISTANCE_SORT] : []), ...SORTS].map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}
             </option>
@@ -198,7 +230,7 @@ export function SearchPage() {
       )}
 
       {query.isFetching && !query.isLoading && <Loading label="ກຳລັງອັບເດດ..." />}
-    </div>
+    </Page>
   );
 }
 

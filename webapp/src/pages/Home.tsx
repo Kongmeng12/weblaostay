@@ -35,6 +35,12 @@ export function HomePage() {
         qs({
           q: criteria.q,
           provinceId: criteria.provinceId,
+          districtId: criteria.districtId,
+          type: criteria.type,
+          minPrice: criteria.minPrice,
+          maxPrice: criteria.maxPrice,
+          lat: criteria.lat,
+          lng: criteria.lng,
           checkIn: criteria.checkIn,
           checkOut: criteria.checkOut,
           guests: criteria.guests,
@@ -103,7 +109,7 @@ export function HomePage() {
           >
             <div style={{ font: t.bodySm, color: c.infoFg }}>{a.title}</div>
             {a.content && (
-              <div style={{ font: f(400, 12.5, 20), color: c.soft, marginTop: 3 }}>{a.content}</div>
+              <div style={{ font: t.caption, color: c.soft, marginTop: 3 }}>{a.content}</div>
             )}
           </div>
         ))}
@@ -228,9 +234,9 @@ function Banner({ banner }: { banner: HomeContent['banners'][number] }) {
         />
       )}
       <div style={{ padding: '14px 16px' }}>
-        <div style={{ font: f(700, 14.5), color: c.text }}>{banner.title}</div>
+        <div style={{ font: t.h3, color: c.text }}>{banner.title}</div>
         {banner.description && (
-          <div style={{ font: f(400, 12.5, 20), color: c.muted, marginTop: 4 }}>
+          <div style={{ font: t.caption, color: c.muted, marginTop: 4 }}>
             {banner.description}
           </div>
         )}
@@ -285,7 +291,7 @@ function Step({ n, title, body }: { n: number; title: string; body: string }) {
       >
         {n}
       </div>
-      <div style={{ font: f(700, 15), color: c.text, marginBottom: 5 }}>{title}</div>
+      <div style={{ font: t.h3, color: c.text, marginBottom: 5 }}>{title}</div>
       <div style={{ font: t.bodySm, color: c.muted }}>{body}</div>
     </div>
   );

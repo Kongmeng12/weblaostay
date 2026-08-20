@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { requestPasswordReset, resetPassword } from '../lib/api';
-import { c, f, radius } from '../theme';
+import { c, f, radius, type as t } from '../theme';
 import { Button, ErrorNote, Field, inputStyle, Spinner } from '../components/ui';
 import { AuthShell } from './SignIn';
 
@@ -131,7 +131,7 @@ export function ForgotPasswordPage() {
       title="ລືມລະຫັດຜ່ານ"
       subtitle="ໃສ່ອີເມວທີ່ໃຊ້ສະໝັກ ແລ້ວເຮົາຈະສົ່ງລິ້ງຕັ້ງລະຫັດຜ່ານໃໝ່ໃຫ້"
       footer={
-        <Link to="/signin" style={{ font: f(700, 13) }}>
+        <Link to="/signin" style={{ font: t.label }}>
           ກັບໄປໜ້າເຂົ້າສູ່ລະບົບ
         </Link>
       }

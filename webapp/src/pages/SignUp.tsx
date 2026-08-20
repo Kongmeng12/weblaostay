@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { c, f } from '../theme';
+import { c, f, type as t, TAP } from '../theme';
 import { Button, ErrorNote, Field, inputStyle, Spinner } from '../components/ui';
 import { AuthShell } from './SignIn';
 
@@ -42,7 +42,11 @@ export function SignUpPage() {
       footer={
         <>
           ມີບັນຊີແລ້ວ?{' '}
-          <Link to="/signin" state={location.state} style={{ font: f(700, 13) }}>
+          <Link
+            to="/signin"
+            state={location.state}
+            style={{ display: 'inline-flex', alignItems: 'center', minHeight: TAP, font: t.label }}
+          >
             ເຂົ້າສູ່ລະບົບ
           </Link>
         </>
@@ -119,7 +123,7 @@ export function SignUpPage() {
             checked={acceptedTerms}
             onChange={(e) => setAcceptedTerms(e.target.checked)}
             required
-            style={{ width: 17, height: 17, marginTop: 1, accentColor: c.accent, flexShrink: 0 }}
+            style={{ width: 24, height: 24, marginTop: 1, accentColor: c.accent, flexShrink: 0 }}
           />
           <span>
             ຂ້າພະເຈົ້າໄດ້ອ່ານ ແລະ ຍອມຮັບ{' '}

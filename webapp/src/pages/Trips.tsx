@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
-import { c, f, radius, MAX_WIDTH, BOOKING_STATUS_PILL, pillFor } from '../theme';
+import { c, f, radius, BOOKING_STATUS_PILL, pillFor, type as t } from '../theme';
 import { countdown, kip, laoDateRange } from '../lib/format';
-import { Button, Empty, ErrorNote, Photo, Pill, Skeleton } from '../components/ui';
+import { Button, Empty, ErrorNote, Page, PageTitle, Photo, Pill, Skeleton } from '../components/ui';
 import type { BookingRow, Paged } from '../lib/types';
 
 const FILTERS = [
@@ -27,8 +27,8 @@ export function TripsPage() {
   });
 
   return (
-    <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: '28px 18px 48px' }}>
-      <h1 style={{ font: f(800, 24), color: c.text, margin: '0 0 18px' }}>ການເດີນທາງຂອງຂ້ອຍ</h1>
+    <Page width="wide">
+      <PageTitle>ການເດີນທາງຂອງຂ້ອຍ</PageTitle>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
         {FILTERS.map((filter) => (
@@ -41,7 +41,7 @@ export function TripsPage() {
               border: `1px solid ${status === filter.value ? c.accent : c.border}`,
               background: status === filter.value ? c.accentSoft : '#fff',
               color: status === filter.value ? c.accentDark : c.soft,
-              font: f(600, 12.5),
+              font: t.caption,
               cursor: 'pointer',
             }}
           >
@@ -76,7 +76,7 @@ export function TripsPage() {
           }
         />
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -101,7 +101,7 @@ function TripRow({ booking }: { booking: BookingRow }) {
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
-          <span style={{ font: f(700, 12), color: c.faint }}>{booking.code}</span>
+          <span style={{ font: t.caption, color: c.faint }}>{booking.code}</span>
           <Pill bg={pill.bg} fg={pill.fg}>
             {pill.label}
           </Pill>
@@ -109,7 +109,7 @@ function TripRow({ booking }: { booking: BookingRow }) {
 
         <div
           style={{
-            font: f(700, 15),
+            font: t.h3,
             color: c.text,
             marginBottom: 3,
             overflow: 'hidden',
@@ -120,7 +120,7 @@ function TripRow({ booking }: { booking: BookingRow }) {
           {booking.property}
         </div>
 
-        <div style={{ font: f(400, 12.5), color: c.muted }}>
+        <div style={{ font: t.caption, color: c.muted }}>
           {laoDateRange(booking.checkIn, booking.checkOut)} · {booking.nights} ຄືນ ·{' '}
           {booking.guests} ຄົນ
           {booking.roomType ? ` · ${booking.roomType}` : ''}
@@ -128,7 +128,7 @@ function TripRow({ booking }: { booking: BookingRow }) {
 
         {/* The one thing on this row that is about to change on its own. */}
         {booking.status === 'pending' && (
-          <div style={{ font: f(700, 12), color: c.warnFg, marginTop: 6 }}>
+          <div style={{ font: t.caption, color: c.warnFg, marginTop: 6 }}>
             {remaining ? `ຕ້ອງຊຳລະພາຍໃນ ${remaining}` : 'ໝົດເວລາກັນຫ້ອງແລ້ວ'}
           </div>
         )}
@@ -137,7 +137,7 @@ function TripRow({ booking }: { booking: BookingRow }) {
       <div style={{ textAlign: 'right', flex: 'none' }}>
         <div style={{ font: f(800, 16), color: c.accent }}>{kip(booking.total)}</div>
         {booking.status === 'completed' && !booking.reviewed && (
-          <div style={{ font: f(600, 11.5), color: c.accentDark, marginTop: 6 }}>ຂຽນຮີວິວ →</div>
+          <div style={{ font: t.caption, color: c.accentDark, marginTop: 6 }}>ຂຽນຮີວິວ →</div>
         )}
       </div>
     </Link>

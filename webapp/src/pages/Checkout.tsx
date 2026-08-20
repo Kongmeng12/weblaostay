@@ -3,19 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, qs, ApiError } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import { c, f, MAX_WIDTH } from '../theme';
+import { c, f, type as t } from '../theme';
 import { kip, laoDateFull, nightsBetween } from '../lib/format';
-import {
-  Button,
-  Card,
-  ErrorNote,
-  Field,
-  Loading,
-  MoneyRow,
-  Photo,
-  Spinner,
-  inputStyle,
-} from '../components/ui';
+import { Button, Card, ErrorNote, Field, Loading, MoneyRow, Page, PageTitle, Photo, Spinner, inputStyle } from '../components/ui';
 import type { BookingDetail, PropertyDetail, Quote } from '../lib/types';
 
 /**
@@ -93,8 +83,8 @@ export function CheckoutPage() {
   const nights = nightsBetween(checkIn, checkOut);
 
   return (
-    <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: '28px 18px 48px' }}>
-      <h1 style={{ font: f(800, 24), color: c.text, margin: '0 0 20px' }}>ຢືນຢັນການຈອງ</h1>
+    <Page width="wide">
+      <PageTitle>ຢືນຢັນການຈອງ</PageTitle>
 
       <div className="laostay-split">
         <div style={{ display: 'grid', gap: 16 }}>
@@ -109,10 +99,10 @@ export function CheckoutPage() {
                 <div style={{ font: f(800, 16), color: c.text, marginBottom: 3 }}>
                   {property.data?.name ?? '—'}
                 </div>
-                <div style={{ font: f(400, 12.5), color: c.muted, marginBottom: 6 }}>
+                <div style={{ font: t.caption, color: c.muted, marginBottom: 6 }}>
                   {[property.data?.district, property.data?.province].filter(Boolean).join(', ')}
                 </div>
-                <div style={{ font: f(600, 13), color: c.accentDark }}>{room?.name ?? '—'}</div>
+                <div style={{ font: t.label, color: c.accentDark }}>{room?.name ?? '—'}</div>
               </div>
             </div>
           </Card>
@@ -173,7 +163,7 @@ export function CheckoutPage() {
                 <MoneyRow label="ລວມທັງໝົດ" amount={kip(quote.data.total)} strong />
 
                 <details style={{ marginTop: 12 }}>
-                  <summary style={{ font: f(600, 12), color: c.muted, cursor: 'pointer' }}>
+                  <summary style={{ font: t.caption, color: c.muted, cursor: 'pointer' }}>
                     ລາຄາແຕ່ລະຄືນ
                   </summary>
                   <div style={{ marginTop: 8 }}>
@@ -221,15 +211,15 @@ export function CheckoutPage() {
           </p>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-      <span style={{ font: f(400, 13), color: c.muted }}>{label}</span>
-      <span style={{ font: f(600, 13), color: c.text, textAlign: 'right' }}>{value}</span>
+      <span style={{ font: t.bodySm, color: c.muted }}>{label}</span>
+      <span style={{ font: t.label, color: c.text, textAlign: 'right' }}>{value}</span>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { c, f, radius } from '../theme';
+import { c, radius, type as t } from '../theme';
 
 /**
  * A property's location on an OpenStreetMap.
@@ -91,7 +91,7 @@ export function PropertyMap({
         overflow: 'hidden',
         border: `1px solid ${c.border}`,
         background: c.neutralBg,
-        font: f(400, 12),
+        font: t.caption,
       }}
     />
   );

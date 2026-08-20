@@ -49,6 +49,14 @@ export interface SearchResult {
   pages: number;
 }
 
+export interface District {
+  id: string;
+  provinceId: string;
+  code: string;
+  name: string;
+  nameEn: string;
+}
+
 export interface Province {
   id: string;
   code: string;

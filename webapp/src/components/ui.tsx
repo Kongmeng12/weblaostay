@@ -346,9 +346,9 @@ export function Empty({
   return (
     <div style={{ padding: '56px 24px', textAlign: 'center' }}>
       <div style={{ fontSize: 34, marginBottom: 14 }}>{icon}</div>
-      <div style={{ font: f(700, 15), color: c.text, marginBottom: 6 }}>{message}</div>
+      <div style={{ font: t.h3, color: c.text, marginBottom: 6 }}>{message}</div>
       {hint && (
-        <div style={{ font: f(400, 13, 21), color: c.muted, maxWidth: 380, margin: '0 auto' }}>
+        <div style={{ font: t.bodySm, color: c.muted, maxWidth: 380, margin: '0 auto' }}>
           {hint}
         </div>
       )}

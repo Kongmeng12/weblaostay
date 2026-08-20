@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { c, f, radius, MAX_WIDTH } from '../theme';
+import { c, f, radius, type as t } from '../theme';
 import { countdown, kip, laoDateFull } from '../lib/format';
-import { Button, Card, ErrorNote, Loading, MoneyRow, Spinner } from '../components/ui';
+import { Button, Card, ErrorNote, Loading, MoneyRow, Page, Spinner } from '../components/ui';
 import { QrCode } from '../components/QrCode';
 import type { BookingDetail, Payment } from '../lib/types';
 
@@ -81,8 +81,8 @@ export function PayPage() {
     return (
       <Centre>
         <div style={{ fontSize: 46, marginBottom: 14 }}>✅</div>
-        <h1 style={{ font: f(800, 24), color: c.text, margin: '0 0 8px' }}>ຊຳລະສຳເລັດ</h1>
-        <p style={{ font: f(400, 14, 22), color: c.muted, margin: '0 0 22px' }}>
+        <h1 style={{ font: t.h1, color: c.text, margin: '0 0 8px' }}>ຊຳລະສຳເລັດ</h1>
+        <p style={{ font: t.body, color: c.muted, margin: '0 0 22px' }}>
           ການຈອງ <b style={{ color: c.text }}>{b.code}</b> ຢືນຢັນແລ້ວ
         </p>
         <Spinner />
@@ -94,10 +94,10 @@ export function PayPage() {
     return (
       <Centre>
         <div style={{ fontSize: 46, marginBottom: 14 }}>⏳</div>
-        <h1 style={{ font: f(800, 22), color: c.text, margin: '0 0 8px' }}>
+        <h1 style={{ font: t.h2, color: c.text, margin: '0 0 8px' }}>
           ໝົດເວລາກັນຫ້ອງແລ້ວ
         </h1>
-        <p style={{ font: f(400, 14, 22), color: c.muted, margin: '0 0 22px', maxWidth: 380 }}>
+        <p style={{ font: t.body, color: c.muted, margin: '0 0 22px', maxWidth: 380 }}>
           ການຈອງ {b.code} ຖືກຍົກເລີກ ເພາະບໍ່ໄດ້ຊຳລະພາຍໃນເວລາ — ຫ້ອງຖືກປ່ອຍຄືນໃຫ້ຄົນອື່ນແລ້ວ.
           ກະລຸນາຈອງໃໝ່ອີກຄັ້ງ.
         </p>
@@ -111,7 +111,7 @@ export function PayPage() {
   if (b.status !== 'pending') {
     return (
       <Centre>
-        <h1 style={{ font: f(800, 22), color: c.text, margin: '0 0 8px' }}>
+        <h1 style={{ font: t.h2, color: c.text, margin: '0 0 8px' }}>
           ການຈອງນີ້ບໍ່ຕ້ອງຊຳລະແລ້ວ
         </h1>
         <Button size="lg" onClick={() => navigate(`/trips/${b.id}`)}>
@@ -122,9 +122,9 @@ export function PayPage() {
   }
 
   return (
-    <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: '28px 18px 48px' }}>
-      <h1 style={{ font: f(800, 24), color: c.text, margin: '0 0 6px' }}>ຊຳລະເງິນ</h1>
-      <p style={{ font: f(400, 13.5), color: c.muted, margin: '0 0 22px' }}>
+    <Page width="wide">
+      <h1 style={{ font: t.h1, color: c.text, margin: '0 0 6px' }}>ຊຳລະເງິນ</h1>
+      <p style={{ font: t.bodySm, color: c.muted, margin: '0 0 22px' }}>
         ການຈອງ <b style={{ color: c.text }}>{b.code}</b> · {b.property.name}
       </p>
 
@@ -139,7 +139,7 @@ export function PayPage() {
                   color: c.warnFg,
                   padding: '8px 16px',
                   borderRadius: 999,
-                  font: f(700, 13),
+                  font: t.label,
                   marginBottom: 18,
                 }}
               >
@@ -153,7 +153,7 @@ export function PayPage() {
                   color: c.dangerFg,
                   padding: '8px 16px',
                   borderRadius: 999,
-                  font: f(700, 13),
+                  font: t.label,
                   marginBottom: 18,
                 }}
               >
@@ -179,10 +179,10 @@ export function PayPage() {
                   <QrCode value={payment.data.qrPayload} />
                 </div>
 
-                <div style={{ font: f(800, 22), color: c.accent, margin: '18px 0 4px' }}>
+                <div style={{ font: t.h2, color: c.accent, margin: '18px 0 4px' }}>
                   {kip(payment.data.amount)}
                 </div>
-                <div style={{ font: f(400, 13, 21), color: c.muted, maxWidth: 320, margin: '0 auto' }}>
+                <div style={{ font: t.bodySm, color: c.muted, maxWidth: 320, margin: '0 auto' }}>
                   ເປີດແອັບທະນາຄານຂອງທ່ານ ແລ້ວສະແກນ QR ນີ້ — ໜ້ານີ້ຈະຢືນຢັນເອງເມື່ອຈ່າຍສຳເລັດ
                 </div>
 
@@ -199,7 +199,7 @@ export function PayPage() {
                       borderRadius: radius.md,
                       border: `1px solid ${c.border}`,
                       background: '#fff',
-                      font: f(700, 13),
+                      font: t.label,
                       color: c.text,
                     }}
                   >
@@ -230,7 +230,7 @@ export function PayPage() {
 
         <div className="laostay-aside" style={{ display: 'grid', gap: 14 }}>
           <Card>
-            <div style={{ font: f(800, 15), color: c.text, marginBottom: 12 }}>ລາຍລະອຽດ</div>
+            <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>ລາຍລະອຽດ</div>
             <Row label="ທີ່ພັກ" value={b.property.name} />
             <Row label="ຫ້ອງ" value={b.roomType?.name ?? '—'} />
             <Row label="ເຂົ້າພັກ" value={laoDateFull(b.checkIn)} />
@@ -249,7 +249,7 @@ export function PayPage() {
           <CancelHoldButton bookingId={b.id} />
         </div>
       </div>
-    </div>
+    </Page>
   );
 }
 
@@ -280,8 +280,8 @@ function CancelHoldButton({ bookingId }: { bookingId: string }) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '4px 0' }}>
-      <span style={{ font: f(400, 13), color: c.muted }}>{label}</span>
-      <span style={{ font: f(600, 13), color: c.text, textAlign: 'right' }}>{value}</span>
+      <span style={{ font: t.bodySm, color: c.muted }}>{label}</span>
+      <span style={{ font: t.label, color: c.text, textAlign: 'right' }}>{value}</span>
     </div>
   );
 }

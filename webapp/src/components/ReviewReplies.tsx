@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { c, f, radius, type as t } from '../theme';
+import { c, radius, type as t } from '../theme';
 import { laoAgo } from '../lib/format';
 import type { ReplyNode, ReviewThread } from '../lib/types';
 
@@ -44,11 +44,11 @@ function Reply({ reply, depth }: { reply: ReplyNode; depth: number }) {
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
         <span style={{ font: t.label, color: c.accentDark }}>{reply.author}</span>
-        <span style={{ font: f(400, 11), color: c.faint }}>{laoAgo(reply.createdAt)}</span>
+        <span style={{ font: t.caption, color: c.faint }}>{laoAgo(reply.createdAt)}</span>
       </div>
       <div
         style={{
-          font: f(400, 12.5, 20),
+          font: t.caption,
           color: c.soft,
           background: c.bg,
           borderRadius: radius.sm,

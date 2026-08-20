@@ -1,22 +1,49 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { c, radius, space, type as t } from '../theme';
-import type { Province } from '../lib/types';
+import { c, radius, space, type as t, TAP, PROPERTY_TYPE_LABEL } from '../theme';
+import type { District, Province } from '../lib/types';
 import { Button } from './ui';
 import { DateRangePicker } from './DateRangePicker';
 
 export interface SearchCriteria {
   q: string;
   provinceId: string;
+  districtId: string;
+  type: string;
+  /** Kip per night. Empty string means "no bound", not zero. */
+  minPrice: string;
+  maxPrice: string;
   checkIn: string;
   checkOut: string;
   guests: number;
+  /** Set only by "near me" — the API sorts and filters by distance from here. */
+  lat: string;
+  lng: string;
 }
 
 export function blankCriteria(): SearchCriteria {
-  return { q: '', provinceId: '', checkIn: '', checkOut: '', guests: 2 };
+  return {
+    q: '',
+    provinceId: '',
+    districtId: '',
+    type: '',
+    minPrice: '',
+    maxPrice: '',
+    checkIn: '',
+    checkOut: '',
+    guests: 2,
+    lat: '',
+    lng: '',
+  };
 }
+
+/**
+ * The four values `property_type` allows, labelled from the map the rest of the
+ * app already displays them with — a second list here would be one enum change
+ * away from showing a type the API would reject.
+ */
+const TYPES = Object.entries(PROPERTY_TYPE_LABEL);
 
 /**
  * The search form.
@@ -37,11 +64,73 @@ export function SearchBar({
 }) {
   const [draft, setDraft] = useState(value);
 
+  /**
+   * Re-seeds when the criteria change from outside the form.
+   *
+   * `useState(value)` only reads its argument once, so anything that alters the
+   * search without going through these fields — the "near me" button, the sort
+   * picker, the back button — used to leave the form displaying the criteria it
+   * was first mounted with. Comparing the serialised value rather than the
+   * object avoids re-seeding on every render, which would throw away what the
+   * guest is halfway through typing.
+   */
+  const seed = JSON.stringify(value);
+  useEffect(() => {
+    setDraft(JSON.parse(seed) as SearchCriteria);
+  }, [seed]);
+
   const { data: provinces } = useQuery({
     queryKey: ['provinces'],
     queryFn: () => api.get<Province[]>('/locations/provinces'),
     staleTime: 60 * 60 * 1000,
   });
+
+  // Districts only mean anything inside a province, so they are fetched per
+  // province rather than all 148 at once into a select nobody can scan.
+  const { data: districts } = useQuery({
+    queryKey: ['districts', draft.provinceId],
+    queryFn: () => api.get<District[]>(`/locations/districts?provinceId=${draft.provinceId}`),
+    enabled: !!draft.provinceId,
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState('');
+
+  /**
+   * Hands the search a pair of coordinates so the API can sort by distance.
+   *
+   * The permission prompt is the browser's, and a refusal is a normal answer
+   * rather than a fault — it just leaves the search as it was.
+   */
+  function locate() {
+    if (!navigator.geolocation) {
+      setLocateError('ເບຣົາເຊີນີ້ບອກຕຳແໜ່ງບໍ່ໄດ້');
+      return;
+    }
+    setLocating(true);
+    setLocateError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        onSearch({
+          ...draft,
+          lat: pos.coords.latitude.toFixed(6),
+          lng: pos.coords.longitude.toFixed(6),
+          // A place-name search and "near me" answer different questions, and
+          // the API would apply both at once.
+          q: '',
+          provinceId: '',
+          districtId: '',
+        });
+      },
+      () => {
+        setLocating(false);
+        setLocateError('ບອກຕຳແໜ່ງບໍ່ໄດ້ — ກະລຸນາອະນຸຍາດໃນເບຣົາເຊີ');
+      },
+      { timeout: 10_000, maximumAge: 300_000 },
+    );
+  }
 
   // The two dates are not set through this — `DateRangePicker` owns both ends
   // together, which is the only way it can refuse a departure before the
@@ -82,7 +171,11 @@ export function SearchBar({
       <Cell label="ແຂວງ">
         <select
           value={draft.provinceId}
-          onChange={(e) => set('provinceId', e.target.value)}
+          onChange={(e) => {
+            // The districts of the old province do not exist in the new one,
+            // so keeping the id would silently filter to nothing.
+            setDraft((d) => ({ ...d, provinceId: e.target.value, districtId: '' }));
+          }}
           style={cellInput}
         >
           <option value="">ທຸກແຂວງ</option>
@@ -90,6 +183,36 @@ export function SearchBar({
             <option key={p.id} value={p.id}>
               {p.name}
               {p.propertyCount ? ` (${p.propertyCount})` : ''}
+            </option>
+          ))}
+        </select>
+      </Cell>
+
+      {/* Only once a province is chosen — a district list on its own is 148
+          names with no context. */}
+      {!!draft.provinceId && (
+        <Cell label="ເມືອງ">
+          <select
+            value={draft.districtId}
+            onChange={(e) => set('districtId', e.target.value)}
+            style={cellInput}
+          >
+            <option value="">ທຸກເມືອງ</option>
+            {districts?.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </Cell>
+      )}
+
+      <Cell label="ປະເພດ">
+        <select value={draft.type} onChange={(e) => set('type', e.target.value)} style={cellInput}>
+          <option value="">ທຸກປະເພດ</option>
+          {TYPES.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
             </option>
           ))}
         </select>
@@ -119,7 +242,65 @@ export function SearchBar({
         />
       </div>
 
-      <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
+      {/* Price is a range, so both ends share one cell — two separate labelled
+          fields would read as two unrelated filters. */}
+      <Cell label="ລາຄາຕໍ່ຄືນ (ກີບ)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
+          <input
+            value={draft.minPrice}
+            onChange={(e) => set('minPrice', e.target.value.replace(/\D/g, ''))}
+            placeholder="ຕ່ຳສຸດ"
+            inputMode="numeric"
+            style={cellInput}
+          />
+          <span style={{ font: t.caption, color: c.faint }}>—</span>
+          <input
+            value={draft.maxPrice}
+            onChange={(e) => set('maxPrice', e.target.value.replace(/\D/g, ''))}
+            placeholder="ສູງສຸດ"
+            inputMode="numeric"
+            style={cellInput}
+          />
+        </div>
+      </Cell>
+
+      <div
+        style={{
+          gridColumn: '1 / -1',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: space[3],
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+          <Button type="button" variant="outline" onClick={locate} disabled={locating}>
+            {locating ? 'ກຳລັງຫາຕຳແໜ່ງ...' : '📍 ໃກ້ຂ້ອຍ'}
+          </Button>
+          {draft.lat && !locateError && (
+            <span style={{ font: t.caption, color: c.soft }}>
+              ຄົ້ນຫາຈາກຕຳແໜ່ງຂອງທ່ານ
+              <button
+                type="button"
+                onClick={() => onSearch({ ...draft, lat: '', lng: '' })}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  minHeight: TAP,
+                  padding: `0 ${space[2]}px`,
+                  font: t.label,
+                  color: c.accent,
+                  cursor: 'pointer',
+                }}
+              >
+                ຍົກເລີກ
+              </button>
+            </span>
+          )}
+          {locateError && <span style={{ font: t.caption, color: c.warnFg }}>{locateError}</span>}
+        </div>
+
         <Button type="submit" size="lg" style={{ height: 46, minWidth: 160 }}>
           ຄົ້ນຫາ
         </Button>

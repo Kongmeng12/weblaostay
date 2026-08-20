@@ -1,8 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { c, f, radius, MAX_WIDTH, shadow } from '../theme';
-import { Button, ErrorNote, Field, inputStyle, Spinner } from '../components/ui';
+import { c, radius, shadow, type as t, TAP } from '../theme';
+import { Button, ErrorNote, Field, Page, Spinner, inputStyle } from '../components/ui';
 
 export function SignInPage() {
   const { user, signIn } = useAuth();
@@ -38,7 +38,11 @@ export function SignInPage() {
       footer={
         <>
           ຍັງບໍ່ມີບັນຊີ?{' '}
-          <Link to="/signup" state={location.state} style={{ font: f(700, 13) }}>
+          <Link
+            to="/signup"
+            state={location.state}
+            style={{ display: 'inline-flex', alignItems: 'center', minHeight: TAP, font: t.label }}
+          >
             ສະໝັກສະມາຊິກ
           </Link>
         </>
@@ -77,7 +81,14 @@ export function SignInPage() {
 
         <Link
           to="/forgot"
-          style={{ font: f(600, 12.5), color: c.muted, textAlign: 'center' }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: TAP,
+            font: t.caption,
+            color: c.muted,
+          }}
         >
           ລືມລະຫັດຜ່ານ?
         </Link>
@@ -99,7 +110,7 @@ export function AuthShell({
   footer?: ReactNode;
 }) {
   return (
-    <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: '40px 18px 64px' }}>
+    <Page width="wide">
       <div
         style={{
           maxWidth: 420,
@@ -111,8 +122,8 @@ export function AuthShell({
           padding: 28,
         }}
       >
-        <h1 style={{ font: f(800, 24), color: c.text, margin: '0 0 6px' }}>{title}</h1>
-        <p style={{ font: f(400, 13, 21), color: c.muted, margin: '0 0 24px' }}>{subtitle}</p>
+        <h1 style={{ font: t.h1, color: c.text, margin: '0 0 6px' }}>{title}</h1>
+        <p style={{ font: t.bodySm, color: c.muted, margin: '0 0 24px' }}>{subtitle}</p>
         {children}
         {footer && (
           <div
@@ -120,7 +131,7 @@ export function AuthShell({
               marginTop: 22,
               paddingTop: 18,
               borderTop: `1px solid ${c.divider}`,
-              font: f(400, 13),
+              font: t.bodySm,
               color: c.muted,
               textAlign: 'center',
             }}
@@ -129,6 +140,6 @@ export function AuthShell({
           </div>
         )}
       </div>
-    </div>
+    </Page>
   );
 }

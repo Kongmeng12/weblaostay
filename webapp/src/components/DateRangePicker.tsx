@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { c, f, radius, shadow, space, TAP } from '../theme';
+import { c, f, radius, shadow, space, TAP, type as t } from '../theme';
 import { LAO_MONTHS_LONG, LAO_WEEKDAYS, laoDate, nightsBetween, todayIso } from '../lib/format';
 
 /**
@@ -212,7 +212,7 @@ function Month({
 
   return (
     <div className={className} style={{ minWidth: 0 }}>
-      <div style={{ font: f(700, 13), color: c.text, textAlign: 'center', marginBottom: space[1] }}>
+      <div style={{ font: t.label, color: c.text, textAlign: 'center', marginBottom: space[1] }}>
         {LAO_MONTHS_LONG[m]} {year}
       </div>
 

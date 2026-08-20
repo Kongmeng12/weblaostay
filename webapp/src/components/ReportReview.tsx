@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { reportReview, type ReportReason } from '../lib/api';
-import { c, f, radius } from '../theme';
+import { c, f, radius, type as t } from '../theme';
 import { Button, ErrorNote, Field, inputStyle, Modal } from './ui';
 
 const REASONS: { value: ReportReason; label: string; hint: string }[] = [
@@ -38,7 +38,7 @@ export function ReportReview({ reviewId }: { reviewId: string }) {
 
   if (done) {
     return (
-      <div style={{ font: f(500, 11.5), color: c.muted, marginTop: 10 }}>
+      <div style={{ font: t.caption, color: c.muted, marginTop: 10 }}>
         ໄດ້ຮັບລາຍງານແລ້ວ — ທີມງານຈະກວດສອບ
       </div>
     );
@@ -54,7 +54,7 @@ export function ReportReview({ reviewId }: { reviewId: string }) {
           border: 'none',
           padding: 0,
           marginTop: 10,
-          font: f(500, 11.5),
+          font: t.caption,
           color: c.faint,
           cursor: 'pointer',
           textDecoration: 'underline',
@@ -109,9 +109,9 @@ export function ReportReview({ reviewId }: { reviewId: string }) {
                     style={{ accentColor: c.accent }}
                   />
                   <span>
-                    <span style={{ font: f(600, 13), color: c.text }}>{r.label}</span>
+                    <span style={{ font: t.label, color: c.text }}>{r.label}</span>
                     {r.hint && (
-                      <span style={{ font: f(400, 11.5), color: c.faint }}> · {r.hint}</span>
+                      <span style={{ font: t.caption, color: c.faint }}> · {r.hint}</span>
                     )}
                   </span>
                 </label>
