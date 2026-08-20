@@ -477,6 +477,26 @@ export class BookingService {
       const paid = paidPayments.reduce((sum, p) => sum + p.amount, 0n);
 
       const policy = booking.cancellation_policies;
+
+      // `days_before_checkin` was captured on every seeded policy but never
+      // actually checked against the clock — every cancellation got the
+      // policy's flat `penalty_percent` regardless of timing, so "cancel
+      // before day X for a full refund" was true only by coincidence. This is
+      // the enforcement those policies were always supposed to have: once
+      // fewer than `days_before_checkin * 24` hours remain before check-in,
+      // the cancellation itself is refused, not just charged a bigger
+      // penalty. `is_refundable: false` policies are a separate, simpler
+      // promise — cancel any time, always at 100% penalty — so they skip
+      // this cutoff entirely.
+      const cutoffHours = (policy?.days_before_checkin ?? 0) * 24;
+      const hoursUntilCheckIn = (booking.check_in.getTime() - Date.now()) / 3_600_000;
+      if (policy?.is_refundable !== false && hoursUntilCheckIn < cutoffHours) {
+        throw new BadRequestException(
+          `ຫຼັງ ${cutoffHours} ຊົ່ວໂມງ ກ່ອນເຂົ້າພັກ ຍົກເລີກບໍ່ໄດ້ · ` +
+            `Cancellation is not possible within ${cutoffHours} hours of check-in`,
+        );
+      }
+
       const penaltyPercent = policy?.is_refundable === false ? 100 : rateOf(policy?.penalty_percent);
       const { penalty, refund } = cancellationSplit(paid, penaltyPercent);
 
@@ -622,13 +642,30 @@ async function nextBookingId(tx: Prisma.TransactionClient): Promise<bigint> {
   return BigInt(id);
 }
 
-/** The cancellation policy the property is currently advertising. */
+/**
+ * The name `0007_cancellation_policy_main.sql` seeds and `cancel()` falls
+ * back to for a property that never picked one — see `policyIdFor`.
+ */
+const MAIN_POLICY_NAME = 'ຫຼັກ · Main';
+
+/**
+ * The cancellation policy the property is currently advertising, falling
+ * back to the platform default so "never picked a policy" cannot mean
+ * "unlimited free cancellation with no deadline," which is what happened
+ * before this fallback existed.
+ */
 async function policyIdFor(tx: Prisma.TransactionClient, propertyId: bigint) {
   const property = await tx.properties.findUnique({
     where: { property_id: propertyId },
     select: { cancellation_policy_id: true },
   });
-  return property?.cancellation_policy_id ?? null;
+  if (property?.cancellation_policy_id) return property.cancellation_policy_id;
+
+  const main = await tx.cancellation_policies.findFirst({
+    where: { policy_name: MAIN_POLICY_NAME },
+    select: { cancellation_policy_id: true },
+  });
+  return main?.cancellation_policy_id ?? null;
 }
 
 async function partnerUserId(tx: Prisma.TransactionClient, partnerId: bigint): Promise<bigint> {
