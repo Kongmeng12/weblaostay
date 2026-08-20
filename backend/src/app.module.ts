@@ -18,6 +18,7 @@ import { CmsModule } from './cms/cms.module';
 import { AdminModule } from './admin/admin.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { HealthController } from './health.controller';
+import { MapsController } from './maps/maps.controller';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -45,7 +46,7 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
     AdminModule,
     UploadsModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, MapsController],
   providers: [
     // Order matters: rate limit, then authenticate, then authorise.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
