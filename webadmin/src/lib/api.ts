@@ -9,8 +9,8 @@
  */
 const BASE = '/api';
 
-const ACCESS_KEY = 'laostay.accessToken';
-const REFRESH_KEY = 'laostay.refreshToken';
+const ACCESS_KEY = 'phaphak.accessToken';
+const REFRESH_KEY = 'phaphak.refreshToken';
 
 export type AdminRole = 'super_admin' | 'finance' | 'staff';
 

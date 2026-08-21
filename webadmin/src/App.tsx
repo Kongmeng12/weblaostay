@@ -125,10 +125,10 @@ function Splash() {
             borderTopColor: c.accent,
             borderRadius: '50%',
             margin: '0 auto 16px',
-            animation: 'laostaySpin .8s linear infinite',
+            animation: 'phaphakSpin .8s linear infinite',
           }}
         />
-        <div style={{ font: f(600, 13), color: c.muted }}>ກຳລັງໂຫຼດ LaoStay Admin...</div>
+        <div style={{ font: f(600, 13), color: c.muted }}>ກຳລັງໂຫຼດ PhaPhak Admin...</div>
       </div>
     </div>
   );

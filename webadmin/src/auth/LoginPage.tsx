@@ -66,7 +66,7 @@ export function LoginPage() {
               L
             </div>
             <div>
-              <div style={{ font: f(800, 18), color: '#fff' }}>LaoStay</div>
+              <div style={{ font: f(800, 18), color: '#fff' }}>PhaPhak</div>
               <div style={{ font: f(400, 12), color: c.onDarkSoft }}>ພັກເຮືອນລາວ</div>
             </div>
           </div>
@@ -83,7 +83,7 @@ export function LoginPage() {
           </div>
 
           <div style={{ font: f(400, 12), color: '#8C7F6C' }}>
-            © 2026 LaoStay · ສະຫງວນລິຂະສິດ
+            © 2026 PhaPhak · ສະຫງວນລິຂະສິດ
           </div>
         </div>
 
@@ -106,7 +106,7 @@ export function LoginPage() {
                 required
                 autoComplete="username"
                 style={inputStyle}
-                placeholder="admin@laostay.la"
+                placeholder="admin@phaphak.la"
               />
             </label>
 

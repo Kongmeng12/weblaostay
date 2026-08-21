@@ -168,7 +168,7 @@ console.log('\nPhaJay — Generate QR\n');
 {
   const seen = stubGateway(REPLY);
   const p = new PhaJayPaymentProvider(cfg({ PHAJAY_API_KEY: 'k' }));
-  await p.createCharge({ ...charge, description: 'LaoStay STL-0079 · ບ້ານພັກສະບາຍດີ' });
+  await p.createCharge({ ...charge, description: 'PhaPhak STL-0079 · ບ້ານພັກສະບາຍດີ' });
   check(
     'Lao characters are stripped for BCEL, booking code kept',
     /^[\x20-\x7E]*$/.test(seen.body.description) && seen.body.description.includes('STL-0079'),

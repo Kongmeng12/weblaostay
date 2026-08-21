@@ -155,14 +155,14 @@ async function main() {
   else bad('the hash was upgraded to argon2 on sign-in', `still ${after.algo}`);
 
   const C = customer.accessToken;
-  const admin = await login('amnuay@laostay.la', ADMIN_PW);
-  const finance = await login('bounmy@laostay.la', ADMIN_PW);
-  const staff = await login('phonsy@laostay.la', ADMIN_PW);
+  const admin = await login('amnuay@phaphak.la', ADMIN_PW);
+  const finance = await login('bounmy@phaphak.la', ADMIN_PW);
+  const staff = await login('phonsy@phaphak.la', ADMIN_PW);
   ok('POST /auth/login for all three admin roles');
   const A = admin.accessToken;
 
-  const partnerA = await login('vintage@laostay.la', PARTNER_PW);
-  const partnerB = await login('homsabay@laostay.la', PARTNER_PW);
+  const partnerA = await login('vintage@phaphak.la', PARTNER_PW);
+  const partnerB = await login('homsabay@phaphak.la', PARTNER_PW);
   ok('POST /auth/login for two partners');
   const P = partnerA.accessToken;
 
@@ -245,7 +245,7 @@ async function main() {
   // that was live at the time. A tick box leaving no trace proves nothing.
   console.log('\nregistration & agreements');
   const signup = {
-    email: `smoke.guest.${Date.now()}@laostay.la`,
+    email: `smoke.guest.${Date.now()}@phaphak.la`,
     password: 'Passw0rd!23',
     fullName: 'ສະໝັກ ທົດສອບ',
     // Unique per run: phone numbers are unique per account now, so a fixed one
@@ -861,7 +861,7 @@ async function main() {
   //
   // The only way an ADMIN row is ever created: no public route reaches it.
   console.log('\nstaff accounts');
-  const staffEmail = `smoke.staff.${Date.now()}@laostay.la`;
+  const staffEmail = `smoke.staff.${Date.now()}@phaphak.la`;
   const staffPw = 'SmokeStaff@2026';
 
   await expect('POST /admin/admins is refused for finance', 'POST', '/admin/admins', {
@@ -919,12 +919,12 @@ async function main() {
 
   await expect('PATCH /admin/settings writes both halves', 'PATCH', '/admin/settings', {
     token: finance.accessToken,
-    body: { service_fee_rate: 7, app: { platform_name: 'LaoStay · smoke' } },
+    body: { service_fee_rate: 7, app: { platform_name: 'PhaPhak · smoke' } },
     check: (b) => {
       if (b?.system?.service_fee_rate !== 7) {
         return `service_fee_rate is ${b?.system?.service_fee_rate}`;
       }
-      if (b?.app?.platform_name !== 'LaoStay · smoke') {
+      if (b?.app?.platform_name !== 'PhaPhak · smoke') {
         return `platform_name is ${b?.app?.platform_name}`;
       }
       return null;
@@ -1111,7 +1111,7 @@ async function main() {
     );
     const host = await login(hostEmail, PARTNER_PW);
     const outsider =
-      hostEmail === 'vintage@laostay.la' ? partnerB.accessToken : partnerA.accessToken;
+      hostEmail === 'vintage@phaphak.la' ? partnerB.accessToken : partnerA.accessToken;
 
     await expect("a partner cannot read another property's thread", 'GET',
       `/partner/conversations/${thread.id}/messages`, { token: outsider, status: 404 });
@@ -1256,7 +1256,7 @@ async function main() {
 
     const replyHost = await login(reviewRow.host_email, PARTNER_PW);
     const outsider =
-      reviewRow.host_email === 'vintage@laostay.la'
+      reviewRow.host_email === 'vintage@phaphak.la'
         ? partnerB.accessToken
         : partnerA.accessToken;
 
@@ -1397,7 +1397,7 @@ async function main() {
       status: 201,
       body: {
         slug: 'about',
-        title: aboutBefore?.title ?? 'ກ່ຽວກັບ LaoStay',
+        title: aboutBefore?.title ?? 'ກ່ຽວກັບ PhaPhak',
         content: `${aboutBefore?.content ?? ''}\nsmoke`,
         isActive: true,
       },

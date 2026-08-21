@@ -38,7 +38,7 @@ export class CustomerPaymentsController {
 /**
  * The acquirer's webhook, and its development stand-in.
  *
- * Public by necessity — a bank cannot hold a LaoStay token — so the HMAC over
+ * Public by necessity — a bank cannot hold a PhaPhak token — so the HMAC over
  * the raw body is the whole of the authentication. `req.rawBody` is populated
  * because main.ts boots Nest with `rawBody: true`; verifying against
  * re-serialised JSON would fail the moment the provider's key order differed

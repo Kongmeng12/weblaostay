@@ -74,37 +74,37 @@ img {
 
 /* Content beside a summary panel that sticks. Below 860px the panel stops
    being a sidebar and simply follows the content, which is what a phone needs. */
-.laostay-split {
+.phaphak-split {
   display: grid;
   gap: 20px;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
   align-items: start;
 }
 @media (max-width: 860px) {
-  .laostay-split {
+  .phaphak-split {
     grid-template-columns: 1fr;
   }
-  .laostay-split > .laostay-aside {
+  .phaphak-split > .phaphak-aside {
     position: static !important;
   }
   /* Opt-in reordering for the one case where the panel is not a summary of the
      content but a prerequisite for it: on the property page the guest picks
      dates before a room, so once the columns stack the panel has to come
      first. The three pages that show a booking summary do not set this. */
-  .laostay-split.laostay-aside-first > .laostay-aside {
+  .phaphak-split.phaphak-aside-first > .phaphak-aside {
     order: -1;
   }
 }
 
-/* The mirror of .laostay-mobile-only: content that only earns its space once
+/* The mirror of .phaphak-mobile-only: content that only earns its space once
    there are two columns. On the property page the sidebar's price and booking
    button are exactly what the bottom bar already shows on a phone, and
    repeating them there just pushed the rooms further down. */
-.laostay-desktop-only {
+.phaphak-desktop-only {
   display: none;
 }
 @media (min-width: 861px) {
-  .laostay-desktop-only {
+  .phaphak-desktop-only {
     display: block;
   }
 }
@@ -114,26 +114,26 @@ img {
    would sit on top of it. */
 /* !important because StickyBar sets `display: flex` inline, and an inline
    style beats a stylesheet rule no matter how specific. */
-.laostay-mobile-only {
+.phaphak-mobile-only {
   display: none !important;
 }
 @media (max-width: 860px) {
-  .laostay-mobile-only {
+  .phaphak-mobile-only {
     display: flex !important;
   }
 }
 
 /* A horizontal strip that scrolls without showing a bar — photo carousels. */
-.laostay-strip {
+.phaphak-strip {
   overflow-x: auto;
   scrollbar-width: none;
   scroll-snap-type: x mandatory;
 }
-.laostay-strip::-webkit-scrollbar {
+.phaphak-strip::-webkit-scrollbar {
   display: none;
 }
 
-@keyframes laostayPulse {
+@keyframes phaphakPulse {
   0%,
   100% {
     opacity: 1;
@@ -143,7 +143,7 @@ img {
   }
 }
 
-@keyframes laostaySpin {
+@keyframes phaphakSpin {
   to {
     transform: rotate(360deg);
   }
@@ -152,11 +152,11 @@ img {
 /* The stay picker (DateRangePicker). Two months side by side where there is
    room; on a phone the second is dropped rather than squeezed, because paging
    a month at a time is the familiar gesture there anyway. */
-.laostay-cal-sheet {
+.phaphak-cal-sheet {
   min-width: 300px;
   max-width: min(640px, calc(100vw - 32px));
 }
-.laostay-cal-months {
+.phaphak-cal-months {
   display: grid;
   /* Capped, not stretched: a month spread across a 1120px row puts each day so
      far from its weekday heading that the grid stops reading as a calendar. */
@@ -165,10 +165,10 @@ img {
   gap: 28px;
 }
 @media (max-width: 720px) {
-  .laostay-cal-months {
+  .phaphak-cal-months {
     grid-template-columns: minmax(0, 330px);
   }
-  .laostay-cal-second {
+  .phaphak-cal-second {
     display: none;
   }
 }
@@ -184,4 +184,54 @@ img {
   width: 44px !important;
   height: 44px !important;
   line-height: 44px !important;
+}
+
+/* CMS page bodies rendered from sanitised HTML — see lib/richText.ts.
+   Written as element selectors rather than inline styles because the markup is
+   built as a string and never passes through React, so there is nothing to
+   attach a style prop to. */
+.phaphak-prose h2 {
+  font: 800 20px/28px 'Noto Sans Lao', system-ui, sans-serif;
+  color: #2B2521;
+  margin: 28px 0 10px;
+}
+.phaphak-prose h3,
+.phaphak-prose h4 {
+  font: 700 16px/24px 'Noto Sans Lao', system-ui, sans-serif;
+  color: #2B2521;
+  margin: 22px 0 8px;
+}
+.phaphak-prose h2:first-child,
+.phaphak-prose h3:first-child {
+  margin-top: 0;
+}
+.phaphak-prose p {
+  margin: 0 0 14px;
+}
+.phaphak-prose ul,
+.phaphak-prose ol {
+  margin: 0 0 14px;
+  padding-left: 22px;
+}
+.phaphak-prose li {
+  margin-bottom: 6px;
+}
+.phaphak-prose strong,
+.phaphak-prose b {
+  color: #2B2521;
+  font-weight: 700;
+}
+.phaphak-prose a {
+  color: #FD4D1C;
+}
+.phaphak-prose blockquote {
+  margin: 0 0 14px;
+  padding-left: 14px;
+  border-left: 3px solid #E8DFD1;
+  color: #8C8073;
+}
+.phaphak-prose hr {
+  border: none;
+  border-top: 1px solid #F1EAE0;
+  margin: 24px 0;
 }

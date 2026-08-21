@@ -702,7 +702,7 @@ function CreateAdminDialog({
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@laostay.la"
+            placeholder="name@phaphak.la"
             style={inputStyle}
           />
         </Field>

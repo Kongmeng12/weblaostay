@@ -124,7 +124,7 @@ export function DateRangePicker({
         <NavButton label="›" onClick={() => setCursor(nextMonth(cursor))} />
       </div>
 
-      <div className="laostay-cal-months">
+      <div className="phaphak-cal-months">
         {months.map((m, i) => (
           <Month
             key={m}
@@ -136,7 +136,7 @@ export function DateRangePicker({
             picking={picking}
             onHover={setHover}
             onPick={pick}
-            className={i === 1 ? 'laostay-cal-second' : undefined}
+            className={i === 1 ? 'phaphak-cal-second' : undefined}
           />
         ))}
       </div>
@@ -177,7 +177,7 @@ export function DateRangePicker({
       </button>
 
       {open && (
-        <div className="laostay-cal-sheet" style={sheet}>
+        <div className="phaphak-cal-sheet" style={sheet}>
           {calendar}
         </div>
       )}

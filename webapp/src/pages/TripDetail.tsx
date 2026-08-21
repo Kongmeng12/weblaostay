@@ -112,7 +112,7 @@ export function TripDetailPage() {
         </div>
       )}
 
-      <div className="laostay-split">
+      <div className="phaphak-split">
         <div style={{ display: 'grid', gap: 16 }}>
           <Card>
             <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>ທີ່ພັກ</div>
@@ -191,7 +191,7 @@ export function TripDetailPage() {
           )}
         </div>
 
-        <div className="laostay-aside" style={{ position: 'sticky', top: 84, display: 'grid', gap: 14 }}>
+        <div className="phaphak-aside" style={{ position: 'sticky', top: 84, display: 'grid', gap: 14 }}>
           <Card>
             <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>ຍອດເງິນ</div>
             <MoneyRow label="ຄ່າຫ້ອງ" amount={kip(b.subtotal)} />

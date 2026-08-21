@@ -86,7 +86,7 @@ console.log('\nSMS — Wenova Link\n');
 {
   const seen = stubGateway(DELIVERED);
   const p = new WenovaSmsProvider(cfg({ WENOVA_SCRIPT_ID: '42' }));
-  await p.send('+856 20 5511 0001', 'LaoStay code: 123456');
+  await p.send('+856 20 5511 0001', 'PhaPhak code: 123456');
 
   check('POST /sms/package', seen.url.endsWith('/sms/package'), seen.url);
   check('the number is normalised on the way out', seen.body.phoneNumber === '2055110001');
@@ -151,7 +151,7 @@ console.log('\nSMS — Wenova Link\n');
 // ── links are refused before they cost anything ─────────────────────────────
 {
   const p = new WenovaSmsProvider(cfg({ WENOVA_SCRIPT_ID: '1' }));
-  for (const text of ['Open https://laostay.la', 'go to www.laostay.la', 'see laostay.la now']) {
+  for (const text of ['Open https://phaphak.la', 'go to www.phaphak.la', 'see phaphak.la now']) {
     const err = await p.send('2055110001', text).then(() => null, (e) => e.message);
     check(`a link is caught here, not at the gateway`, /ລິ້ງ|link/.test(String(err)), text);
   }
@@ -203,7 +203,7 @@ console.log('\nSMS — Wenova Link\n');
 // ── the console provider ────────────────────────────────────────────────────
 {
   const p = new ConsoleSmsProvider();
-  await p.send('+856 20 5511 0001', 'LaoStay code: 123456');
+  await p.send('+856 20 5511 0001', 'PhaPhak code: 123456');
   check('the console provider accepts a stored number', true);
   const err = await p.send('021 260 000', 'x').then(() => null, (e) => e.message);
   check('and still refuses a landline, so bad numbers surface early', err !== null);

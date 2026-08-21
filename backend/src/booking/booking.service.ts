@@ -620,7 +620,7 @@ export class BookingService {
     return tx.users.create({
       data: {
         role: user_role.CUSTOMER,
-        email: dto.guestEmail?.toLowerCase() ?? `walkin+${crypto.randomUUID()}@laostay.la`,
+        email: dto.guestEmail?.toLowerCase() ?? `walkin+${crypto.randomUUID()}@phaphak.la`,
         phone: dto.guestPhone,
         // Not a valid hash for any algorithm, so no password can ever match it.
         password_hash: 'walk-in:no-login',

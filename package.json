@@ -1,8 +1,8 @@
 {
-  "name": "laostay",
+  "name": "phaphak",
   "version": "0.1.0",
   "private": true,
-  "description": "LaoStay — backend API + WebAdmin + ເວັບລູກຄ້າ, ແລ່ນພ້ອມກັນດ້ວຍຄຳສັ່ງດຽວ",
+  "description": "PhaPhak — backend API + WebAdmin + ເວັບລູກຄ້າ, ແລ່ນພ້ອມກັນດ້ວຍຄຳສັ່ງດຽວ",
   "scripts": {
     "dev": "concurrently --names \"API,ADMIN,WEB\" --prefix-colors \"yellow.bold,cyan.bold,magenta.bold\" --kill-others-on-fail \"npm:dev:api\" \"npm:dev:admin\" \"npm:dev:web\"",
     "dev:api": "npm --prefix backend run start:dev",

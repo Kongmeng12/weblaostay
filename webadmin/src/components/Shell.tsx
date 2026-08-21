@@ -347,7 +347,7 @@ export function Shell() {
             L
           </div>
           <div>
-            <div style={{ font: f(800, 15), color: '#fff' }}>LaoStay</div>
+            <div style={{ font: f(800, 15), color: '#fff' }}>PhaPhak</div>
             <div style={{ font: f(400, 11), color: c.onDarkSoft }}>Web Admin</div>
           </div>
         </div>

@@ -86,7 +86,7 @@ const partnerRefused = await page.evaluate(async (api) => {
   const res = await fetch(`${api}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'vintage@laostay.la', password: 'Partner@2026' }),
+    body: JSON.stringify({ email: 'vintage@phaphak.la', password: 'Partner@2026' }),
   });
   const body = await res.json();
   return body?.user?.role;
@@ -153,7 +153,7 @@ check('the amount to pay is shown', /₭[\d,]+/.test(payText));
 
 // The QR must carry a real EMVCo payload, not a placeholder.
 const qrIsEmvco = await page.evaluate(async (api, id) => {
-  const token = localStorage.getItem('laostay.guest.accessToken');
+  const token = localStorage.getItem('phaphak.guest.accessToken');
   const res = await fetch(`${api}/customer/bookings/${id}`, {
     headers: { Authorization: `Bearer ${token}` },
   });

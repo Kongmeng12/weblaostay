@@ -128,7 +128,7 @@ export function PayPage() {
         ການຈອງ <b style={{ color: c.text }}>{b.code}</b> · {b.property.name}
       </p>
 
-      <div className="laostay-split">
+      <div className="phaphak-split">
         <Card padding={24}>
           <div style={{ textAlign: 'center' }}>
             {remaining ? (
@@ -228,7 +228,7 @@ export function PayPage() {
           </div>
         </Card>
 
-        <div className="laostay-aside" style={{ display: 'grid', gap: 14 }}>
+        <div className="phaphak-aside" style={{ display: 'grid', gap: 14 }}>
           <Card>
             <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>ລາຍລະອຽດ</div>
             <Row label="ທີ່ພັກ" value={b.property.name} />

@@ -15,7 +15,7 @@ const env = Object.fromEntries(
 );
 
 const to = process.argv[2];
-const message = `LaoStay code: 123456. Valid 5 minutes.`;
+const message = `PhaPhak code: 123456. Valid 5 minutes.`;
 const segments = Math.max(1, Math.ceil(message.length / (/[^\x00-\x7F]/.test(message) ? 67 : 153)));
 
 console.log(`\nສົ່ງໄປ ${to}`);

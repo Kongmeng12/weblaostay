@@ -73,7 +73,7 @@ export class PaymentsService {
       bookingId,
       amountKip: Number(booking.total_amount),
       reference: booking.booking_code,
-      description: `LaoStay ${booking.booking_code} · ${booking.properties.property_name}`,
+      description: `PhaPhak ${booking.booking_code} · ${booking.properties.property_name}`,
     });
 
     try {

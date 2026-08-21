@@ -1,7 +1,7 @@
 import type { Email } from './email-provider.interface';
 
 /**
- * The messages LaoStay sends by email.
+ * The messages PhaPhak sends by email.
  *
  * Kept together and away from the services that trigger them, so the wording
  * can be read and changed without going through business logic.
@@ -23,7 +23,7 @@ const FAINT = 'color:#8C8073;font-size:13px';
 export function otpEmail(to: string, code: string, ttlMinutes: number): Email {
   return {
     to,
-    subject: `${code} — ລະຫັດຢືນຢັນ LaoStay`,
+    subject: `${code} — ລະຫັດຢືນຢັນ PhaPhak`,
     text: [
       `ລະຫັດຢືນຢັນຂອງທ່ານແມ່ນ ${code}`,
       '',
@@ -31,13 +31,13 @@ export function otpEmail(to: string, code: string, ttlMinutes: number): Email {
       '',
       'ຖ້າທ່ານບໍ່ໄດ້ຮ້ອງຂໍ ບໍ່ຕ້ອງເຮັດຫຍັງ.',
       '',
-      '— LaoStay',
+      '— PhaPhak',
     ].join('\n'),
     html: `<div style="${WRAP}">
-  <h1 style="font-size:20px;margin:0 0 16px">ລະຫັດຢືນຢັນ LaoStay</h1>
+  <h1 style="font-size:20px;margin:0 0 16px">ລະຫັດຢືນຢັນ PhaPhak</h1>
   <p style="font-size:34px;font-weight:800;letter-spacing:6px;margin:0 0 8px;color:#FD4D1C">${code}</p>
   <p style="${FAINT};margin:0 0 24px">ໝົດອາຍຸໃນ ${ttlMinutes} ນາທີ</p>
-  <p style="margin:0 0 24px">ຢ່າບອກລະຫັດນີ້ໃຫ້ໃຜ — ພະນັກງານ LaoStay ຈະບໍ່ຖາມຫາມັນ.</p>
+  <p style="margin:0 0 24px">ຢ່າບອກລະຫັດນີ້ໃຫ້ໃຜ — ພະນັກງານ PhaPhak ຈະບໍ່ຖາມຫາມັນ.</p>
   <hr style="border:none;border-top:1px solid #E4D8C4;margin:24px 0">
   <p style="${FAINT};margin:0">ຖ້າທ່ານບໍ່ໄດ້ຮ້ອງຂໍ ບໍ່ຕ້ອງເຮັດຫຍັງ.</p>
 </div>`,
@@ -45,23 +45,23 @@ export function otpEmail(to: string, code: string, ttlMinutes: number): Email {
 }
 
 export function passwordResetEmail(to: string, link: string, ttlMinutes: number): Email {
-  const subject = 'ຕັ້ງລະຫັດຜ່ານ LaoStay ໃໝ່ · Reset your LaoStay password';
+  const subject = 'ຕັ້ງລະຫັດຜ່ານ PhaPhak ໃໝ່ · Reset your PhaPhak password';
 
   return {
     to,
     subject,
     text: [
-      'ຕັ້ງລະຫັດຜ່ານ LaoStay ໃໝ່',
+      'ຕັ້ງລະຫັດຜ່ານ PhaPhak ໃໝ່',
       '',
       `ເປີດລິ້ງນີ້ເພື່ອຕັ້ງລະຫັດຜ່ານໃໝ່ (ໝົດອາຍຸໃນ ${ttlMinutes} ນາທີ):`,
       link,
       '',
       'ຖ້າທ່ານບໍ່ໄດ້ຮ້ອງຂໍ ບໍ່ຕ້ອງເຮັດຫຍັງ — ລະຫັດຜ່ານເກົ່າຍັງໃຊ້ໄດ້ຄືເກົ່າ.',
       '',
-      '— LaoStay',
+      '— PhaPhak',
     ].join('\n'),
     html: `<div style="${WRAP}">
-  <h1 style="font-size:20px;margin:0 0 16px">ຕັ້ງລະຫັດຜ່ານ LaoStay ໃໝ່</h1>
+  <h1 style="font-size:20px;margin:0 0 16px">ຕັ້ງລະຫັດຜ່ານ PhaPhak ໃໝ່</h1>
   <p style="margin:0 0 24px">ກົດປຸ່ມລຸ່ມນີ້ເພື່ອຕັ້ງລະຫັດຜ່ານໃໝ່. ລິ້ງໝົດອາຍຸໃນ ${ttlMinutes} ນາທີ.</p>
   <p style="margin:0 0 24px"><a href="${link}" style="${BUTTON}">ຕັ້ງລະຫັດຜ່ານໃໝ່</a></p>
   <p style="${FAINT};margin:0 0 8px">ຖ້າປຸ່ມກົດບໍ່ໄດ້ ໃຫ້ຄັດລອກລິ້ງນີ້:</p>

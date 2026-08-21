@@ -126,7 +126,7 @@ export function PropertyPage() {
     <div style={{ paddingBottom: 20 }}>
       {/* gallery */}
       <div
-        className="laostay-strip"
+        className="phaphak-strip"
         style={{ display: 'flex', gap: 4, background: c.neutralBg }}
       >
         {(p.images.length ? p.images : [{ url: '', caption: null, isCover: true }]).map(
@@ -203,12 +203,12 @@ export function PropertyPage() {
         The booking panel used to be a card in the flow plus a bar pinned to the
         bottom of the window — a phone layout that a wide screen inherited, so
         the calendar pushed the rooms nearly 300px below the fold and the thing
-        you came to buy was off-screen. `laostay-aside-first` puts the panel
+        you came to buy was off-screen. `phaphak-aside-first` puts the panel
         back above the rooms when the columns collapse, because a guest picks
         dates before a room.
       */}
       <div
-        className="laostay-split laostay-aside-first"
+        className="phaphak-split phaphak-aside-first"
         style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: `${space[5]}px 18px 0` }}
       >
         <div style={{ minWidth: 0 }}>
@@ -345,7 +345,7 @@ export function PropertyPage() {
         </div>
         </div>
 
-        <aside className="laostay-aside">
+        <aside className="phaphak-aside">
           <div
             style={{
               padding: space[4],
@@ -387,7 +387,7 @@ export function PropertyPage() {
             )}
 
             <div
-              className="laostay-desktop-only"
+              className="phaphak-desktop-only"
               style={{ borderTop: `1px solid ${c.divider}`, paddingTop: space[3] }}
             >
               {room ? (
@@ -406,7 +406,7 @@ export function PropertyPage() {
               )}
             </div>
 
-            <div className="laostay-desktop-only">
+            <div className="phaphak-desktop-only">
               <Button size="lg" full data-testid="book" disabled={!bookable} onClick={book}>
                 {!hasRange ? 'ເລືອກວັນທີ່ກ່ອນ' : !room ? 'ເລືອກຫ້ອງ' : bookable ? 'ຈອງເລີຍ' : 'ຫ້ອງເຕັມ'}
               </Button>
@@ -420,7 +420,7 @@ export function PropertyPage() {
         bar would sit on top of it. Kept because on a phone the rooms are a long
         scroll and the price has to stay in reach.
       */}
-      <StickyBar className="laostay-mobile-only">
+      <StickyBar className="phaphak-mobile-only">
         <div style={{ flex: 1, minWidth: 0 }}>
           {room ? (
             <>

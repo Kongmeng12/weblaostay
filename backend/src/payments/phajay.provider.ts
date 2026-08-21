@@ -240,7 +240,7 @@ export class PhaJayPaymentProvider implements PaymentProvider {
     if (bank !== 'bcel') return description;
 
     const ascii = description.replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
-    return ascii || 'LaoStay booking';
+    return ascii || 'PhaPhak booking';
   }
 
   /**

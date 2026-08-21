@@ -1,7 +1,7 @@
 /**
  * Design tokens.
  *
- * The same brand as the admin panel — LaoStay orange on warm neutrals — but a
+ * The same brand as the admin panel — PhaPhak orange on warm neutrals — but a
  * different frame. The admin console is a dark-sidebar card floating on a
  * coloured page because it is a desk tool. This is a shopfront: white, edge to
  * edge, laid out for a phone first.

@@ -10,7 +10,7 @@ import puppeteer from 'puppeteer-core';
 
 const BASE = 'http://localhost:5173';
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const EMAIL = 'amnuay@laostay.la';
+const EMAIL = 'amnuay@phaphak.la';
 const PASSWORD = 'LaoStay@2026';
 
 /** `drawer` is what the layout is expected to do, not what it does. */

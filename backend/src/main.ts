@@ -154,7 +154,7 @@ async function bootstrap(): Promise<void> {
   // Node's own fetch on Windows, which prefers ::1.
   await app.listen(port);
 
-  new Logger('Bootstrap').log(`LaoStay API listening on http://localhost:${port}/api`);
+  new Logger('Bootstrap').log(`PhaPhak API listening on http://localhost:${port}/api`);
 }
 
 void bootstrap();

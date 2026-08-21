@@ -94,7 +94,7 @@ check('a traversing key is refused', await exists(join(UPLOAD_ROOT, '..', '..', 
 const s3 = new S3Storage({
   endpoint: 'https://acct.r2.cloudflarestorage.com',
   region: 'auto',
-  bucket: 'laostay-photos',
+  bucket: 'phaphak-photos',
   accessKeyId: 'x',
   secretAccessKey: 'y',
   publicUrl: 'https://pub-abc.r2.dev/',

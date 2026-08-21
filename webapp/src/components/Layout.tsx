@@ -67,9 +67,9 @@ export function Layout() {
                 color: '#fff',
               }}
             >
-              L
+              P
             </div>
-            <span style={{ font: t.h3, color: c.text }}>LaoStay</span>
+            <span style={{ font: t.h3, color: c.text }}>PhaPhak</span>
           </Link>
 
           <nav style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -172,7 +172,7 @@ export function Layout() {
           }}
         >
           <div>
-            <div style={{ font: t.h3, color: '#fff', marginBottom: 4 }}>LaoStay</div>
+            <div style={{ font: t.h3, color: '#fff', marginBottom: 4 }}>PhaPhak</div>
             <div style={{ font: t.caption }}>ຈອງທີ່ພັກທົ່ວລາວ</div>
           </div>
 
@@ -189,7 +189,7 @@ export function Layout() {
             ))}
           </nav>
 
-          <div style={{ font: t.caption }}>© 2026 LaoStay · ສະຫງວນລິຂະສິດ</div>
+          <div style={{ font: t.caption }}>© 2026 PhaPhak · ສະຫງວນລິຂະສິດ</div>
         </div>
       </footer>
     </div>

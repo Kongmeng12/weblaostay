@@ -62,7 +62,7 @@ input:disabled {
   background: transparent;
 }
 
-@keyframes laostayPulse {
+@keyframes phaphakPulse {
   0%,
   100% {
     opacity: 1;
@@ -72,7 +72,7 @@ input:disabled {
   }
 }
 
-@keyframes laostaySpin {
+@keyframes phaphakSpin {
   to {
     transform: rotate(360deg);
   }

@@ -120,7 +120,7 @@ export function Dashboard() {
                   borderRadius: radius.sm,
                   background: 'rgba(255,255,255,.10)',
                   marginBottom: 8,
-                  animation: 'laostayPulse 1.2s ease-in-out infinite',
+                  animation: 'phaphakPulse 1.2s ease-in-out infinite',
                 }}
               />
               <div
@@ -129,7 +129,7 @@ export function Dashboard() {
                   width: '35%',
                   borderRadius: radius.sm,
                   background: 'rgba(255,255,255,.07)',
-                  animation: 'laostayPulse 1.2s ease-in-out infinite',
+                  animation: 'phaphakPulse 1.2s ease-in-out infinite',
                 }}
               />
             </>
@@ -388,7 +388,7 @@ function KpiCard({
             width: '62%',
             borderRadius: radius.sm,
             background: c.bg,
-            animation: 'laostayPulse 1.2s ease-in-out infinite',
+            animation: 'phaphakPulse 1.2s ease-in-out infinite',
           }}
         />
       ) : (

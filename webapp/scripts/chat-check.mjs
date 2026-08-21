@@ -16,7 +16,7 @@ const API = 'http://localhost:3100/api';
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 const GUEST = { email: 'souda.v@gmail.com', password: 'Customer@2026' };
-const HOST = { email: 'vintage@laostay.la', password: 'Partner@2026' };
+const HOST = { email: 'vintage@phaphak.la', password: 'Partner@2026' };
 
 const problems = [];
 const seen = new Set();
@@ -193,7 +193,7 @@ check('the reply is the last line shown', list.includes(answer.slice(0, 20)));
 // has other conversations, and a total that happens to be zero would only mean
 // nobody else has written lately.
 const guestThreads = await page.evaluate(async (api) => {
-  const token = localStorage.getItem('laostay.guest.accessToken');
+  const token = localStorage.getItem('phaphak.guest.accessToken');
   const res = await fetch(`${api}/customer/conversations`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -236,7 +236,7 @@ check(
 
 const otherHost = await apiCall('/auth/login', {
   method: 'POST',
-  body: { email: 'homsabay@laostay.la', password: 'Partner@2026' },
+  body: { email: 'homsabay@phaphak.la', password: 'Partner@2026' },
 }).catch(() => null);
 
 if (otherHost?.accessToken) {
@@ -286,7 +286,7 @@ if (!review) {
   check("the property page shows the host's reply under the review", shown);
 
   // A guest who is neither the author nor the host must be refused.
-  const guestToken = await page.evaluate(() => localStorage.getItem('laostay.guest.accessToken'));
+  const guestToken = await page.evaluate(() => localStorage.getItem('phaphak.guest.accessToken'));
   const me = await apiCall('/customer/me', { token: guestToken });
   const notMine = publicProperty.reviews?.find((r) => r.guest !== me.fullName);
 

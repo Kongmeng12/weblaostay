@@ -86,7 +86,7 @@ export function CheckoutPage() {
     <Page width="wide">
       <PageTitle>ຢືນຢັນການຈອງ</PageTitle>
 
-      <div className="laostay-split">
+      <div className="phaphak-split">
         <div style={{ display: 'grid', gap: 16 }}>
           <Card>
             <div style={{ display: 'flex', gap: 14 }}>
@@ -131,7 +131,7 @@ export function CheckoutPage() {
         </div>
 
         <div
-          className="laostay-aside"
+          className="phaphak-aside"
           style={{ position: 'sticky', top: 84, display: 'grid', gap: 14 }}
         >
           <Card>

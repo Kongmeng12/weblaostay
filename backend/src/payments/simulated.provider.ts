@@ -31,7 +31,7 @@ export class SimulatedPaymentProvider implements PaymentProvider {
     const qrPayload = buildQrPayload({
       acquirerId: 'la.phajay.sim',
       merchantId: this.config.get<string>('PHAJAY_MERCHANT_ID', 'SIMULATED-MERCHANT'),
-      merchantName: 'LaoStay',
+      merchantName: 'PhaPhak',
       merchantCity: 'Vientiane',
       amountKip: request.amountKip,
       reference: request.reference,
@@ -63,7 +63,7 @@ export class SimulatedPaymentProvider implements PaymentProvider {
   private webhookSecret(): string {
     // Falls back to a fixed development secret so a fresh clone works without
     // any configuration; production runs the real provider, which requires one.
-    return this.config.get<string>('PHAJAY_WEBHOOK_SECRET') || 'laostay-dev-webhook-secret';
+    return this.config.get<string>('PHAJAY_WEBHOOK_SECRET') || 'phaphak-dev-webhook-secret';
   }
 }
 

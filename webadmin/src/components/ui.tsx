@@ -354,7 +354,7 @@ function TableSkeleton({ columns }: { columns: number }) {
                 flex: i === 0 ? 0.6 : 1,
                 background: c.divider,
                 borderRadius: 4,
-                animation: 'laostayPulse 1.3s ease-in-out infinite',
+                animation: 'phaphakPulse 1.3s ease-in-out infinite',
                 animationDelay: `${(r * columns + i) * 0.04}s`,
               }}
             />

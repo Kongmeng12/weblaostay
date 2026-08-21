@@ -261,7 +261,7 @@ export function Spinner({ size = 20, color = c.accent }: { size?: number; color?
         border: `2px solid ${color}33`,
         borderTopColor: color,
         borderRadius: '50%',
-        animation: 'laostaySpin .7s linear infinite',
+        animation: 'phaphakSpin .7s linear infinite',
       }}
     />
   );
@@ -374,7 +374,7 @@ export function Skeleton({
         width,
         background: c.neutralBg,
         borderRadius: radius.sm,
-        animation: 'laostayPulse 1.4s ease-in-out infinite',
+        animation: 'phaphakPulse 1.4s ease-in-out infinite',
         ...style,
       }}
     />

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { c, f, radius, type as t } from '../theme';
 import { laoDateFull } from '../lib/format';
+import { looksLikeHtml, sanitiseHtml } from '../lib/richText';
 import { ErrorNote, Loading } from '../components/ui';
 import type { AppPage, FaqGroup } from '../lib/types';
 
@@ -144,10 +145,35 @@ export function StaticPage() {
           ແກ້ໄຂລ່າສຸດ {laoDateFull(page.updatedAt)}
         </div>
       )}
-      <div style={{ font: f(400, 14, 25), color: c.soft, whiteSpace: 'pre-wrap' }}>
-        {page.content}
-      </div>
+      <PageBody body={page.content ?? ''} />
     </article>
+  );
+}
+
+/**
+ * A page body, however the admin happened to write it.
+ *
+ * Both forms exist in the database: the seeded pages are plain text with blank
+ * lines between paragraphs, and the legal pages were rewritten by hand in HTML.
+ * Running the plain ones through the sanitiser would swallow their line breaks,
+ * and rendering the HTML ones as text put `<h2>` in front of every reader — so
+ * the body is sniffed and handled as what it is.
+ */
+function PageBody({ body }: { body: string }) {
+  if (!looksLikeHtml(body)) {
+    return (
+      <div style={{ font: f(400, 14, 25), color: c.soft, whiteSpace: 'pre-wrap' }}>{body}</div>
+    );
+  }
+
+  return (
+    <div
+      className="phaphak-prose"
+      style={{ font: f(400, 14, 25), color: c.soft }}
+      // Safe by construction: `sanitiseHtml` rebuilds the markup from an
+      // allowlist, so what reaches here can only be the tags named in it.
+      dangerouslySetInnerHTML={{ __html: sanitiseHtml(body) }}
+    />
   );
 }
 

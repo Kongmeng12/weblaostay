@@ -16,7 +16,7 @@ const WEBAPP = 'http://localhost:5174';
 const API = 'http://localhost:3100/api';
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
-const EMAIL = 'amnuay@laostay.la';
+const EMAIL = 'amnuay@phaphak.la';
 const PASSWORD = 'LaoStay@2026';
 
 const stamp = Date.now();
