@@ -491,9 +491,18 @@ export class BookingService {
       // penalty. `is_refundable: false` policies are a separate, simpler
       // promise — cancel any time, always at 100% penalty — so they skip
       // this cutoff entirely.
+      // A `pending` booking is only an unpaid hold — nobody has been charged
+      // and the property has no confirmed guest to protect, so the cutoff
+      // below (which exists to stop a *paid* stay being cancelled too close
+      // to check-in) does not apply to it. Its own guard against staying
+      // forever is `hold_expires_at`/HoldSweeperService, not this one.
       const cutoffHours = (policy?.days_before_checkin ?? 0) * 24;
       const hoursUntilCheckIn = (booking.check_in.getTime() - Date.now()) / 3_600_000;
-      if (policy?.is_refundable !== false && hoursUntilCheckIn < cutoffHours) {
+      if (
+        booking.status !== booking_status.pending &&
+        policy?.is_refundable !== false &&
+        hoursUntilCheckIn < cutoffHours
+      ) {
         throw new BadRequestException(
           `ຫຼັງ ${cutoffHours} ຊົ່ວໂມງ ກ່ອນເຂົ້າພັກ ຍົກເລີກບໍ່ໄດ້ · ` +
             `Cancellation is not possible within ${cutoffHours} hours of check-in`,
