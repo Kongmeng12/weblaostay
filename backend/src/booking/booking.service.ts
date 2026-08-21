@@ -298,7 +298,7 @@ export class BookingService {
             districts: true,
             partners: { select: { partner_id: true, business_name: true, contact_phone: true } },
             property_images: {
-              select: { image_url: true },
+              select: { image_url: true, thumbnail_url: true },
               orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }],
               take: 1,
             },
@@ -338,7 +338,10 @@ export class BookingService {
         lng: booking.properties.longitude ? Number(booking.properties.longitude.toString()) : null,
         phone: booking.properties.phone,
         host: booking.properties.partners.business_name,
-        photo: booking.properties.property_images[0]?.image_url ?? null,
+        photo:
+          booking.properties.property_images[0]?.thumbnail_url ??
+          booking.properties.property_images[0]?.image_url ??
+          null,
       },
       roomType: item
         ? {

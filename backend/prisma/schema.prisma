@@ -860,6 +860,7 @@ model property_images {
   property_image_id BigInt     @id @default(autoincrement())
   property_id       BigInt
   image_url         String     @db.VarChar(500)
+  thumbnail_url     String?    @db.VarChar(500)
   caption           String?    @db.VarChar(255)
   display_order     Int        @default(0)
   is_cover          Boolean    @default(false)

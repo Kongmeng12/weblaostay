@@ -113,7 +113,7 @@ export class CatalogService {
              p.longitude,
              p.rating_avg,
              p.review_count,
-             (SELECT pi.image_url FROM property_images pi
+             (SELECT COALESCE(pi.thumbnail_url, pi.image_url) FROM property_images pi
                WHERE pi.property_id = p.property_id
                ORDER BY pi.is_cover DESC, pi.display_order ASC
                LIMIT 1)                                    AS cover_image,
@@ -260,6 +260,7 @@ export class CatalogService {
       reviewCount: property.review_count,
       images: property.property_images.map((i) => ({
         url: i.image_url,
+        thumbnailUrl: i.thumbnail_url ?? i.image_url,
         caption: i.caption,
         isCover: i.is_cover,
       })),
