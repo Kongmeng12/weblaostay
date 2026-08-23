@@ -62,6 +62,9 @@ type Ttl = NonNullable<JwtSignOptions['expiresIn']>;
 
 const BAD_CREDENTIALS = 'ອີເມວ/ເບີໂທ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ · Invalid email/phone or password';
 
+/** Minimum gap between two OTPs for the same target+purpose — see requestOtp. */
+const OTP_RESEND_COOLDOWN_MS = 60_000;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -382,6 +385,23 @@ export class AuthService {
     target: string,
     purpose: otp_purpose,
   ): Promise<{ sent: true; expiresAt: Date; devCode?: string }> {
+    // The @Throttle on this route is per IP, which does nothing to stop one
+    // phone number being spammed from many IPs — Wenova bills per SMS, so
+    // that's a real cost, not just noise. This is the per-target half of the
+    // defence: one outstanding code per target/purpose at a time, refused
+    // outright rather than silently reusing it, so an attacker gets no signal
+    // about whether the target exists either way.
+    const recent = await this.prisma.otp_verifications.findFirst({
+      where: { target, purpose, created_at: { gt: new Date(Date.now() - OTP_RESEND_COOLDOWN_MS) } },
+      orderBy: { created_at: 'desc' },
+      select: { otp_id: true },
+    });
+    if (recent) {
+      throw new BadRequestException(
+        'ກະລຸນາລໍຖ້າຄູ່ໜຶ່ງກ່ອນຂໍລະຫັດໃໝ່ · Please wait a bit before requesting another code',
+      );
+    }
+
     const { otp_ttl_minutes, otp_max_attempts } = await this.settings.get();
     const code = randomInt(100_000, 999_999).toString();
     const expiresAt = new Date(Date.now() + otp_ttl_minutes * 60_000);
