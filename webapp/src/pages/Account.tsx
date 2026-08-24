@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { c, f, radius, type as t } from '../theme';
 import { Button, Card, ErrorNote, Field, Loading, Page, PageTitle, Pill, Spinner, inputStyle } from '../components/ui';
 import type { CustomerProfile } from '../lib/types';
+import { looksLikePhone } from '../lib/validation';
 
 export function AccountPage() {
   const { signOut } = useAuth();
@@ -19,6 +20,7 @@ export function AccountPage() {
   const [phone, setPhone] = useState('');
   const [seeded, setSeeded] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   // Fill the form once. Re-filling on every refetch would wipe what is being
   // typed the moment a background refresh lands.
@@ -45,6 +47,11 @@ export function AccountPage() {
 
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (!looksLikePhone(phone)) {
+      setPhoneError('ໃສ່ເບີໂທທີ່ຖືກຕ້ອງ · Enter a valid phone number');
+      return;
+    }
+    setPhoneError(null);
     save.mutate();
   }
 
@@ -110,7 +117,7 @@ export function AccountPage() {
               />
             </Field>
 
-            <Field label="ເບີໂທ" hint="ທີ່ພັກຈະຕິດຕໍ່ທ່ານທາງເບີນີ້">
+            <Field label="ເບີໂທ" hint="ທີ່ພັກຈະຕິດຕໍ່ທ່ານທາງເບີນີ້" error={phoneError}>
               <input
                 type="tel"
                 value={phone}

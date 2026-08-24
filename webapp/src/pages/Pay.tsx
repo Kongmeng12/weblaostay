@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, tokens } from '../lib/api';
 import { c, f, radius, type as t } from '../theme';
 import { countdown, kip, laoDateFull } from '../lib/format';
 import { Button, Card, ErrorNote, Loading, MoneyRow, Page, Spinner } from '../components/ui';
@@ -50,6 +50,13 @@ export function PayPage() {
 
   const settled = status.data?.status === 'paid' || booking.data?.status === 'confirmed';
 
+  // Guards read synchronously by the abandonment handlers below — refs, not
+  // state, since an unmount/pagehide callback can't wait for a re-render.
+  const paidRef = useRef(false);
+  const statusRef = useRef(booking.data?.status);
+  statusRef.current = booking.data?.status;
+  if (settled) paidRef.current = true;
+
   useEffect(() => {
     if (!settled) return;
     void queryClient.invalidateQueries({ queryKey: ['booking', bookingId] });
@@ -62,6 +69,38 @@ export function PayPage() {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Release the hold the moment the guest leaves this screen without paying —
+  // back button, in-app nav away, or the browser tab closing — instead of
+  // waiting on the server's passive hold-expiry sweeper. Best-effort and
+  // silent: this is an optimization to free the room sooner, not something
+  // the guest needs to see succeed or fail.
+  useEffect(() => {
+    return () => {
+      if (paidRef.current || statusRef.current !== 'pending') return;
+      void api
+        .post(`/customer/bookings/${bookingId}/cancel`, { reason: 'abandoned pay page' })
+        .catch(() => {});
+    };
+  }, [bookingId]);
+
+  useEffect(() => {
+    const cancelBeacon = () => {
+      if (paidRef.current || statusRef.current !== 'pending') return;
+      const access = tokens.access();
+      fetch(`/api/customer/bookings/${bookingId}/cancel`, {
+        method: 'POST',
+        keepalive: true,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(access ? { Authorization: `Bearer ${access}` } : {}),
+        },
+        body: JSON.stringify({ reason: 'abandoned pay page' }),
+      }).catch(() => {});
+    };
+    window.addEventListener('pagehide', cancelBeacon);
+    return () => window.removeEventListener('pagehide', cancelBeacon);
+  }, [bookingId]);
 
   if (booking.isLoading) return <Loading />;
   if (booking.isError) {

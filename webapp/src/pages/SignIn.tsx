@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { c, radius, shadow, type as t, TAP } from '../theme';
 import { Button, ErrorNote, Field, Page, Spinner, inputStyle } from '../components/ui';
+import { isValidIdentifier } from '../lib/validation';
 
 export function SignInPage() {
   const { user, signIn } = useAuth();
@@ -12,6 +13,7 @@ export function SignInPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -20,6 +22,11 @@ export function SignInPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!isValidIdentifier(email)) {
+      setIdentifierError('ໃສ່ອີເມວ ຫຼື ເບີໂທທີ່ຖືກຕ້ອງ · Enter a valid email or phone number');
+      return;
+    }
+    setIdentifierError(null);
     setBusy(true);
     try {
       await signIn(email, password);
@@ -49,9 +56,9 @@ export function SignInPage() {
       }
     >
       <form onSubmit={submit} style={{ display: 'grid', gap: 16 }}>
-        <Field label="ອີເມວ">
+        <Field label="ອີເມວ ຫຼື ເບີໂທ" error={identifierError}>
           <input
-            type="email"
+            type="text"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

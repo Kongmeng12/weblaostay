@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { requestPasswordReset, resetPassword } from '../lib/api';
 import { c, f, radius, type as t } from '../theme';
 import { Button, ErrorNote, Field, inputStyle, Spinner } from '../components/ui';
+import { looksLikeEmail } from '../lib/validation';
 import { AuthShell } from './SignIn';
 
 /**
@@ -26,12 +27,18 @@ export function ForgotPasswordPage() {
   const [token, setToken] = useState(linked);
   const [password, setPassword] = useState('');
   const [devToken, setDevToken] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
   async function ask(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!looksLikeEmail(email)) {
+      setEmailError('ໃສ່ອີເມວທີ່ຖືກຕ້ອງ · Enter a valid email');
+      return;
+    }
+    setEmailError(null);
     setBusy(true);
     try {
       const res = await requestPasswordReset(email.trim());
@@ -137,7 +144,7 @@ export function ForgotPasswordPage() {
       }
     >
       <form onSubmit={ask} style={{ display: 'grid', gap: 16 }}>
-        <Field label="ອີເມວ">
+        <Field label="ອີເມວ" error={emailError}>
           <input
             type="email"
             value={email}

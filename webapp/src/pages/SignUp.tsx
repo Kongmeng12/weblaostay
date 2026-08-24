@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { c, f, type as t, TAP } from '../theme';
 import { Button, ErrorNote, Field, inputStyle, Spinner } from '../components/ui';
+import { looksLikeEmail, looksLikePhone } from '../lib/validation';
 import { AuthShell } from './SignIn';
 
 export function SignUpPage() {
@@ -16,6 +17,8 @@ export function SignUpPage() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -24,6 +27,11 @@ export function SignUpPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const emailOk = looksLikeEmail(email);
+    const phoneOk = looksLikePhone(phone);
+    setEmailError(emailOk ? null : 'ໃສ່ອີເມວທີ່ຖືກຕ້ອງ · Enter a valid email');
+    setPhoneError(phoneOk ? null : 'ໃສ່ເບີໂທທີ່ຖືກຕ້ອງ · Enter a valid phone number');
+    if (!emailOk || !phoneOk) return;
     setBusy(true);
     try {
       await signUp({ fullName, email, phone, password, acceptedTerms });
@@ -65,7 +73,7 @@ export function SignUpPage() {
           />
         </Field>
 
-        <Field label="ອີເມວ">
+        <Field label="ອີເມວ" error={emailError}>
           <input
             type="email"
             value={email}
@@ -79,7 +87,7 @@ export function SignUpPage() {
 
         {/* The property phones the guest about their arrival, so this is not
             optional — the API requires it too. */}
-        <Field label="ເບີໂທ" hint="ທີ່ພັກຈະຕິດຕໍ່ທ່ານທາງເບີນີ້">
+        <Field label="ເບີໂທ" hint="ທີ່ພັກຈະຕິດຕໍ່ທ່ານທາງເບີນີ້" error={phoneError}>
           <input
             type="tel"
             value={phone}
