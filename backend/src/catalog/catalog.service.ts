@@ -3,7 +3,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { kipOf, rateOf } from '../common/money';
 import { addDaysUtc, isoDayUtc, utcMidnight } from '../common/dates';
-import type { CalendarQueryDto, SearchDto } from './catalog.dto';
+import type { CalendarQueryDto, SearchDto, SearchSort } from './catalog.dto';
+import { PlaceResolverService, type ResolvedPlace } from './place-resolver.service';
 
 /**
  * One row of the search result, straight out of the raw query below.
@@ -31,7 +32,10 @@ interface SearchRow {
 
 @Injectable()
 export class CatalogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly placeResolver: PlaceResolverService,
+  ) {}
 
   /**
    * Public property search.
@@ -46,8 +50,44 @@ export class CatalogService {
    * When dates are supplied the result only contains properties that can
    * actually take the booking — a listing that 409s at checkout is worse than
    * no listing at all.
+   *
+   * A text query that matches no property/province/district directly might
+   * still be a landmark name — "Kuang Si Falls" isn't any of those, but a
+   * guest typing it clearly wants stays near there. Only tried when the
+   * caller didn't already supply coordinates and the direct search came up
+   * empty, so the common case (an actual property/province/district hit)
+   * pays nothing extra for it.
    */
   async search(dto: SearchDto) {
+    const result = await this.runSearch(dto);
+
+    if (dto.q && dto.lat === undefined && dto.lng === undefined && result.total === 0) {
+      const place = await this.placeResolver.resolve(dto.q).catch(() => null);
+      if (place) {
+        const nearby = await this.runSearch(dto, {
+          q: null,
+          lat: place.lat,
+          lng: place.lng,
+          radiusKm: 15,
+          sort: dto.sort ?? 'distance',
+        });
+        return { ...nearby, resolvedPlace: place };
+      }
+    }
+
+    return { ...result, resolvedPlace: null as ResolvedPlace | null };
+  }
+
+  private async runSearch(
+    dto: SearchDto,
+    overrides: { q?: string | null; lat?: number; lng?: number; radiusKm?: number; sort?: SearchSort } = {},
+  ) {
+    const q = 'q' in overrides ? overrides.q : (dto.q ?? null);
+    const lat = overrides.lat ?? dto.lat;
+    const lng = overrides.lng ?? dto.lng;
+    const radiusKm = overrides.radiusKm ?? dto.radiusKm;
+    const sort = overrides.sort ?? dto.sort;
+
     const range = this.parseRange(dto.checkIn, dto.checkOut);
     const guests = dto.guests ?? 1;
     const offset = (dto.page - 1) * dto.limit;
@@ -57,8 +97,8 @@ export class CatalogService {
     const from = range?.checkIn ?? null;
     const toExclusive = range?.checkOut ?? null;
 
-    const hasGeo = dto.lat !== undefined && dto.lng !== undefined;
-    const radiusMeters = (dto.radiusKm ?? 50) * 1000;
+    const hasGeo = lat !== undefined && lng !== undefined;
+    const radiusMeters = (radiusKm ?? 50) * 1000;
 
     const rows = await this.prisma.$queryRaw<SearchRow[]>`
       WITH nights AS (
@@ -122,7 +162,7 @@ export class CatalogService {
              o.available_rooms,
              CASE WHEN ${hasGeo}
                   THEN ST_Distance(p.geog,
-                         ST_SetSRID(ST_MakePoint(${dto.lng ?? 0}, ${dto.lat ?? 0}), 4326)::geography)
+                         ST_SetSRID(ST_MakePoint(${lng ?? 0}, ${lat ?? 0}), 4326)::geography)
                   ELSE NULL END                            AS distance_m,
              COUNT(*) OVER ()::bigint                      AS total_count
       FROM properties p
@@ -138,33 +178,33 @@ export class CatalogService {
         AND (${dto.type ?? null}::text IS NULL OR p.property_type::text = ${dto.type ?? null}::text)
         AND (${dto.minPrice ?? null}::bigint IS NULL OR o.from_price >= ${dto.minPrice ?? null}::bigint)
         AND (${dto.maxPrice ?? null}::bigint IS NULL OR o.from_price <= ${dto.maxPrice ?? null}::bigint)
-        AND (${dto.q ?? null}::text IS NULL
+        AND (${q}::text IS NULL
              -- Full-text match on name/description (handles multi-word,
              -- word-order-independent queries).
-             OR p.search_vector @@ plainto_tsquery('simple', ${dto.q ?? null}::text)
+             OR p.search_vector @@ plainto_tsquery('simple', ${q}::text)
              -- search_vector is a GENERATED column derived only from this
              -- row's own columns (a Postgres requirement for generated
              -- columns), so it can never contain province/district names —
              -- those live in joined tables. Match them here instead, plus a
              -- plain substring match on the name so partial words like
              -- "Praban" still find "Luang Prabang".
-             OR p.property_name ILIKE '%' || ${dto.q ?? null}::text || '%'
-             OR pv.province_name_lo ILIKE '%' || ${dto.q ?? null}::text || '%'
-             OR pv.province_name_en ILIKE '%' || ${dto.q ?? null}::text || '%'
-             OR d.district_name_lo ILIKE '%' || ${dto.q ?? null}::text || '%'
-             OR d.district_name_en ILIKE '%' || ${dto.q ?? null}::text || '%'
-             OR p.address_detail ILIKE '%' || ${dto.q ?? null}::text || '%')
+             OR p.property_name ILIKE '%' || ${q}::text || '%'
+             OR pv.province_name_lo ILIKE '%' || ${q}::text || '%'
+             OR pv.province_name_en ILIKE '%' || ${q}::text || '%'
+             OR d.district_name_lo ILIKE '%' || ${q}::text || '%'
+             OR d.district_name_en ILIKE '%' || ${q}::text || '%'
+             OR p.address_detail ILIKE '%' || ${q}::text || '%')
         AND (NOT ${hasGeo}
              OR ST_DWithin(p.geog,
-                  ST_SetSRID(ST_MakePoint(${dto.lng ?? 0}, ${dto.lat ?? 0}), 4326)::geography,
+                  ST_SetSRID(ST_MakePoint(${lng ?? 0}, ${lat ?? 0}), 4326)::geography,
                   ${radiusMeters}))
       ORDER BY
-        CASE WHEN ${dto.sort ?? 'rating'} = 'price_asc'  THEN o.from_price END ASC,
-        CASE WHEN ${dto.sort ?? 'rating'} = 'price_desc' THEN o.from_price END DESC,
-        CASE WHEN ${dto.sort ?? 'rating'} = 'reviews'    THEN p.review_count END DESC,
-        CASE WHEN ${dto.sort ?? 'rating'} = 'distance' AND ${hasGeo}
+        CASE WHEN ${sort ?? 'rating'} = 'price_asc'  THEN o.from_price END ASC,
+        CASE WHEN ${sort ?? 'rating'} = 'price_desc' THEN o.from_price END DESC,
+        CASE WHEN ${sort ?? 'rating'} = 'reviews'    THEN p.review_count END DESC,
+        CASE WHEN ${sort ?? 'rating'} = 'distance' AND ${hasGeo}
              THEN ST_Distance(p.geog,
-                    ST_SetSRID(ST_MakePoint(${dto.lng ?? 0}, ${dto.lat ?? 0}), 4326)::geography)
+                    ST_SetSRID(ST_MakePoint(${lng ?? 0}, ${lat ?? 0}), 4326)::geography)
              END ASC,
         p.rating_avg DESC, p.review_count DESC, p.property_id ASC
       LIMIT ${dto.limit} OFFSET ${offset}

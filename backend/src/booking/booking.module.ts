@@ -4,6 +4,7 @@ import { InventoryService } from './inventory.service';
 import { PricingService } from './pricing.service';
 import { LedgerService } from './ledger.service';
 import { HoldSweeperService } from './hold-sweeper.service';
+import { CheckoutSweeperService } from './checkout-sweeper.service';
 import { CustomerController } from './customer.controller';
 
 /**
@@ -21,7 +22,15 @@ import { CustomerController } from './customer.controller';
     PricingService,
     LedgerService,
     HoldSweeperService,
+    CheckoutSweeperService,
   ],
-  exports: [BookingService, InventoryService, PricingService, LedgerService, HoldSweeperService],
+  exports: [
+    BookingService,
+    InventoryService,
+    PricingService,
+    LedgerService,
+    HoldSweeperService,
+    CheckoutSweeperService,
+  ],
 })
 export class BookingModule {}

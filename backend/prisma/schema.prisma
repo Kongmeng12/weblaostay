@@ -257,6 +257,28 @@ model properties {
   @@schema("public")
 }
 
+/// Tourist attractions/landmarks resolved to coordinates so a guest can
+/// search a place name and see stays near it — see place-resolver.service.ts.
+/// `curated` rows are hand-seeded (0013_attractions.sql); `geocoded` rows are
+/// written back automatically the first time a query falls through to
+/// MapTiler, so the same name is never geocoded twice.
+model attractions {
+  attraction_id BigInt                    @id @default(autoincrement())
+  name_lo       String                    @db.VarChar(160)
+  name_en       String?                   @db.VarChar(160)
+  slug          String                    @unique @db.VarChar(160)
+  latitude      Decimal                   @db.Decimal(10, 7)
+  longitude     Decimal                   @db.Decimal(11, 7)
+  geog          Unsupported("geography")? @default(dbgenerated("(st_setsrid(st_makepoint((longitude)::double precision, (latitude)::double precision), 4326))::geography"))
+  province_id   BigInt?
+  source        String                    @default("curated") @db.VarChar(20)
+  created_at    DateTime                  @default(now()) @db.Timestamptz(6)
+  provinces     provinces?                @relation(fields: [province_id], references: [province_id], onUpdate: NoAction, onDelete: SetNull)
+
+  @@index([geog], map: "idx_attractions_geog", type: Gist)
+  @@schema("public")
+}
+
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model reviews {
   review_id          BigInt           @id @default(autoincrement())
@@ -899,6 +921,7 @@ model provinces {
   updated_at       DateTime     @default(now()) @db.Timestamptz(6)
   districts        districts[]
   properties       properties[]
+  attractions      attractions[]
 
   @@schema("public")
 }
