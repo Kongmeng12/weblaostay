@@ -126,6 +126,11 @@ export class ChatService {
         id: c.conversation_id.toString(),
         propertyId: c.properties.property_id.toString(),
         property: c.properties.property_name,
+        // Lets a partner match this thread to a guest by id — a booking's
+        // `guest.id` — rather than by display name, which two guests can
+        // share. Meaningless to the customer side, which already knows who
+        // it is talking to.
+        customerId: role === user_role.PARTNER ? c.customer_id.toString() : null,
         // Whichever side the caller is not.
         counterpartName:
           role === user_role.PARTNER

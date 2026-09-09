@@ -388,6 +388,10 @@ export class BookingService {
           }
         : null,
       guest: {
+        // Lets a caller match this guest against a conversation's
+        // `customerId` by id instead of by display name, which two guests
+        // can share.
+        id: booking.customer_id.toString(),
         name: booking.users.user_profiles?.full_name ?? null,
         email: booking.users.email,
         phone: booking.users.phone,
