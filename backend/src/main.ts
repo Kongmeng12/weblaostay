@@ -27,14 +27,33 @@ async function bootstrap(): Promise<void> {
 
   // The admin panel is a separate origin in development (Vite on :5173) and is
   // served from its own host in production, so CORS is explicit rather than open.
-  // The guest web app (:5174) and the partner Flutter app run on Chrome (:5175)
-  // are two more. Read from CORS_ORIGIN, which `--watch` does not reload: adding
-  // an origin there needs this process restarted, not just saved.
+  // The guest web app (:5174) is one more, with its own fixed Vite port.
+  // Read from CORS_ORIGIN, which `--watch` does not reload: adding an origin
+  // there needs this process restarted, not just saved.
+  const allowedOrigins = config
+    .get<string>('CORS_ORIGIN', 'http://localhost:5173')
+    .split(',')
+    .map((o) => o.trim());
+
   app.enableCors({
-    origin: config
-      .get<string>('CORS_ORIGIN', 'http://localhost:5173')
-      .split(',')
-      .map((o) => o.trim()),
+    // The two Flutter apps (customer, partner) run on Chrome via `flutter
+    // run -d chrome` or an IDE's own launch config, both of which pick a
+    // fresh random port every single run — there is no fixed port to add to
+    // the list above, and chasing whatever port a given tool happened to
+    // pick this time is a losing game (see run.ps1 in both Flutter repos for
+    // the history of trying). Allowing any `http://localhost:*` origin
+    // unconditionally is safe, not a hole: `Origin` is a header the browser
+    // sets and a page can never forge, so `http://localhost:<port>` can only
+    // ever mean code actually running on this machine, in a real browser —
+    // never a request from someone else's site. The explicit list above
+    // still gates every real, non-local origin.
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin) || /^http:\/\/localhost:\d+$/.test(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} is not allowed by CORS`));
+      }
+    },
     credentials: true,
   });
 

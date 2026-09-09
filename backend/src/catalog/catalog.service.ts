@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { InventoryService } from '../booking/inventory.service';
 import { kipOf, rateOf } from '../common/money';
 import { addDaysUtc, isoDayUtc, utcMidnight } from '../common/dates';
-import type { CalendarQueryDto, SearchDto, SearchSort } from './catalog.dto';
+import type { CalendarQueryDto, RoomAvailabilityQueryDto, SearchDto, SearchSort } from './catalog.dto';
 import { PlaceResolverService, type ResolvedPlace } from './place-resolver.service';
 
 /**
@@ -35,6 +36,7 @@ export class CatalogService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly placeResolver: PlaceResolverService,
+    private readonly inventory: InventoryService,
   ) {}
 
   /**
@@ -352,6 +354,7 @@ export class CatalogService {
           basePrice: kipOf(rt.base_price),
           totalRooms: rt.total_rooms,
           minNights: rt.min_nights,
+          allowRoomSelection: rt.allow_room_selection,
           images: rt.room_type_images.map((i) => i.image_url),
           /** Null when no dates were given — the base price applies. */
           stayTotal: offer ? kipOf(offer.stayTotal) : null,
@@ -425,6 +428,37 @@ export class CatalogService {
           days,
         };
       }),
+    };
+  }
+
+  /**
+   * The "pick your room" list for a room type with `allowRoomSelection` on.
+   * A 400 for any other room type — there is nothing meaningful to pick.
+   */
+  async roomTypeRooms(roomTypeId: bigint, query: RoomAvailabilityQueryDto) {
+    const roomType = await this.prisma.room_types.findFirst({
+      where: { room_type_id: roomTypeId, status: 'active', deleted_at: null },
+      select: { allow_room_selection: true },
+    });
+    if (!roomType) {
+      throw new NotFoundException(`ບໍ່ພົບປະເພດຫ້ອງ #${roomTypeId} · Room type not found`);
+    }
+    if (!roomType.allow_room_selection) {
+      throw new BadRequestException(
+        'ປະເພດຫ້ອງນີ້ບໍ່ຮອງຮັບການເລືອກເລກຫ້ອງ · This room type does not support picking a specific room',
+      );
+    }
+
+    const checkIn = utcMidnight(query.checkIn);
+    const checkOut = utcMidnight(query.checkOut);
+    if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime()) || checkOut <= checkIn) {
+      throw new BadRequestException('ຊ່ວງວັນທີບໍ່ຖືກຕ້ອງ · Invalid date range');
+    }
+
+    const rooms = await this.inventory.availableRooms(roomTypeId, checkIn, checkOut);
+    return {
+      roomTypeId: roomTypeId.toString(),
+      rooms: rooms.map((r) => ({ id: r.roomId.toString(), roomNumber: r.roomNumber, floor: r.floor })),
     };
   }
 

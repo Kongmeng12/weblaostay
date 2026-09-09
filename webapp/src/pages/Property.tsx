@@ -36,7 +36,7 @@ import {
  * bundled into the entry chunk that every page pays for.
  */
 const PropertyMap = lazy(() => import('../components/PropertyMap'));
-import type { PropertyDetail, RoomOffer, WishlistItem } from '../lib/types';
+import type { PropertyDetail, RoomOffer, RoomUnitsResponse, WishlistItem } from '../lib/types';
 import { useStartConversation } from './Messages';
 import { ReviewReplies } from '../components/ReviewReplies';
 import { ReportReview } from '../components/ReportReview';
@@ -55,6 +55,11 @@ export function PropertyPage() {
   const nights = hasRange ? nightsBetween(checkIn, checkOut) : 0;
 
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+  // The specific physical room picked inside the selected room type, if any —
+  // only meaningful when that room type has `allowRoomSelection`. Kept
+  // separate from `selectedRoom` because picking one is always optional: the
+  // ordinary "partner assigns later" flow is just this staying null.
+  const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ['property', id, checkIn, checkOut],
@@ -90,6 +95,12 @@ export function PropertyPage() {
     if (next.checkOut === undefined && next.checkIn && (!merged.checkOut || merged.checkOut <= next.checkIn)) {
       merged.checkOut = addDaysIso(next.checkIn, 1);
     }
+    // A specific room picked for the old dates may not be free for the new
+    // ones — the picker below refetches from scratch, so drop the pick rather
+    // than silently carrying forward a room that might no longer be available.
+    if (merged.checkIn !== checkIn || merged.checkOut !== checkOut) {
+      setSelectedUnit(null);
+    }
     setParams(
       new URLSearchParams(
         Object.entries({
@@ -118,7 +129,18 @@ export function PropertyPage() {
   function book() {
     if (!room) return;
     const target =
-      '/checkout' + qs({ propertyId: p.id, roomTypeId: room.id, checkIn, checkOut, guests });
+      '/checkout' +
+      qs({
+        propertyId: p.id,
+        roomTypeId: room.id,
+        checkIn,
+        checkOut,
+        guests,
+        // Only ever carried for a room type that opted in — `selectedUnit` is
+        // reset whenever the room type or dates change, but this guard keeps
+        // a stale id from leaking through even if that ever regresses.
+        ...(room.allowRoomSelection && selectedUnit ? { roomId: selectedUnit } : {}),
+      });
     navigate(user ? target : '/signin', user ? undefined : { state: { from: target } });
   }
 
@@ -221,8 +243,18 @@ export function PropertyPage() {
                 nights={nights}
                 guests={guests}
                 hasRange={hasRange}
+                checkIn={checkIn}
+                checkOut={checkOut}
                 selected={selectedRoom === rt.id}
-                onSelect={() => setSelectedRoom(rt.id)}
+                onSelect={() => {
+                  // Re-clicking the row you already picked must not wipe a
+                  // room number you already chose inside it — only switching
+                  // to a *different* room type should reset that pick.
+                  if (selectedRoom !== rt.id) setSelectedUnit(null);
+                  setSelectedRoom(rt.id);
+                }}
+                selectedUnit={selectedUnit}
+                onSelectUnit={setSelectedUnit}
               />
             ))}
           </div>
@@ -518,78 +550,204 @@ function RoomRow({
   nights,
   guests,
   hasRange,
+  checkIn,
+  checkOut,
   selected,
   onSelect,
+  selectedUnit,
+  onSelectUnit,
 }: {
   room: RoomOffer;
   nights: number;
   guests: number;
   hasRange: boolean;
+  checkIn: string;
+  checkOut: string;
   selected: boolean;
   onSelect: () => void;
+  selectedUnit: string | null;
+  onSelectUnit: (unitId: string | null) => void;
 }) {
   const tooSmall = guests > room.maxOccupancy;
   const soldOut = hasRange && room.available === false;
   const tooShort = hasRange && nights > 0 && nights < room.minNights;
   const blocked = soldOut || tooSmall || tooShort;
 
+  // The room-number picker only makes sense once this offer is the one being
+  // booked, is actually bookable, and dates are known (the endpoint 400s
+  // without a range).
+  const showUnitPicker = selected && !blocked && room.allowRoomSelection && hasRange;
+
   return (
     <div
-      onClick={blocked ? undefined : onSelect}
       // Stable hooks for the end-to-end journey test. Matching on Lao copy
       // instead would make every wording change a broken test.
       data-room-id={room.id}
       data-room-bookable={blocked ? 'false' : 'true'}
       style={{
-        display: 'flex',
-        gap: 14,
-        padding: 14,
         background: c.surface,
         border: `1.5px solid ${selected ? c.accent : c.border}`,
         borderRadius: radius.lg,
         boxShadow: selected ? shadow.card : 'none',
-        opacity: blocked ? 0.6 : 1,
-        cursor: blocked ? 'not-allowed' : 'pointer',
+        overflow: 'hidden',
       }}
     >
-      <Photo url={room.images[0] ?? null} alt={room.name} height={86} width={110} />
+      <div
+        onClick={blocked ? undefined : onSelect}
+        style={{
+          display: 'flex',
+          gap: 14,
+          padding: 14,
+          opacity: blocked ? 0.6 : 1,
+          cursor: blocked ? 'not-allowed' : 'pointer',
+        }}
+      >
+        <Photo url={room.images[0] ?? null} alt={room.name} height={86} width={110} />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ font: t.h3, color: c.text, marginBottom: 3 }}>{room.name}</div>
-        <div style={{ font: t.caption, color: c.muted, marginBottom: 6 }}>
-          {BED_TYPE_LABEL[room.bedType] ?? room.bedType} · ຮັບໄດ້ {room.maxOccupancy} ຄົນ
-          {room.hasAc ? ' · ມີແອ' : ''}
-          {room.sizeSqm ? ` · ${room.sizeSqm} ຕ.ມ.` : ''}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ font: t.h3, color: c.text, marginBottom: 3 }}>{room.name}</div>
+          <div style={{ font: t.caption, color: c.muted, marginBottom: 6 }}>
+            {BED_TYPE_LABEL[room.bedType] ?? room.bedType} · ຮັບໄດ້ {room.maxOccupancy} ຄົນ
+            {room.hasAc ? ' · ມີແອ' : ''}
+            {room.sizeSqm ? ` · ${room.sizeSqm} ຕ.ມ.` : ''}
+          </div>
+
+          {/* Say exactly why a room cannot be booked. "Unavailable" makes the
+              guest change the wrong thing. */}
+          {tooSmall ? (
+            <Pill bg={c.warnBg} fg={c.warnFg}>ຮັບໄດ້ສູງສຸດ {room.maxOccupancy} ຄົນ</Pill>
+          ) : tooShort ? (
+            <Pill bg={c.warnBg} fg={c.warnFg}>ຕ້ອງພັກຢ່າງໜ້ອຍ {room.minNights} ຄືນ</Pill>
+          ) : soldOut ? (
+            <Pill bg={c.neutralBg} fg={c.neutralFg}>ເຕັມໃນວັນທີ່ເລືອກ</Pill>
+          ) : selected ? (
+            <Pill bg={c.accentSoft} fg={c.accentDark}>ເລືອກແລ້ວ</Pill>
+          ) : room.allowRoomSelection ? (
+            <Pill bg={c.infoBg} fg={c.infoFg}>ເລືອກເລກຫ້ອງໄດ້</Pill>
+          ) : null}
         </div>
 
-        {/* Say exactly why a room cannot be booked. "Unavailable" makes the
-            guest change the wrong thing. */}
-        {tooSmall ? (
-          <Pill bg={c.warnBg} fg={c.warnFg}>ຮັບໄດ້ສູງສຸດ {room.maxOccupancy} ຄົນ</Pill>
-        ) : tooShort ? (
-          <Pill bg={c.warnBg} fg={c.warnFg}>ຕ້ອງພັກຢ່າງໜ້ອຍ {room.minNights} ຄືນ</Pill>
-        ) : soldOut ? (
-          <Pill bg={c.neutralBg} fg={c.neutralFg}>ເຕັມໃນວັນທີ່ເລືອກ</Pill>
-        ) : selected ? (
-          <Pill bg={c.accentSoft} fg={c.accentDark}>ເລືອກແລ້ວ</Pill>
-        ) : null}
+        <div style={{ textAlign: 'right', flex: 'none' }}>
+          {room.stayTotal !== null ? (
+            <>
+              <div style={{ font: f(800, 16), color: c.accent }}>{kip(room.stayTotal)}</div>
+              <div style={{ font: t.caption, color: c.muted }}>{nights} ຄືນ</div>
+            </>
+          ) : (
+            <>
+              <div style={{ font: f(800, 16), color: c.accent }}>{kip(room.basePrice)}</div>
+              <div style={{ font: t.caption, color: c.muted }}>/ ຄືນ</div>
+            </>
+          )}
+        </div>
       </div>
 
-      <div style={{ textAlign: 'right', flex: 'none' }}>
-        {room.stayTotal !== null ? (
-          <>
-            <div style={{ font: f(800, 16), color: c.accent }}>{kip(room.stayTotal)}</div>
-            <div style={{ font: t.caption, color: c.muted }}>{nights} ຄືນ</div>
-          </>
-        ) : (
-          <>
-            <div style={{ font: f(800, 16), color: c.accent }}>{kip(room.basePrice)}</div>
-            <div style={{ font: t.caption, color: c.muted }}>/ ຄືນ</div>
-          </>
-        )}
-      </div>
+      {showUnitPicker && (
+        <div
+          // Selecting a specific room must not also toggle the row's
+          // selection above (it already is selected — this just stops the
+          // click bubbling into a no-op re-select for no reason).
+          onClick={(e) => e.stopPropagation()}
+          style={{ borderTop: `1px solid ${c.divider}`, background: c.bg, padding: 14 }}
+        >
+          <RoomUnitPicker
+            roomTypeId={room.id}
+            checkIn={checkIn}
+            checkOut={checkOut}
+            selectedUnit={selectedUnit}
+            onSelect={onSelectUnit}
+          />
+        </div>
+      )}
     </div>
   );
+}
+
+/**
+ * Lets a guest pick which physical room they get, for room types where the
+ * partner has opted in. Always optional — leaving it on "ບໍ່ລະບຸ" is exactly
+ * today's ordinary flow, where the partner assigns a room after booking.
+ *
+ * Fetched fresh per room type and date range: the list is only the rooms
+ * actually free for those dates, so it must refetch whenever either changes.
+ */
+function RoomUnitPicker({
+  roomTypeId,
+  checkIn,
+  checkOut,
+  selectedUnit,
+  onSelect,
+}: {
+  roomTypeId: string;
+  checkIn: string;
+  checkOut: string;
+  selectedUnit: string | null;
+  onSelect: (unitId: string | null) => void;
+}) {
+  const query = useQuery({
+    queryKey: ['room-units', roomTypeId, checkIn, checkOut],
+    queryFn: () =>
+      api.get<RoomUnitsResponse>(`/room-types/${roomTypeId}/rooms` + qs({ checkIn, checkOut })),
+    enabled: !!roomTypeId && !!checkIn && !!checkOut,
+  });
+
+  return (
+    <div>
+      <div style={{ font: t.label, color: c.text, marginBottom: 8 }}>
+        ເລືອກເລກຫ້ອງ (ບໍ່ບັງຄັບ)
+      </div>
+
+      {query.isLoading ? (
+        <div style={{ font: t.caption, color: c.muted }}>ກຳລັງໂຫຼດເລກຫ້ອງ...</div>
+      ) : query.isError ? (
+        <ErrorNote error={query.error} onRetry={() => void query.refetch()} />
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button
+            type="button"
+            data-room-unit-bookable="true"
+            onClick={() => onSelect(null)}
+            style={unitChipStyle(selectedUnit === null)}
+          >
+            ບໍ່ລະບຸ · ໃຫ້ທີ່ພັກຈັດໃຫ້
+          </button>
+
+          {query.data?.rooms.map((unit) => (
+            <button
+              key={unit.id}
+              type="button"
+              data-room-unit-id={unit.id}
+              data-room-unit-bookable="true"
+              onClick={() => onSelect(unit.id)}
+              style={unitChipStyle(selectedUnit === unit.id)}
+            >
+              ຫ້ອງ {unit.roomNumber}
+              {unit.floor ? ` · ຊັ້ນ ${unit.floor}` : ''}
+            </button>
+          ))}
+
+          {/* The server already filters to rooms free for these dates, so an
+              empty list here means none of this type's specific rooms are
+              free — the same "sold out" treatment used above, not an error. */}
+          {query.data && query.data.rooms.length === 0 && (
+            <Pill bg={c.neutralBg} fg={c.neutralFg}>ບໍ່ມີເລກຫ້ອງວ່າງໃຫ້ເລືອກ · ຈະຈັດໃຫ້ອັດຕະໂນມັດ</Pill>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function unitChipStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '8px 14px',
+    borderRadius: radius.pill,
+    border: `1.5px solid ${active ? c.accent : c.border}`,
+    background: active ? c.accentSoft : c.surface,
+    color: active ? c.accentDark : c.text,
+    font: t.label,
+    cursor: 'pointer',
+  };
 }
 
 const dateInput: React.CSSProperties = {

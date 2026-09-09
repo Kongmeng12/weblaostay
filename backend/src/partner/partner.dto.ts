@@ -13,7 +13,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { bed_type, inventory_status, price_type, property_type } from '@prisma/client';
+import { bed_type, inventory_status, price_type, property_type, room_status } from '@prisma/client';
 
 export class UpdatePropertyDto {
   @IsOptional()
@@ -127,12 +127,46 @@ export class RoomTypeDto {
   @IsInt()
   @Min(1)
   sizeSqm?: number;
+
+  /** Lets a guest pick a specific room number instead of just this room type. Off by default. */
+  @IsOptional()
+  @IsBoolean()
+  allowRoomSelection?: boolean;
 }
 
 export class UpdateRoomTypeDto extends RoomTypeDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+export class CreateRoomDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  roomNumber!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  floor?: string;
+}
+
+export class UpdateRoomDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  roomNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  floor?: string;
+
+  @IsOptional()
+  @IsEnum(room_status)
+  status?: room_status;
 }
 
 /** `to` is exclusive, matching a stay's check-out. */

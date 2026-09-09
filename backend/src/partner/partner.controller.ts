@@ -9,12 +9,14 @@ import { Audit, CurrentUser, Roles, type AuthedUser } from '../common/decorators
 import { rateOf } from '../common/money';
 import {
   BankAccountDto,
+  CreateRoomDto,
   DateRangeDto,
   RoomTypeDto,
   SetInventoryDto,
   SetPriceDto,
   UpdatePartnerProfileDto,
   UpdatePropertyDto,
+  UpdateRoomDto,
   UpdateRoomTypeDto,
 } from './partner.dto';
 import {
@@ -152,6 +154,34 @@ export class PartnerController {
   @Audit('partner_room_type_delete', 'partner', 'room_types', 'roomTypeId')
   removeRoomType(@CurrentUser() user: AuthedUser, @Param('roomTypeId') roomTypeId: string) {
     return this.partner.removeRoomType(this.own.partnerId(user), BigInt(roomTypeId));
+  }
+
+  // ── rooms ─────────────────────────────────────────────────────────────────
+
+  @Post('room-types/:roomTypeId/rooms')
+  @Audit('partner_room_create', 'partner', 'rooms', 'roomTypeId')
+  createRoom(
+    @CurrentUser() user: AuthedUser,
+    @Param('roomTypeId') roomTypeId: string,
+    @Body() dto: CreateRoomDto,
+  ) {
+    return this.partner.createRoom(this.own.partnerId(user), BigInt(roomTypeId), dto);
+  }
+
+  @Patch('rooms/:roomId')
+  @Audit('partner_room_update', 'partner', 'rooms', 'roomId')
+  updateRoom(
+    @CurrentUser() user: AuthedUser,
+    @Param('roomId') roomId: string,
+    @Body() dto: UpdateRoomDto,
+  ) {
+    return this.partner.updateRoom(this.own.partnerId(user), BigInt(roomId), dto);
+  }
+
+  @Delete('rooms/:roomId')
+  @Audit('partner_room_delete', 'partner', 'rooms', 'roomId')
+  removeRoom(@CurrentUser() user: AuthedUser, @Param('roomId') roomId: string) {
+    return this.partner.removeRoom(this.own.partnerId(user), BigInt(roomId));
   }
 
   // ── inventory & prices ────────────────────────────────────────────────────

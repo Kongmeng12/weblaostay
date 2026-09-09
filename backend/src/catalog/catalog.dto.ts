@@ -120,6 +120,14 @@ export class CalendarQueryDto {
   to!: string;
 }
 
+export class RoomAvailabilityQueryDto {
+  @IsISO8601()
+  checkIn!: string;
+
+  @IsISO8601()
+  checkOut!: string;
+}
+
 export class DistrictQueryDto {
   @IsOptional()
   @Type(() => Number)

@@ -9,6 +9,7 @@ export interface StayQuote {
   roomTypeId: bigint;
   propertyId: bigint;
   partnerId: bigint;
+  allowRoomSelection: boolean;
   nights: number;
   quantity: number;
   perNight: { date: string; price: bigint }[];
@@ -124,6 +125,7 @@ export class PricingService {
       roomTypeId: roomType.room_type_id,
       propertyId: roomType.property_id,
       partnerId: partner.partner_id,
+      allowRoomSelection: roomType.allow_room_selection,
       nights,
       quantity,
       perNight,
@@ -145,6 +147,7 @@ export class PricingService {
     return {
       roomTypeId: quote.roomTypeId.toString(),
       propertyId: quote.propertyId.toString(),
+      allowRoomSelection: quote.allowRoomSelection,
       nights: quote.nights,
       quantity: quote.quantity,
       perNight: quote.perNight.map((n) => ({ date: n.date, price: kipOf(n.price) })),

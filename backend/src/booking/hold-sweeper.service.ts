@@ -102,6 +102,8 @@ export class HoldSweeperService {
               item.quantity,
             );
           }
+          // A no-op unless the guest had picked specific rooms.
+          await this.inventory.releaseRoomAssignments(tx, booking.booking_id);
 
           await tx.bookings.update({
             where: { booking_id: booking.booking_id },

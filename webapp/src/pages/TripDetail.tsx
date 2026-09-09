@@ -133,6 +133,12 @@ export function TripDetailPage() {
             {b.roomType && b.roomType.quantity > 1 && (
               <Row label="ຈຳນວນຫ້ອງ" value={`${b.roomType.quantity} ຫ້ອງ`} />
             )}
+            {/* Empty for the ordinary flow, where the partner assigns a room
+                after booking — only a guest who picked a specific room at
+                booking time sees a number here. */}
+            {b.roomType && b.roomType.roomNumbers.length > 0 && (
+              <Row label="ເລກຫ້ອງ" value={b.roomType.roomNumbers.join(', ')} />
+            )}
             <Row label="ເຈົ້າຂອງ" value={b.property.host} />
             {b.property.phone && (
               <Row

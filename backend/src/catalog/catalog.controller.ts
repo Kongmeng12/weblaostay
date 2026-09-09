@@ -4,6 +4,7 @@ import { Public } from '../common/decorators';
 import {
   CalendarQueryDto,
   DistrictQueryDto,
+  RoomAvailabilityQueryDto,
   SearchDto,
   StayRangeDto,
 } from './catalog.dto';
@@ -32,6 +33,12 @@ export class CatalogController {
   @Get('properties/:id/calendar')
   calendar(@Param('id') id: string, @Query() query: CalendarQueryDto) {
     return this.catalog.calendar(BigInt(id), query);
+  }
+
+  @Public()
+  @Get('room-types/:id/rooms')
+  roomTypeRooms(@Param('id') id: string, @Query() query: RoomAvailabilityQueryDto) {
+    return this.catalog.roomTypeRooms(BigInt(id), query);
   }
 
   @Public()

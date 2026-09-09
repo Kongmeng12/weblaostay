@@ -8,10 +8,12 @@ import { kipOf, rateOf, toKip } from '../common/money';
 import { addDaysUtc, todayUtc, utcMidnight } from '../common/dates';
 import { REVENUE_STATUSES } from '../common/enums';
 import type {
+  CreateRoomDto,
   RoomTypeDto,
   SetInventoryDto,
   SetPriceDto,
   UpdatePropertyDto,
+  UpdateRoomDto,
   UpdateRoomTypeDto,
 } from './partner.dto';
 
@@ -38,7 +40,10 @@ export class PartnerService {
         room_types: {
           where: { deleted_at: null },
           orderBy: { base_price: 'asc' },
-          include: { room_type_images: { orderBy: { display_order: 'asc' } } },
+          include: {
+            room_type_images: { orderBy: { display_order: 'asc' } },
+            rooms: { orderBy: { room_number: 'asc' } },
+          },
         },
         _count: { select: { bookings: true, reviews: true } },
       },
@@ -129,8 +134,9 @@ export class PartnerService {
         min_nights: dto.minNights ?? 1,
         extra_guest_fee: toKip(dto.extraGuestFee ?? 0),
         size_sqm: dto.sizeSqm ?? null,
+        allow_room_selection: dto.allowRoomSelection ?? false,
       },
-      include: { room_type_images: true },
+      include: { room_type_images: true, rooms: true },
     });
 
     return toRoomTypeView(created);
@@ -153,11 +159,82 @@ export class PartnerService {
         ...(dto.extraGuestFee !== undefined && { extra_guest_fee: toKip(dto.extraGuestFee) }),
         ...(dto.sizeSqm !== undefined && { size_sqm: dto.sizeSqm }),
         ...(dto.isActive !== undefined && { status: dto.isActive ? 'active' : 'inactive' }),
+        ...(dto.allowRoomSelection !== undefined && {
+          allow_room_selection: dto.allowRoomSelection,
+        }),
       },
-      include: { room_type_images: true },
+      include: { room_type_images: true, rooms: { orderBy: { room_number: 'asc' } } },
     });
 
     return toRoomTypeView(updated);
+  }
+
+  // ── rooms ─────────────────────────────────────────────────────────────────
+  //
+  // A room type's numbered physical inventory. `total_rooms` on the room type
+  // stays the count the aggregate `room_inventory` engine sells against — these
+  // rows only decide which specific one a guest who used room selection gets.
+
+  async createRoom(partnerId: bigint, roomTypeId: bigint, dto: CreateRoomDto) {
+    await this.own.assertOwnsRoomType(partnerId, roomTypeId);
+
+    try {
+      const room = await this.prisma.rooms.create({
+        data: { room_type_id: roomTypeId, room_number: dto.roomNumber, floor: dto.floor ?? null },
+      });
+      return toRoomView(room);
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException(
+          `ຫ້ອງເລກ ${dto.roomNumber} ມີແລ້ວ · Room ${dto.roomNumber} already exists in this room type`,
+        );
+      }
+      throw err;
+    }
+  }
+
+  async updateRoom(partnerId: bigint, roomId: bigint, dto: UpdateRoomDto) {
+    await this.own.assertOwnsRoom(partnerId, roomId);
+
+    try {
+      const room = await this.prisma.rooms.update({
+        where: { room_id: roomId },
+        data: {
+          ...(dto.roomNumber !== undefined && { room_number: dto.roomNumber }),
+          ...(dto.floor !== undefined && { floor: dto.floor }),
+          ...(dto.status !== undefined && { status: dto.status }),
+        },
+      });
+      return toRoomView(room);
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException(
+          `ຫ້ອງເລກ ${dto.roomNumber} ມີແລ້ວ · That room number already exists in this room type`,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * A room that has ever been assigned to a stay carries booking history, the
+   * same reasoning `removeRoomType` applies to a room type — deactivate it
+   * instead of deleting, which the `room_assignments` FK would refuse anyway.
+   */
+  async removeRoom(partnerId: bigint, roomId: bigint) {
+    await this.own.assertOwnsRoom(partnerId, roomId);
+
+    const assignments = await this.prisma.room_assignments.count({ where: { room_id: roomId } });
+    if (assignments > 0) {
+      const room = await this.prisma.rooms.update({
+        where: { room_id: roomId },
+        data: { status: 'inactive' },
+      });
+      return { deleted: false, deactivated: true, room: toRoomView(room) };
+    }
+
+    await this.prisma.rooms.delete({ where: { room_id: roomId } });
+    return { deleted: true, deactivated: false, room: null };
   }
 
   /**
@@ -587,8 +664,10 @@ function toRoomTypeView(rt: {
   base_price: bigint;
   total_rooms: number;
   min_nights: number;
+  allow_room_selection: boolean;
   status: string;
   room_type_images?: { room_image_id: bigint; image_url: string; is_cover: boolean }[];
+  rooms?: { room_id: bigint; room_number: string; floor: string | null; status: string }[];
 }) {
   return {
     id: rt.room_type_id.toString(),
@@ -603,11 +682,27 @@ function toRoomTypeView(rt: {
     basePrice: kipOf(rt.base_price),
     totalRooms: rt.total_rooms,
     minNights: rt.min_nights,
+    allowRoomSelection: rt.allow_room_selection,
     isActive: rt.status === 'active',
     images: (rt.room_type_images ?? []).map((i) => ({
       id: i.room_image_id.toString(),
       url: i.image_url,
       isCover: i.is_cover,
     })),
+    rooms: (rt.rooms ?? []).map(toRoomView),
+  };
+}
+
+function toRoomView(r: {
+  room_id: bigint;
+  room_number: string;
+  floor: string | null;
+  status: string;
+}) {
+  return {
+    id: r.room_id.toString(),
+    roomNumber: r.room_number,
+    floor: r.floor,
+    status: r.status,
   };
 }

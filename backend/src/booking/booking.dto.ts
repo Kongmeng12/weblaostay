@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsEmail,
   IsEnum,
   IsISO8601,
@@ -41,6 +43,18 @@ export class CreateBookingDto {
   @IsString()
   @MaxLength(1000)
   specialRequest?: string;
+
+  /**
+   * Only meaningful for a room type with `allowRoomSelection` on, and only
+   * ever advisory here — `roomIds.length` must equal `quantity`, and the real
+   * check is the exclusion constraint `BookingService.create` writes under.
+   * Omit for the ordinary "any room of this type" flow.
+   */
+  @IsOptional()
+  @IsString({ each: true })
+  @ArrayMinSize(1)
+  @ArrayMaxSize(10)
+  roomIds?: string[];
 
   /**
    * Supplied by the client so a retried request returns the original booking

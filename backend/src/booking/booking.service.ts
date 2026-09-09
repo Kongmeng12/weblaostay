@@ -97,6 +97,21 @@ export class BookingService {
       source: booking_source.app,
     });
 
+    const roomIds = dto.roomIds?.map((id) => BigInt(id));
+    if (roomIds?.length) {
+      if (!quote.allowRoomSelection) {
+        throw new BadRequestException(
+          'ປະເພດຫ້ອງນີ້ບໍ່ຮອງຮັບການເລືອກເລກຫ້ອງ · ' +
+            'This room type does not support picking a specific room',
+        );
+      }
+      if (roomIds.length !== quantity) {
+        throw new BadRequestException(
+          `ຕ້ອງເລືອກ ${quantity} ຫ້ອງ · You must select exactly ${quantity} room(s)`,
+        );
+      }
+    }
+
     // Independent reads, so they go out together rather than one after another.
     // The booking code is derived from the id, which is why the id is drawn
     // from the sequence here: one INSERT carries both, and no row is ever
@@ -149,22 +164,35 @@ export class BookingService {
 
       // The line item, the guest and the opening status log in one round-trip.
       // Three separate inserts read better, but they would be three more waits
-      // with the room locked; the CTE form keeps the queue moving.
-      await tx.$executeRaw`
+      // with the room locked; the CTE form keeps the queue moving. `RETURNING`
+      // the item id costs nothing extra — it is only needed a few lines below,
+      // when a room selection was made, but reading it here keeps this the
+      // same single statement either way rather than branching the query shape.
+      const [{ booking_item_id: bookingItemId }] = await tx.$queryRaw<
+        { booking_item_id: bigint }[]
+      >`
         WITH item AS (
           INSERT INTO booking_items
             (booking_id, room_type_id, quantity, nights, price_per_night, subtotal)
           VALUES (${bookingId}, ${roomTypeId}, ${quantity}, ${quote.nights},
                   ${quote.perNight[0].price}, ${quote.subtotalAmount})
+          RETURNING booking_item_id
         ),
         guest AS (
           INSERT INTO booking_guests (booking_id, full_name, is_primary)
           VALUES (${bookingId}, ${profile?.full_name ?? 'Guest'}, true)
+        ),
+        log AS (
+          INSERT INTO booking_status_logs (booking_id, from_status, to_status, changed_by, note)
+          VALUES (${bookingId}, NULL, 'pending'::booking_status, ${customerId},
+                  'ສ້າງການຈອງ ແລະ ຈອງຫ້ອງໄວ້ຊົ່ວຄາວ')
         )
-        INSERT INTO booking_status_logs (booking_id, from_status, to_status, changed_by, note)
-        VALUES (${bookingId}, NULL, 'pending'::booking_status, ${customerId},
-                'ສ້າງການຈອງ ແລະ ຈອງຫ້ອງໄວ້ຊົ່ວຄາວ')
+        SELECT booking_item_id FROM item
       `;
+
+      if (roomIds?.length) {
+        await this.inventory.assignRooms(tx, bookingItemId, roomTypeId, roomIds, checkIn, checkOut);
+      }
 
       return created;
     });
@@ -304,7 +332,12 @@ export class BookingService {
             },
           },
         },
-        booking_items: { include: { room_types: true } },
+        booking_items: {
+          include: {
+            room_types: true,
+            room_assignments: { include: { rooms: { select: { room_number: true } } } },
+          },
+        },
         booking_guests: true,
         payments: { orderBy: { created_at: 'desc' } },
         refunds: true,
@@ -349,6 +382,9 @@ export class BookingService {
             name: item.room_types.type_name,
             quantity: item.quantity,
             pricePerNight: kipOf(item.price_per_night),
+            // Empty when the room type does not offer room selection, or the
+            // guest did not use it — "any room of this type" is still valid.
+            roomNumbers: item.room_assignments.map((ra) => ra.rooms.room_number),
           }
         : null,
       guest: {
@@ -538,6 +574,8 @@ export class BookingService {
             tx, item.room_type_id, booking.check_in, booking.check_out, quantity,
           );
         }
+        // A no-op unless a room selection was made, same as the aggregate release above.
+        await this.inventory.releaseRoomAssignments(tx, bookingId);
       }
 
       let refundRow: { refund_id: bigint } | null = null;

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { isoDayUtc } from '../common/dates';
 
 /**
@@ -16,6 +17,8 @@ import { isoDayUtc } from '../common/dates';
  */
 @Injectable()
 export class InventoryService {
+  constructor(private readonly prisma: PrismaService) {}
+
   /**
    * Takes a hold on every night of a stay.
    *
@@ -263,6 +266,113 @@ export class InventoryService {
     const perNight = rows.map((r) => ({ date: isoDayUtc(r.date), price: BigInt(r.price) }));
     const subtotal = perNight.reduce((sum, n) => sum + n.price, 0n);
     return { perNight, subtotal };
+  }
+
+  // ── room-level assignment ────────────────────────────────────────────────
+  //
+  // Everything above decides *how many* rooms of a type are free. These decide
+  // *which* physical one — only relevant for a room type where the partner has
+  // switched `allow_room_selection` on. The aggregate counters above are still
+  // what `hold()` checks first; this only adds a second, narrower claim on top
+  // of a hold that already succeeded.
+
+  /**
+   * Binds specific physical rooms to a booking item.
+   *
+   * The `room_assignments_no_overlap` exclusion constraint — not this method —
+   * is what actually makes two bookings landing on the same physical room for
+   * overlapping nights impossible; the checks here exist only to turn a
+   * violation into a message a guest can read, same division of labour as
+   * `hold()` / `explainUnavailable()`.
+   */
+  async assignRooms(
+    tx: Prisma.TransactionClient,
+    bookingItemId: bigint,
+    roomTypeId: bigint,
+    roomIds: bigint[],
+    checkIn: Date,
+    checkOut: Date,
+  ): Promise<void> {
+    const rooms = await tx.rooms.findMany({
+      where: { room_id: { in: roomIds }, room_type_id: roomTypeId },
+      select: { room_id: true, room_number: true, status: true },
+    });
+
+    if (rooms.length !== roomIds.length) {
+      throw new BadRequestException(
+        'ບໍ່ພົບຫ້ອງທີ່ເລືອກໃນປະເພດຫ້ອງນີ້ · One or more selected rooms were not found in this room type',
+      );
+    }
+    const unavailable = rooms.filter((r) => r.status !== 'available');
+    if (unavailable.length) {
+      throw new ConflictException(
+        `ຫ້ອງ ${unavailable.map((r) => r.room_number).join(', ')} ບໍ່ວ່າງ · ` +
+          'One or more selected rooms are not available',
+      );
+    }
+
+    try {
+      // One INSERT per room rather than a batched one: `quantity` — and so
+      // `roomIds.length` — is capped at 10, and each statement can fail the
+      // exclusion constraint independently with its own readable room number.
+      for (const room of rooms) {
+        await tx.$executeRaw`
+          INSERT INTO room_assignments (booking_item_id, room_id, check_in, check_out)
+          VALUES (${bookingItemId}, ${room.room_id}, ${checkIn}::date, ${checkOut}::date)
+        `;
+      }
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        String(err.meta?.constraint ?? '').includes('room_assignments_no_overlap')
+      ) {
+        throw new ConflictException(
+          'ຫ້ອງທີ່ເລືອກຫາກໍຖືກຈອງໄປ ກະລຸນາເລືອກຫ້ອງອື່ນ · ' +
+            'One of the selected rooms was just booked — please choose another',
+        );
+      }
+      throw err;
+    }
+  }
+
+  /** A hold expired or a booking was cancelled: its room-number claims are freed too. */
+  async releaseRoomAssignments(tx: Prisma.TransactionClient, bookingId: bigint): Promise<void> {
+    await tx.$executeRaw`
+      DELETE FROM room_assignments
+      WHERE booking_item_id IN (
+        SELECT booking_item_id FROM booking_items WHERE booking_id = ${bookingId}
+      )
+    `;
+  }
+
+  /**
+   * Physical rooms free for a stay — the "pick your room" list.
+   *
+   * A snapshot, not a lock: the real guarantee is `assignRooms`' exclusion
+   * constraint at write time, the same relationship `room_inventory.available_count`
+   * has to `hold()`.
+   */
+  async availableRooms(
+    roomTypeId: bigint,
+    checkIn: Date,
+    checkOut: Date,
+  ): Promise<{ roomId: bigint; roomNumber: string; floor: string | null }[]> {
+    const rows = await this.prisma.$queryRaw<
+      { room_id: bigint; room_number: string; floor: string | null }[]
+    >`
+      SELECT r.room_id, r.room_number, r.floor
+      FROM rooms r
+      WHERE r.room_type_id = ${roomTypeId}
+        AND r.status = 'available'
+        AND NOT EXISTS (
+          SELECT 1 FROM room_assignments ra
+          WHERE ra.room_id = r.room_id
+            AND ra.check_in < ${checkOut}::date
+            AND ra.check_out > ${checkIn}::date
+        )
+      ORDER BY r.room_number
+    `;
+    return rows.map((r) => ({ roomId: r.room_id, roomNumber: r.room_number, floor: r.floor }));
   }
 
   /** Guards the shape of a requested stay before any money is calculated. */

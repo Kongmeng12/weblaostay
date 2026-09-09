@@ -92,6 +92,29 @@ export interface RoomOffer {
   stayTotal: number | null;
   /** Null without dates; false when some night of the range is sold out. */
   available: boolean | null;
+  /** When true, a guest may additionally pick a specific physical room — see `RoomUnit`. */
+  allowRoomSelection: boolean;
+}
+
+/**
+ * One physical room behind a room type, as returned by
+ * `GET /room-types/:id/rooms`. Only fetched for room types with
+ * `allowRoomSelection`.
+ *
+ * Named `RoomUnit` rather than `Room` on purpose: the Flutter apps in this
+ * project already use `Room` for the room *type*, and this is the physical
+ * room a partner assigns — a distinct concept that needs a distinct name.
+ */
+export interface RoomUnit {
+  id: string;
+  roomNumber: string;
+  floor: string | null;
+}
+
+/** `GET /room-types/:id/rooms?checkIn=&checkOut=` — physical rooms free for that range. */
+export interface RoomUnitsResponse {
+  roomTypeId: string;
+  rooms: RoomUnit[];
 }
 
 export interface PropertyDetail {
@@ -167,6 +190,8 @@ export interface Quote {
   cleaningFee: number;
   discount: number;
   total: number;
+  /** Whether this room type lets the guest pick a specific physical room at booking time. */
+  allowRoomSelection: boolean;
 }
 
 export interface BookingRow {
@@ -219,7 +244,14 @@ export interface BookingDetail {
     phone: string | null;
     host: string;
   };
-  roomType: { id: string; name: string; quantity: number; pricePerNight: number } | null;
+  roomType: {
+    id: string;
+    name: string;
+    quantity: number;
+    pricePerNight: number;
+    /** Empty when no specific room was assigned; otherwise the assigned room number(s). */
+    roomNumbers: string[];
+  } | null;
   guest: { name: string | null; email: string; phone: string | null };
   payments: {
     id: string;

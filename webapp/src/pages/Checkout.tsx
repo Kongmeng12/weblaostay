@@ -5,7 +5,7 @@ import { api, qs, ApiError } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { c, f, type as t } from '../theme';
 import { kip, laoDateFull, nightsBetween } from '../lib/format';
-import { Button, Card, ErrorNote, Field, Loading, MoneyRow, Page, PageTitle, Photo, Spinner, inputStyle } from '../components/ui';
+import { Button, Card, ErrorNote, Field, Loading, MoneyRow, Page, PageTitle, Photo, Pill, Spinner, inputStyle } from '../components/ui';
 import type { BookingDetail, PropertyDetail, Quote } from '../lib/types';
 
 /**
@@ -25,15 +25,23 @@ export function CheckoutPage() {
   const checkIn = params.get('checkIn') ?? '';
   const checkOut = params.get('checkOut') ?? '';
   const guests = Number(params.get('guests') ?? 2);
+  // The specific physical room the guest picked on the property page, if that
+  // room type has `allowRoomSelection` — null for the ordinary flow, which is
+  // still how every room type behaves today.
+  const roomId = params.get('roomId');
 
   const [specialRequest, setSpecialRequest] = useState('');
 
-  // Generated once per mount. A guest who double-taps "confirm", or whose
-  // connection drops mid-request and retries, gets the same booking back
-  // instead of a second room held in their name.
+  // Regenerated whenever anything that determines what gets booked changes —
+  // not just once per mount. A key kept from before the guest switched room
+  // type, dates, guest count or room pick would still look "the same request"
+  // to the server's idempotency check, so a retry sent after such a change
+  // could replay against the old price or the wrong room instead of quoting
+  // and booking what's on screen now. (The Flutter customer app already
+  // regenerates on every such change; this brings the web app in line.)
   const idempotencyKey = useMemo(
     () => `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-    [],
+    [roomTypeId, checkIn, checkOut, guests, roomId],
   );
 
   const valid = !!roomTypeId && !!checkIn && !!checkOut && nightsBetween(checkIn, checkOut) > 0;
@@ -47,6 +55,9 @@ export function CheckoutPage() {
 
   const quote = useQuery({
     queryKey: ['quote', roomTypeId, checkIn, checkOut, guests],
+    // Price-only — the quote endpoint does not take or validate a room
+    // selection, so `roomId` is deliberately not sent here. Real validation
+    // of the pick happens at booking-create time below.
     queryFn: () =>
       api.post<Quote>('/customer/bookings/quote', { roomTypeId, checkIn, checkOut, guests }),
     enabled: valid,
@@ -61,6 +72,9 @@ export function CheckoutPage() {
         checkOut,
         guests,
         idempotencyKey,
+        // This app never lets a guest choose more than one room, so a single
+        // pick is always sent as the one-element array the API expects.
+        ...(roomId ? { roomIds: [roomId] } : {}),
         ...(specialRequest.trim() ? { specialRequest: specialRequest.trim() } : {}),
       }),
     onSuccess: (booking) => navigate(`/pay/${booking.id}`, { replace: true }),
@@ -103,6 +117,15 @@ export function CheckoutPage() {
                   {[property.data?.district, property.data?.province].filter(Boolean).join(', ')}
                 </div>
                 <div style={{ font: t.label, color: c.accentDark }}>{room?.name ?? '—'}</div>
+                {/* The room id itself means nothing to a guest — this just
+                    confirms a pick was carried through from the property
+                    page. The assigned room number appears once the booking
+                    exists. */}
+                {roomId && (
+                  <div style={{ marginTop: 6 }}>
+                    <Pill bg={c.accentSoft} fg={c.accentDark}>ເລືອກເລກຫ້ອງສະເພາະແລ້ວ</Pill>
+                  </div>
+                )}
               </div>
             </div>
           </Card>
