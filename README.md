@@ -88,6 +88,19 @@ SQL ຢູ່ `backend/prisma/migrations-v2/` ແລ່ນຕາມລຳດັ�
 > `0006` ແຍກອອກມາຈາກ `0004` ໂດຍເຈດຕະນາ: ທຸກຕາຕະລາງໃນນັ້ນມີ FK ຫາ `users`
 > ແລະ `0005` ໃຊ້ `TRUNCATE users CASCADE` ເຊິ່ງລາມໄປລຶບພວກມັນຫາຍງຽບໆ.
 
+> **`0005_demo_data.sql` ບໍ່ໃຫ້ຄວາມຫຼາກຫຼາຍລະຫວ່າງ 5 ທີ່ພັກ** — ຈົ່ງໃຈເຮັດແບບນີ້
+> ເພື່ອໃຫ້ seed script ສັ້ນ, ບໍ່ແມ່ນ bug:
+> - **ຫ້ອງ**: ທຸກທີ່ພັກໄດ້ set ຫ້ອງດຽວກັນໝົດ (Standard Fan / Standard AC / Deluxe /
+>   Family Suite, ຊື່-ລາຍລະອຽດ-ລາຄາຄືກັນ 100%) — ເບິ່ງ `room_types` ໃນໄຟລ໌ນີ້,
+>   ມັນ cross-join VALUES ດຽວໃສ່ທຸກ property ໂດຍບໍ່ມີເງື່ອນໄຂແຍກ.
+>   ຢາກໃຫ້ແຕ່ລະທີ່ພັກມີຫ້ອງຕ່າງກັນ (ຕາມ property_type: resort/villa/homestay/guesthouse)
+>   ຕ້ອງແກ້ໄຟລ໌ນີ້ໃຫ້ໃຊ້ VALUES ແຍກຕໍ່ property ແລ້ວ `db:reset` ໃໝ່.
+> - **ຮູບ**: ໄຟລ໌ນີ້**ບໍ່ seed ຮູບເລີຍ** (ບໍ່ມີ `INSERT INTO property_images`) —
+>   ຮູບທີ່ເຫັນຢູ່ໃນບັນຊີ demo (ເຊັ່ນ `vintage@laostay.la` / `homsabay@laostay.la`)
+>   ແມ່ນມາຈາກການອັບໂຫຼດທົດສອບດ້ວຍມືຜ່ານ Partner app ພາຍຫຼັງ, ບໍ່ແມ່ນສ່ວນນຶ່ງຂອງ
+>   `npm run db:reset` — ຖ້າສອງບັນຊີເຫັນຮູບຄືກັນ ແມ່ນຍ້ອນມີຄົນອັບໂຫຼດໄຟລ໌ດຽວກັນໃສ່
+>   ທັງສອງບັນຊີຕອນທົດສອບ, ບໍ່ແມ່ນ seed data ໄປແຊຮູບກັນ.
+
 ### ສາມຢ່າງທີ່ຖືເປັນຫົວໃຈ
 
 1. **ຄັງຫ້ອງກັນການຂາຍເກີນ** — `room_inventory` ມີ `total_count` / `held_count` /

@@ -219,6 +219,12 @@ SELECT property_id, '14:00', '12:00', false,
 FROM properties;
 
 -- ── Room types ──────────────────────────────────────────────────────────────
+-- Each property gets its own lineup, shaped by what that property actually is
+-- (a boutique guesthouse's rooms don't look like a resort's). Previously this
+-- was one shared VALUES list cross-joined onto every property with `ON true`,
+-- so all five properties showed the exact same four rooms at the exact same
+-- prices — matched here to `properties.property_name` instead, the same key
+-- the properties insert above matched against `partners.business_name`.
 INSERT INTO room_types (
   property_id, type_name, description, bed_type, has_ac, max_occupancy,
   base_price, total_rooms, min_nights, extra_guest_fee
@@ -227,11 +233,34 @@ SELECT pr.property_id, r.type_name, r.descr, r.bed::bed_type, r.ac,
        r.occ, r.price, r.rooms, r.min_n, r.extra
 FROM properties pr
 JOIN (VALUES
-  ('Standard Fan',   'ຫ້ອງມາດຕະຖານ ພັດລົມ ຫ້ອງນ້ຳໃນຕົວ',      'single', false, 2,  320000,  6, 1, 50000),
-  ('Standard AC',    'ຫ້ອງມາດຕະຖານ ມີແອ ຫ້ອງນ້ຳໃນຕົວ',        'double', true,  2,  450000,  8, 1, 60000),
-  ('Deluxe',         'ຫ້ອງກວ້າງ ມີລະບຽງ ວິວສວນ',              'double', true,  3,  620000,  4, 1, 80000),
-  ('Family Suite',   'ຫ້ອງຄອບຄົວ 2 ຫ້ອງນອນ ມີຄົວນ້ອຍ',       'twin',   true,  5,  980000,  2, 2, 100000)
-) AS r(type_name, descr, bed, ac, occ, price, rooms, min_n, extra) ON true;
+  -- Vintage House Vientiane — boutique guesthouse, ໃຈກາງນະຄອນຫຼວງ
+  ('Vintage House Vientiane', 'Vintage Single',      'ຫ້ອງເດ່ຍວສະໄໝເກົ່າ ພັດລົມ ຫ້ອງນ້ຳໃນຕົວ',       'single', false, 1,  250000, 4, 1,  40000),
+  ('Vintage House Vientiane', 'Vintage Double AC',   'ຫ້ອງຄູ່ຕົກແຕ່ງແບບເກົ່າ ມີແອ',                    'double', true,  2,  400000, 6, 1,  50000),
+  ('Vintage House Vientiane', 'Heritage Suite',      'ຫ້ອງສະວີດແບບເຮືອນເກົ່າ ມີລະບຽງໄມ້',              'double', true,  3,  650000, 3, 1,  80000),
+
+  -- Hom Sabay Guesthouse — homestay ບັນຍາກາດຄອບຄົວ ໃກ້ວັດຊຽງທອງ, ຫຼວງພະບາງ
+  ('Hom Sabay Guesthouse', 'Cozy Fan Room',        'ຫ້ອງນ້ອຍ ພັດລົມ ບັນຍາກາດອົບອຸ່ນ',                'single', false, 1,  180000, 5, 1,  30000),
+  ('Hom Sabay Guesthouse', 'Family Double',        'ຕຽງຄູ່ ມີແອ ເໝາະສຳລັບຄູ່ຮັກ',                    'double', true,  2,  350000, 6, 1,  50000),
+  ('Hom Sabay Guesthouse', 'Traditional Lao Room', 'ຫ້ອງສະໄຕລ໌ລາວດັ້ງເດີມ ມີລະບຽງ',                  'double', true,  2,  420000, 3, 1,  55000),
+  ('Hom Sabay Guesthouse', 'Riverside Twin',       'ສອງຕຽງ ວິວແມ່ນ້ຳຂອງ',                            'twin',   true,  3,  480000, 4, 2,  60000),
+
+  -- Mekong View Resort — ຣີສອດຕິດແມ່ນ້ຳຂອງ, ປາກເຊ
+  ('Mekong View Resort', 'Garden Bungalow',   'ບັງກະໂລຕິດສວນ ສະຫງົບ',                    'double', true,  2,  550000, 8, 1,  70000),
+  ('Mekong View Resort', 'River View Room',   'ຫ້ອງວິວແມ່ນ້ຳຂອງ ຊົມພະອາທິດຕົກ',          'double', true,  2,  750000, 6, 1,  90000),
+  ('Mekong View Resort', 'Sunset Suite',      'ຫ້ອງສະວີດວິວພະອາທິດຕົກ ລະບຽງກວ້າງ',       'double', true,  3,  950000, 2, 1, 100000),
+  ('Mekong View Resort', 'Pool Villa',        'ວິນລ່າຕິດສະລອຍນ້ຳ ເໝາະສຳລັບຄອບຄົວ',       'twin',   true,  4, 1200000, 3, 2, 120000),
+
+  -- Vang Vieng Riverside — ວິນລ່າລິມນ້ຳຊອງ ວິວພູຫິນປູນ
+  ('Vang Vieng Riverside', 'Mountain View Twin', 'ສອງຕຽງ ວິວພູຫິນປູນ',                      'twin',   true,  2,  500000, 5, 1,  60000),
+  ('Vang Vieng Riverside', 'Riverside Double',   'ຕຽງຄູ່ ຕິດລິມນ້ຳຊອງ',                     'double', true,  2,  580000, 6, 1,  65000),
+  ('Vang Vieng Riverside', 'Family Villa 2BR',   'ວິນລ່າ 2 ຫ້ອງນອນ ມີຄົວນ້ອຍ ເໝາະສຳລັບຄອບຄົວ', 'twin', true,  6, 1500000, 2, 2, 100000),
+
+  -- Dokchampa Homestay — ໂຮມສະເຕນ້ອຍ ສະຫງົບ ເໝາະສຳລັບນັກເດີນທາງຄົນດຽວ
+  ('Dokchampa Homestay', 'Solo Fan Room', 'ຫ້ອງນ້ອຍ ພັດລົມ ເໝາະສຳລັບຄົນດຽວ', 'single', false, 1, 150000, 3, 1, 25000),
+  ('Dokchampa Homestay', 'Solo AC Room',  'ຫ້ອງນ້ອຍ ມີແອ ເໝາະສຳລັບຄົນດຽວ',   'single', true,  1, 220000, 3, 1, 30000),
+  ('Dokchampa Homestay', 'Cozy Double',   'ຕຽງຄູ່ຂະໜາດນ້ອຍ ບັນຍາກາດອົບອຸ່ນ', 'double', true,  2, 320000, 2, 1, 40000)
+) AS r(biz, type_name, descr, bed, ac, occ, price, rooms, min_n, extra)
+  ON r.biz = pr.property_name;
 
 -- ── Inventory and prices · 90 days forward ─────────────────────────────────
 -- Every night on sale, so search has something to return from day one.
