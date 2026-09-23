@@ -165,6 +165,8 @@ export interface ProvinceCount {
 export interface ApprovalRow {
   id: string;
   businessName: string;
+  businessType: string;
+  taxId: string | null;
   ownerName: string | null;
   email: string;
   phone: string | null;
@@ -174,7 +176,11 @@ export interface ApprovalRow {
     id: string;
     name: string;
     type: string;
+    description: string | null;
+    phone: string | null;
     province: string | null;
+    district: string | null;
+    village: string | null;
     address: string | null;
   }[];
 }

@@ -332,20 +332,7 @@ export function Shell() {
         style={{ background: `linear-gradient(160deg, ${c.sidebarFrom}, ${c.sidebarTo})` }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 22px' }}>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              background: c.accent,
-              display: 'grid',
-              placeItems: 'center',
-              font: f(800, 18),
-              color: '#fff',
-            }}
-          >
-            L
-          </div>
+          <img src="/logo.png" alt="PhaPhak" style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0 }} />
           <div>
             <div style={{ font: f(800, 15), color: '#fff' }}>PhaPhak</div>
             <div style={{ font: f(400, 11), color: c.onDarkSoft }}>Web Admin</div>

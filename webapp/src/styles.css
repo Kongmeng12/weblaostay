@@ -37,8 +37,10 @@ input,
 select,
 textarea {
   font-family: inherit;
-  /* iOS zooms the whole page when a focused input is under 16px. */
-  font-size: 16px;
+  /* iOS zooms the whole page when a focused input is under 16px. The rule
+     must be !important: inline `font` shorthands win on specificity otherwise,
+     and each cell input sets its size to 13.5px that way. */
+  font-size: 16px !important;
 }
 input:focus,
 select:focus,
@@ -184,6 +186,25 @@ img {
   width: 44px !important;
   height: 44px !important;
   line-height: 44px !important;
+}
+
+/* ── SearchBar: phone layout ─────────────────────────────────────────────
+   Below 480 px the two-column grid is too narrow for comfortable tap targets.
+   Switch to a single column and let the submit button fill the row so a thumb
+   can reach it without aiming. The actions row flips to a column so the locate
+   button sits above the submit button rather than squeezing beside it. */
+@media (max-width: 479px) {
+  .phaphak-search {
+    grid-template-columns: 1fr !important;
+  }
+  .phaphak-search-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .phaphak-search-submit {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
 }
 
 /* CMS page bodies rendered from sanitised HTML — see lib/richText.ts.

@@ -2,10 +2,25 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import { c, f, radius, type as t } from '../theme';
+import { c, f, radius, space, type as t } from '../theme';
 import { Button, Card, ErrorNote, Field, Loading, Page, PageTitle, Pill, Spinner, inputStyle } from '../components/ui';
 import type { CustomerProfile } from '../lib/types';
 import { looksLikePhone } from '../lib/validation';
+
+const NOTIF_KEY = 'phaphak.guest.notifPrefs';
+
+interface NotifPrefs {
+  emailOffers: boolean;
+  tripReminders: boolean;
+}
+
+function loadNotifPrefs(): NotifPrefs {
+  try {
+    return JSON.parse(localStorage.getItem(NOTIF_KEY) ?? 'null') ?? { emailOffers: true, tripReminders: true };
+  } catch {
+    return { emailOffers: true, tripReminders: true };
+  }
+}
 
 export function AccountPage() {
   const { signOut } = useAuth();
@@ -21,6 +36,7 @@ export function AccountPage() {
   const [seeded, setSeeded] = useState(false);
   const [saved, setSaved] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(loadNotifPrefs);
 
   // Fill the form once. Re-filling on every refetch would wipe what is being
   // typed the moment a background refresh lands.
@@ -142,6 +158,32 @@ export function AccountPage() {
         </Card>
 
         <Card>
+          <div style={{ font: t.h3, color: c.text, marginBottom: 16 }}>ການຕັ້ງຄ່າ</div>
+          <div style={{ display: 'grid', gap: 14 }}>
+            <NotifToggle
+              label="ອີເມວ Offers ແລະ ໂປຣໂມຊັ່ນ"
+              hint="ຮັບຂ່າວສານດີລ ແລະ ສ່ວນຫຼຸດ"
+              checked={notifPrefs.emailOffers}
+              onChange={(v) => {
+                const next = { ...notifPrefs, emailOffers: v };
+                setNotifPrefs(next);
+                localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+              }}
+            />
+            <NotifToggle
+              label="ແຈ້ງເຕືອນການເດີນທາງ"
+              hint="ຮັບແຈ້ງເຕືອນກ່ອນເຊັກອິນ 24 ຊົ່ວໂມງ"
+              checked={notifPrefs.tripReminders}
+              onChange={(v) => {
+                const next = { ...notifPrefs, tripReminders: v };
+                setNotifPrefs(next);
+                localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+              }}
+            />
+          </div>
+        </Card>
+
+        <Card>
           <div style={{ font: t.h3, color: c.text, marginBottom: 6 }}>ອອກຈາກລະບົບ</div>
           <p style={{ font: t.caption, color: c.muted, margin: '0 0 14px' }}>
             ອອກຈາກອຸປະກອນນີ້ — ການຈອງຂອງທ່ານຍັງຢູ່ຄືເກົ່າ
@@ -152,6 +194,58 @@ export function AccountPage() {
         </Card>
       </div>
     </Page>
+  );
+}
+
+function NotifToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3] }}>
+      <div>
+        <div style={{ font: t.label, color: c.text }}>{label}</div>
+        <div style={{ font: t.caption, color: c.muted, marginTop: 2 }}>{hint}</div>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        aria-checked={checked}
+        role="switch"
+        style={{
+          width: 44,
+          height: 26,
+          borderRadius: 13,
+          background: checked ? c.accent : c.border,
+          border: 'none',
+          cursor: 'pointer',
+          position: 'relative',
+          flexShrink: 0,
+          transition: 'background 0.18s',
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute',
+            top: 3,
+            left: checked ? 21 : 3,
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            background: '#fff',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+            transition: 'left 0.18s',
+          }}
+        />
+      </button>
+    </div>
   );
 }
 

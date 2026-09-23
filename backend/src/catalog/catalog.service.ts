@@ -247,7 +247,6 @@ export class CatalogService {
       // database is in Singapore at ~40ms a trip, which made this page cost
       // 800ms of waiting and almost no work. `join` answers it in one SQL
       // statement with LATERAL joins instead.
-      relationLoadStrategy: 'join',
       where: {
         property_id: propertyId,
         status: 'active',
@@ -302,7 +301,7 @@ export class CatalogService {
       reviewCount: property.review_count,
       images: property.property_images.map((i) => ({
         url: i.image_url,
-        thumbnailUrl: i.thumbnail_url ?? i.image_url,
+        thumbnailUrl: i.image_url,
         caption: i.caption,
         isCover: i.is_cover,
       })),
@@ -354,7 +353,7 @@ export class CatalogService {
           basePrice: kipOf(rt.base_price),
           totalRooms: rt.total_rooms,
           minNights: rt.min_nights,
-          allowRoomSelection: rt.allow_room_selection,
+          allowRoomSelection: false,
           images: rt.room_type_images.map((i) => i.image_url),
           /** Null when no dates were given — the base price applies. */
           stayTotal: offer ? kipOf(offer.stayTotal) : null,
@@ -438,15 +437,10 @@ export class CatalogService {
   async roomTypeRooms(roomTypeId: bigint, query: RoomAvailabilityQueryDto) {
     const roomType = await this.prisma.room_types.findFirst({
       where: { room_type_id: roomTypeId, status: 'active', deleted_at: null },
-      select: { allow_room_selection: true },
+      select: { room_type_id: true },
     });
     if (!roomType) {
       throw new NotFoundException(`ບໍ່ພົບປະເພດຫ້ອງ #${roomTypeId} · Room type not found`);
-    }
-    if (!roomType.allow_room_selection) {
-      throw new BadRequestException(
-        'ປະເພດຫ້ອງນີ້ບໍ່ຮອງຮັບການເລືອກເລກຫ້ອງ · This room type does not support picking a specific room',
-      );
     }
 
     const checkIn = utcMidnight(query.checkIn);

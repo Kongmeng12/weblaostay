@@ -148,6 +148,7 @@ export function SearchBar({
   return (
     <form
       onSubmit={submit}
+      className="phaphak-search"
       style={{
         background: c.surface,
         border: `1px solid ${c.border}`,
@@ -265,6 +266,7 @@ export function SearchBar({
       </Cell>
 
       <div
+        className="phaphak-search-actions"
         style={{
           gridColumn: '1 / -1',
           display: 'flex',
@@ -301,7 +303,7 @@ export function SearchBar({
           {locateError && <span style={{ font: t.caption, color: c.warnFg }}>{locateError}</span>}
         </div>
 
-        <Button type="submit" size="lg" style={{ height: 46, minWidth: 160 }}>
+        <Button type="submit" size="lg" className="phaphak-search-submit" style={{ height: 46, minWidth: 160 }}>
           ຄົ້ນຫາ
         </Button>
       </div>

@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import compression from 'compression';
+import cors from 'cors';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -35,18 +36,18 @@ async function bootstrap(): Promise<void> {
     .split(',')
     .map((o) => o.trim());
 
-  app.enableCors({
-    // The two Flutter apps (customer, partner) run on Chrome via `flutter
-    // run -d chrome` or an IDE's own launch config, both of which pick a
-    // fresh random port every single run — there is no fixed port to add to
-    // the list above, and chasing whatever port a given tool happened to
-    // pick this time is a losing game (see run.ps1 in both Flutter repos for
-    // the history of trying). Allowing any `http://localhost:*` origin
-    // unconditionally is safe, not a hole: `Origin` is a header the browser
-    // sets and a page can never forge, so `http://localhost:<port>` can only
-    // ever mean code actually running on this machine, in a real browser —
-    // never a request from someone else's site. The explicit list above
-    // still gates every real, non-local origin.
+  // CORS is scoped to /api only — not applied globally.
+  //
+  // Vite builds ES modules with `type="module" crossorigin` on every <script>
+  // tag, so the browser sends an `Origin` header even for same-origin JS and
+  // CSS requests. A global cors() middleware would then block the site from
+  // loading its own assets unless every production domain were in the list.
+  // Restricting CORS to the /api prefix sidesteps the issue cleanly: static
+  // files never need a CORS header, and the API still enforces its whitelist.
+  //
+  // Flutter apps pick a random port each run — see comment below for why any
+  // http://localhost:* is allowed unconditionally.
+  const corsMiddleware = cors({
     origin(origin, callback) {
       if (!origin || allowedOrigins.includes(origin) || /^http:\/\/localhost:\d+$/.test(origin)) {
         callback(null, true);
@@ -56,6 +57,7 @@ async function bootstrap(): Promise<void> {
     },
     credentials: true,
   });
+  app.use('/api', corsMiddleware);
 
   // No cross-origin resource policy fuss: this process serves JSON and the
   // uploaded photos, which the apps load from a different origin.

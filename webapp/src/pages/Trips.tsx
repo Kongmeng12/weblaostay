@@ -7,31 +7,83 @@ import { countdown, kip, laoDateRange } from '../lib/format';
 import { Button, Empty, ErrorNote, Page, PageTitle, Photo, Pill, Skeleton } from '../components/ui';
 import type { BookingRow, Paged } from '../lib/types';
 
-const FILTERS = [
+type Tab = 'upcoming' | 'history';
+
+const UPCOMING_STATUSES = new Set(['pending', 'confirmed', 'staying']);
+const HISTORY_STATUSES = new Set(['completed', 'cancelled']);
+
+const UPCOMING_FILTERS = [
   { value: '', label: 'ທັງໝົດ' },
   { value: 'pending', label: 'ລໍຊຳລະ' },
-  { value: 'confirmed', label: 'ຢືນຢັນແລ້ວ' },
+  { value: 'confirmed', label: 'ຢືນຢັນ' },
   { value: 'staying', label: 'ກຳລັງພັກ' },
-  { value: 'completed', label: 'ພັກຈົບແລ້ວ' },
+] as const;
+
+const HISTORY_FILTERS = [
+  { value: '', label: 'ທັງໝົດ' },
+  { value: 'completed', label: 'ພັກຈົບ' },
   { value: 'cancelled', label: 'ຍົກເລີກ' },
 ] as const;
 
 export function TripsPage() {
+  const [tab, setTab] = useState<Tab>('upcoming');
   const [status, setStatus] = useState('');
 
   const query = useQuery({
     queryKey: ['trips', status],
     queryFn: () => api.get<Paged<BookingRow>>('/customer/bookings' + qs({ status, limit: 50 })),
-    // A pending booking's hold is ticking down, so the list must not go stale.
-    refetchInterval: status === '' || status === 'pending' ? 30_000 : false,
+    refetchInterval: tab === 'upcoming' && (status === '' || status === 'pending') ? 30_000 : false,
   });
+
+  // When sub-filter is "all" (status=''), the API returns every booking status.
+  // Client-side narrow to what the active tab actually represents.
+  const items = (query.data?.items ?? []).filter((b) => {
+    if (status !== '') return true;
+    return tab === 'upcoming' ? UPCOMING_STATUSES.has(b.status) : HISTORY_STATUSES.has(b.status);
+  });
+
+  function switchTab(next: Tab) {
+    setTab(next);
+    setStatus('');
+  }
+
+  const filters = tab === 'upcoming' ? UPCOMING_FILTERS : HISTORY_FILTERS;
 
   return (
     <Page width="wide">
       <PageTitle>ການເດີນທາງຂອງຂ້ອຍ</PageTitle>
 
+      {/* Main tabs */}
+      <div
+        style={{
+          display: 'flex',
+          borderBottom: `1px solid ${c.border}`,
+          marginBottom: 16,
+        }}
+      >
+        {([['upcoming', 'ຈອງໄວ້'] as const, ['history', 'ປະຫວັດ'] as const]).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => switchTab(key)}
+            style={{
+              padding: '10px 20px',
+              background: 'none',
+              border: 'none',
+              borderBottom: `2px solid ${tab === key ? c.accent : 'transparent'}`,
+              font: f(tab === key ? 700 : 400, 14),
+              color: tab === key ? c.accent : c.muted,
+              cursor: 'pointer',
+              marginBottom: -1,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Sub-filters */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {FILTERS.map((filter) => (
+        {filters.map((filter) => (
           <button
             key={filter.value}
             onClick={() => setStatus(filter.value)}
@@ -58,21 +110,33 @@ export function TripsPage() {
             <Skeleton key={i} height={128} />
           ))}
         </div>
-      ) : query.data?.items.length ? (
+      ) : items.length ? (
         <div style={{ display: 'grid', gap: 12 }}>
-          {query.data.items.map((b) => (
+          {items.map((b) => (
             <TripRow key={b.id} booking={b} />
           ))}
         </div>
       ) : (
         <Empty
-          icon="🧳"
-          message={status ? 'ບໍ່ມີການຈອງໃນສະຖານະນີ້' : 'ຍັງບໍ່ມີການຈອງ'}
-          hint="ຄົ້ນຫາທີ່ພັກແລ້ວຈອງ — ການຈອງຂອງທ່ານຈະປາກົດຢູ່ນີ້"
+          icon={tab === 'upcoming' ? '🗓️' : '🧳'}
+          message={
+            status
+              ? 'ບໍ່ມີການຈອງໃນສະຖານະນີ້'
+              : tab === 'upcoming'
+                ? 'ຍັງບໍ່ມີການຈອງທີ່ຈະມາ'
+                : 'ຍັງບໍ່ມີປະຫວັດການຈອງ'
+          }
+          hint={
+            tab === 'upcoming'
+              ? 'ຄົ້ນຫາທີ່ພັກ ແລ້ວຈອງ — ການຈອງຂອງທ່ານຈະປາກົດຢູ່ນີ້'
+              : 'ການຈອງທີ່ສຳເລັດ ຫຼື ຍົກເລີກຈະປາກົດຢູ່ນີ້'
+          }
           action={
-            <Link to="/search">
-              <Button size="lg">ຄົ້ນຫາທີ່ພັກ</Button>
-            </Link>
+            tab === 'upcoming' ? (
+              <Link to="/search">
+                <Button size="lg">ຄົ້ນຫາທີ່ພັກ</Button>
+              </Link>
+            ) : undefined
           }
         />
       )}
@@ -91,7 +155,7 @@ function TripRow({ booking }: { booking: BookingRow }) {
         display: 'flex',
         gap: 14,
         padding: 14,
-        background: c.surface,
+        background: '#fff',
         border: `1px solid ${c.border}`,
         borderRadius: radius.lg,
         color: 'inherit',
@@ -126,7 +190,6 @@ function TripRow({ booking }: { booking: BookingRow }) {
           {booking.roomType ? ` · ${booking.roomType}` : ''}
         </div>
 
-        {/* The one thing on this row that is about to change on its own. */}
         {booking.status === 'pending' && (
           <div style={{ font: t.caption, color: c.warnFg, marginTop: 6 }}>
             {remaining ? `ຕ້ອງຊຳລະພາຍໃນ ${remaining}` : 'ໝົດເວລາກັນຫ້ອງແລ້ວ'}

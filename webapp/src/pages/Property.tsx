@@ -54,6 +54,7 @@ export function PropertyPage() {
   const hasRange = !!checkIn && !!checkOut;
   const nights = hasRange ? nightsBetween(checkIn, checkOut) : 0;
 
+  const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   // The specific physical room picked inside the selected room type, if any —
   // only meaningful when that room type has `allowRoomSelection`. Kept
@@ -146,23 +147,62 @@ export function PropertyPage() {
 
   return (
     <div style={{ paddingBottom: 20 }}>
-      {/* gallery */}
+      {galleryIndex !== null && (
+        <GalleryLightbox
+          images={p.images.map((img) => img.url)}
+          name={p.name}
+          index={galleryIndex}
+          onChange={setGalleryIndex}
+          onClose={() => setGalleryIndex(null)}
+        />
+      )}
+
+      {/* gallery strip — click any photo to open the lightbox */}
       <div
         className="phaphak-strip"
-        style={{ display: 'flex', gap: 4, background: c.neutralBg }}
+        style={{ display: 'flex', gap: 4, background: c.neutralBg, position: 'relative' }}
       >
         {(p.images.length ? p.images : [{ url: '', caption: null, isCover: true }]).map(
           (img, i) => (
-            <Photo
+            <div
               key={i}
-              url={img.url || null}
-              alt={p.name}
-              height={300}
-              width={p.images.length > 1 ? 'min(78vw, 560px)' : '100%'}
-              rounded={0}
-              style={{ flex: 'none', scrollSnapAlign: 'start' }}
-            />
+              onClick={() => p.images.length > 0 && setGalleryIndex(i)}
+              style={{
+                flex: 'none',
+                scrollSnapAlign: 'start',
+                cursor: p.images.length > 0 ? 'pointer' : 'default',
+              }}
+            >
+              <Photo
+                url={img.url || null}
+                alt={p.name}
+                height={300}
+                width={p.images.length > 1 ? 'min(78vw, 560px)' : '100%'}
+                rounded={0}
+              />
+            </div>
           ),
+        )}
+
+        {p.images.length > 1 && (
+          <button
+            onClick={() => setGalleryIndex(0)}
+            style={{
+              position: 'absolute',
+              bottom: 12,
+              right: 12,
+              padding: '6px 14px',
+              background: 'rgba(0,0,0,0.55)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: radius.pill,
+              font: f(600, 12),
+              cursor: 'pointer',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            ເບິ່ງທັງໝົດ {p.images.length} ຮູບ
+          </button>
         )}
       </div>
 
@@ -768,5 +808,159 @@ function Rule({ label, value }: { label: string; value: string }) {
       <span style={{ font: t.bodySm, color: c.muted }}>{label}</span>
       <span style={{ font: t.label, color: c.text }}>{value}</span>
     </div>
+  );
+}
+
+function GalleryLightbox({
+  images,
+  name,
+  index,
+  onChange,
+  onClose,
+}: {
+  images: string[];
+  name: string;
+  index: number;
+  onChange: (i: number) => void;
+  onClose: () => void;
+}) {
+  const total = images.length;
+  const prev = () => onChange((index - 1 + total) % total);
+  const next = () => onChange((index + 1) % total);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        background: 'rgba(0,0,0,0.92)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {/* header */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 16px',
+          background: 'rgba(0,0,0,0.4)',
+        }}
+      >
+        <span style={{ font: f(600, 13), color: 'rgba(255,255,255,0.7)' }}>
+          {name} · {index + 1} / {total}
+        </span>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#fff',
+            font: f(400, 22),
+            cursor: 'pointer',
+            lineHeight: 1,
+            padding: '4px 8px',
+          }}
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* main image */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0 8px', width: '100%', maxWidth: 900 }}
+      >
+        <NavBtn onClick={prev} label="‹" disabled={total <= 1} />
+
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+          <img
+            src={images[index]}
+            alt={`${name} ${index + 1}`}
+            style={{
+              maxWidth: '100%',
+              maxHeight: 'calc(100vh - 120px)',
+              objectFit: 'contain',
+              borderRadius: radius.md,
+            }}
+          />
+        </div>
+
+        <NavBtn onClick={next} label="›" disabled={total <= 1} />
+      </div>
+
+      {/* thumbnail strip */}
+      {total > 1 && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            gap: 4,
+            overflowX: 'auto',
+            padding: '8px 16px',
+            background: 'rgba(0,0,0,0.5)',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {images.map((url, i) => (
+            <img
+              key={i}
+              src={url}
+              alt=""
+              onClick={() => onChange(i)}
+              style={{
+                width: 60,
+                height: 44,
+                objectFit: 'cover',
+                borderRadius: radius.sm,
+                border: `2px solid ${i === index ? '#fff' : 'transparent'}`,
+                opacity: i === index ? 1 : 0.55,
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NavBtn({ onClick, label, disabled }: { onClick: () => void; label: string; disabled: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        background: 'rgba(255,255,255,0.12)',
+        border: 'none',
+        color: '#fff',
+        font: f(300, 32),
+        width: 44,
+        height: 44,
+        borderRadius: '50%',
+        cursor: disabled ? 'default' : 'pointer',
+        display: 'grid',
+        placeItems: 'center',
+        flexShrink: 0,
+        opacity: disabled ? 0 : 1,
+      }}
+    >
+      {label}
+    </button>
   );
 }

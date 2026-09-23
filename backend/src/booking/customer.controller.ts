@@ -74,7 +74,7 @@ export class CustomerController {
               property_name: true,
               provinces: { select: { province_name_lo: true } },
               property_images: {
-                select: { image_url: true, thumbnail_url: true },
+                select: { image_url: true },
                 orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }],
                 take: 1,
               },
@@ -96,9 +96,7 @@ export class CustomerController {
         property: b.properties.property_name,
         province: b.properties.provinces?.province_name_lo ?? null,
         photo:
-          b.properties.property_images[0]?.thumbnail_url ??
-          b.properties.property_images[0]?.image_url ??
-          null,
+          b.properties.property_images[0]?.image_url ?? null,
         roomType: b.booking_items[0]?.room_types.type_name ?? null,
         checkIn: b.check_in,
         checkOut: b.check_out,
@@ -257,7 +255,7 @@ export class CustomerController {
             review_count: true,
             provinces: { select: { province_name_lo: true } },
             property_images: {
-              select: { image_url: true, thumbnail_url: true },
+              select: { image_url: true },
               orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }],
               take: 1,
             },
@@ -280,9 +278,7 @@ export class CustomerController {
       rating: rateOf(w.properties.rating_avg),
       reviewCount: w.properties.review_count,
       photo:
-        w.properties.property_images[0]?.thumbnail_url ??
-        w.properties.property_images[0]?.image_url ??
-        null,
+        w.properties.property_images[0]?.image_url ?? null,
       fromPricePerNight: w.properties.room_types[0]
         ? kipOf(w.properties.room_types[0].base_price)
         : null,

@@ -53,23 +53,9 @@ export function Layout() {
         >
           <Link
             to="/"
-            style={{ display: 'flex', alignItems: 'center', minHeight: TAP, gap: space[2] }}
+            style={{ display: 'flex', alignItems: 'center', minHeight: TAP }}
           >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 9,
-                background: c.accent,
-                display: 'grid',
-                placeItems: 'center',
-                font: t.h3,
-                color: '#fff',
-              }}
-            >
-              P
-            </div>
-            <span style={{ font: t.h3, color: c.text }}>PhaPhak</span>
+            <img src="/logo.png" alt="PhaPhak" style={{ height: 36, width: 36, borderRadius: '50%' }} />
           </Link>
 
           <nav style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -86,6 +72,24 @@ export function Layout() {
                 </HeaderLink>
               </>
             )}
+
+            <Link
+              to="/partner-register"
+              style={{
+                marginLeft: space[1],
+                display: 'inline-flex',
+                alignItems: 'center',
+                minHeight: TAP,
+                padding: `0 ${space[3]}px`,
+                borderRadius: radius.md,
+                border: `1px solid ${c.border}`,
+                background: 'transparent',
+                color: c.soft,
+                font: t.label,
+              }}
+            >
+              ສະໝັກ Partner
+            </Link>
 
             {user ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 8 }}>

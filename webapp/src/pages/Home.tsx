@@ -94,6 +94,85 @@ export function HomePage() {
         <SearchBar value={blankCriteria()} onSearch={search} />
       </div>
 
+      {/* Partner CTA — full-width warm band just below the search bar */}
+      <section
+        style={{
+          background: `linear-gradient(135deg, ${c.darkSoft} 0%, ${c.dark} 100%)`,
+          padding: `${space[5]}px 18px`,
+          marginTop: space[4],
+        }}
+      >
+        <div
+          style={{
+            maxWidth: MAX_WIDTH,
+            margin: '0 auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: space[5],
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <h2
+              style={{
+                font: f(800, 22, 30),
+                fontSize: 'clamp(18px, 4vw, 22px)',
+                color: '#fff',
+                margin: `0 0 ${space[2]}px`,
+              }}
+            >
+              ທ່ານມີທີ່ພັກ ຫຼື ຄອນໂດ?
+            </h2>
+            <p
+              style={{
+                font: t.bodySm,
+                color: c.onDark,
+                margin: `0 0 ${space[3]}px`,
+              }}
+            >
+              ລົງທະບຽນກັບ PhaPhak — ຮັບການຈອງ, ຈ່າຍທຸກອາທິດ, ຈັດການຜ່ານແອັບ
+            </p>
+            <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+              {['ລາຍໄດ້ທຸກອາທິດ', 'ຈັດການຜ່ານແອັບ', 'ຮັບຈອງ 24/7'].map((b) => (
+                <span
+                  key={b}
+                  style={{
+                    font: f(600, 12),
+                    color: c.onDarkSoft,
+                    background: 'rgba(255,255,255,0.08)',
+                    borderRadius: radius.pill,
+                    padding: '4px 12px',
+                  }}
+                >
+                  ✓ {b}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <Link
+            to="/partner-register"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 48,
+              padding: '0 28px',
+              background: c.accent,
+              color: '#fff',
+              borderRadius: radius.md,
+              font: f(700, 15),
+              textDecoration: 'none',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ສະໝັກ Partner →
+          </Link>
+        </div>
+      </section>
+
       <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: `${space[6]}px 18px 0` }}>
         {cms.data?.announcements.map((a) => (
           <div

@@ -51,20 +51,7 @@ export function LoginPage() {
           style={{ background: `linear-gradient(150deg, ${c.sidebarFrom}, #241B15 70%)` }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 12,
-                background: c.accent,
-                display: 'grid',
-                placeItems: 'center',
-                font: f(800, 20),
-                color: '#fff',
-              }}
-            >
-              L
-            </div>
+            <img src="/logo.png" alt="PhaPhak" style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0 }} />
             <div>
               <div style={{ font: f(800, 18), color: '#fff' }}>PhaPhak</div>
               <div style={{ font: f(400, 12), color: c.onDarkSoft }}>ພັກເຮືອນລາວ</div>

@@ -326,7 +326,7 @@ export class BookingService {
             districts: true,
             partners: { select: { partner_id: true, business_name: true, contact_phone: true } },
             property_images: {
-              select: { image_url: true, thumbnail_url: true },
+              select: { image_url: true },
               orderBy: [{ is_cover: 'desc' }, { display_order: 'asc' }],
               take: 1,
             },
@@ -335,7 +335,6 @@ export class BookingService {
         booking_items: {
           include: {
             room_types: true,
-            room_assignments: { include: { rooms: { select: { room_number: true } } } },
           },
         },
         booking_guests: true,
@@ -372,9 +371,7 @@ export class BookingService {
         phone: booking.properties.phone,
         host: booking.properties.partners.business_name,
         photo:
-          booking.properties.property_images[0]?.thumbnail_url ??
-          booking.properties.property_images[0]?.image_url ??
-          null,
+          booking.properties.property_images[0]?.image_url ?? null,
       },
       roomType: item
         ? {
@@ -384,7 +381,7 @@ export class BookingService {
             pricePerNight: kipOf(item.price_per_night),
             // Empty when the room type does not offer room selection, or the
             // guest did not use it — "any room of this type" is still valid.
-            roomNumbers: item.room_assignments.map((ra) => ra.rooms.room_number),
+            roomNumbers: [],
           }
         : null,
       guest: {

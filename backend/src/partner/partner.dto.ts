@@ -13,7 +13,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { bed_type, inventory_status, price_type, property_type, room_status } from '@prisma/client';
+import { bed_type, inventory_status, price_type, property_type } from '@prisma/client';
 
 export class UpdatePropertyDto {
   @IsOptional()
@@ -165,8 +165,8 @@ export class UpdateRoomDto {
   floor?: string;
 
   @IsOptional()
-  @IsEnum(room_status)
-  status?: room_status;
+  @IsString()
+  status?: string;
 }
 
 /** `to` is exclusive, matching a stay's check-out. */

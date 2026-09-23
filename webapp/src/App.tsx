@@ -22,6 +22,7 @@ import { SignInPage } from './pages/SignIn';
 import { SignUpPage } from './pages/SignUp';
 import { ForgotPasswordPage } from './pages/ForgotPassword';
 import { HelpPage, StaticPage } from './pages/Content';
+import { PartnerRegisterPage } from './pages/PartnerRegister';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -55,6 +56,7 @@ export default function App() {
               <Route path="forgot" element={<ForgotPasswordPage />} />
               <Route path="help" element={<HelpPage />} />
               <Route path="p/:slug" element={<StaticPage />} />
+              <Route path="partner-register" element={<PartnerRegisterPage />} />
 
               {/* Everything that touches a real booking. */}
               <Route

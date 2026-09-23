@@ -1,0 +1,17 @@
+{
+  "name": "phaphak",
+  "short_name": "phaphak",
+  "description": "ຈອງທີ່ພັກທົ່ວລາວ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#FD4D1C",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

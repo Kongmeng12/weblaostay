@@ -293,10 +293,11 @@ export class InventoryService {
     checkIn: Date,
     checkOut: Date,
   ): Promise<void> {
-    const rooms = await tx.rooms.findMany({
-      where: { room_id: { in: roomIds }, room_type_id: roomTypeId },
-      select: { room_id: true, room_number: true, status: true },
-    });
+    const rooms = await tx.$queryRaw<{ room_id: bigint; room_number: string; status: string }[]>`
+      SELECT room_id, room_number, status
+      FROM rooms
+      WHERE room_id = ANY(${roomIds}::bigint[]) AND room_type_id = ${roomTypeId}
+    `;
 
     if (rooms.length !== roomIds.length) {
       throw new BadRequestException(

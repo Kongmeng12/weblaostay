@@ -367,8 +367,12 @@ export class AdminController {
             property_id: true,
             property_name: true,
             property_type: true,
+            description: true,
+            phone: true,
             address_detail: true,
             provinces: { select: { province_name_lo: true } },
+            districts: { select: { district_name_lo: true } },
+            villages: { select: { village_name_lo: true } },
           },
         },
       },
@@ -377,6 +381,8 @@ export class AdminController {
     return rows.map((p) => ({
       id: p.partner_id.toString(),
       businessName: p.business_name,
+      businessType: p.business_type,
+      taxId: p.tax_id,
       ownerName: p.users.user_profiles?.full_name ?? null,
       email: p.users.email,
       phone: p.contact_phone,
@@ -391,7 +397,11 @@ export class AdminController {
         id: pr.property_id.toString(),
         name: pr.property_name,
         type: pr.property_type,
+        description: pr.description,
+        phone: pr.phone,
         province: pr.provinces?.province_name_lo ?? null,
+        district: pr.districts?.district_name_lo ?? null,
+        village: pr.villages?.village_name_lo ?? null,
         address: pr.address_detail,
       })),
     }));
@@ -1331,8 +1341,9 @@ export class AdminController {
   }
 
   /**
-   * Removes a member of staff. Soft delete plus session revocation: the audit
-   * log still points at a row, but the account cannot be signed into again.
+   * Permanently removes a member of staff. FK references in audit/history tables
+   * are nulled so content is preserved; owned rows (sessions, profile, etc.)
+   * are deleted, then the user row itself is hard-deleted.
    */
   @Delete('admins/:id')
   @AdminRoles(admin_role.super_admin)
@@ -1362,16 +1373,40 @@ export class AdminController {
       }
     }
 
-    await this.prisma.$transaction([
-      this.prisma.users.update({
-        where: { user_id: targetId },
-        data: { deleted_at: new Date(), status: user_status.deleted },
-      }),
-      this.prisma.user_sessions.updateMany({
-        where: { user_id: targetId, revoked_at: null },
-        data: { revoked_at: new Date() },
-      }),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      // Nullify FK references in tables where the column is nullable so the
+      // content (audit log, booking history, etc.) is preserved without the
+      // account that originally created it.
+      await tx.audit_logs.updateMany({ where: { user_id: targetId }, data: { user_id: null } });
+      await tx.otp_verifications.updateMany({ where: { user_id: targetId }, data: { user_id: null } });
+      await tx.booking_cancellations.updateMany({ where: { cancelled_by: targetId }, data: { cancelled_by: null } });
+      await tx.booking_status_logs.updateMany({ where: { changed_by: targetId }, data: { changed_by: null } });
+      await tx.partner_documents.updateMany({ where: { reviewed_by: targetId }, data: { reviewed_by: null } });
+      await tx.payouts.updateMany({ where: { confirmed_by: targetId }, data: { confirmed_by: null } });
+      await tx.refunds.updateMany({ where: { processed_by: targetId }, data: { processed_by: null } });
+      await tx.review_reports.updateMany({ where: { handled_by: targetId }, data: { handled_by: null } });
+      await tx.announcements.updateMany({ where: { created_by: targetId }, data: { created_by: null } });
+      await tx.app_pages.updateMany({ where: { updated_by: targetId }, data: { updated_by: null } });
+      await tx.app_settings.updateMany({ where: { updated_by: targetId }, data: { updated_by: null } });
+      await tx.banners.updateMany({ where: { created_by: targetId }, data: { created_by: null } });
+      await tx.coupons.updateMany({ where: { created_by: targetId }, data: { created_by: null } });
+      await tx.faqs.updateMany({ where: { created_by: targetId }, data: { created_by: null } });
+      await tx.promotions.updateMany({ where: { created_by: targetId }, data: { created_by: null } });
+      await tx.system_settings.updateMany({ where: { updated_by: targetId }, data: { updated_by: null } });
+
+      // Delete rows that have a non-nullable FK back to users.
+      await tx.user_sessions.deleteMany({ where: { user_id: targetId } });
+      await tx.user_profiles.deleteMany({ where: { user_id: targetId } });
+      await tx.password_reset_tokens.deleteMany({ where: { user_id: targetId } });
+      await tx.user_device_tokens.deleteMany({ where: { user_id: targetId } });
+      await tx.user_agreements.deleteMany({ where: { user_id: targetId } });
+      await tx.notifications.deleteMany({ where: { user_id: targetId } });
+      await tx.review_replies.deleteMany({ where: { user_id: targetId } });
+      await tx.messages.deleteMany({ where: { sender_id: targetId } });
+
+      // Hard delete. Cascade handles wishlist_items and conversation_reads.
+      await tx.users.delete({ where: { user_id: targetId } });
+    });
 
     return { id: id, deleted: true };
   }
