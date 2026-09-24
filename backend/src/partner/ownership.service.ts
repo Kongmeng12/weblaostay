@@ -66,8 +66,18 @@ export class OwnershipService {
   }
 
   /** Returns the room's room_type_id, so callers need not re-read it. */
-  async assertOwnsRoom(_partnerId: bigint, roomId: bigint): Promise<bigint> {
-    throw new NotFoundException(`ບໍ່ພົບຫ້ອງ #${roomId} · Room not found`);
+  async assertOwnsRoom(partnerId: bigint, roomId: bigint): Promise<bigint> {
+    const room = await this.prisma.rooms.findFirst({
+      where: {
+        room_id: roomId,
+        room_types: { deleted_at: null, properties: { partner_id: partnerId, deleted_at: null } },
+      },
+      select: { room_type_id: true },
+    });
+    if (!room) {
+      throw new NotFoundException(`ບໍ່ພົບຫ້ອງ #${roomId} · Room not found`);
+    }
+    return room.room_type_id;
   }
 
   async assertOwnsBooking(partnerId: bigint, bookingId: bigint): Promise<void> {

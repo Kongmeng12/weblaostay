@@ -125,7 +125,7 @@ export class PricingService {
       roomTypeId: roomType.room_type_id,
       propertyId: roomType.property_id,
       partnerId: partner.partner_id,
-      allowRoomSelection: false,
+      allowRoomSelection: roomType.allow_room_selection,
       nights,
       quantity,
       perNight,

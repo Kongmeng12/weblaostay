@@ -343,6 +343,7 @@ export class BookingService {
         booking_items: {
           include: {
             room_types: true,
+            room_assignments: { include: { rooms: { select: { room_number: true } } } },
           },
         },
         booking_guests: true,
@@ -389,7 +390,7 @@ export class BookingService {
             pricePerNight: kipOf(item.price_per_night),
             // Empty when the room type does not offer room selection, or the
             // guest did not use it — "any room of this type" is still valid.
-            roomNumbers: [],
+            roomNumbers: item.room_assignments.map((ra) => ra.rooms.room_number),
           }
         : null,
       guest: {
