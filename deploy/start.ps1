@@ -73,7 +73,26 @@ Write-Host "API is up." -ForegroundColor Green
 # on purpose — that's the whole point of a token) and instead asks Cloudflare
 # for a fresh run token each start.
 $CfDir       = Join-Path $env:USERPROFILE '.cloudflared'
-$tunnelInfo  = & $cloudflared tunnel list --output json | ConvertFrom-Json | Where-Object { $_.name -eq 'laostay' }
+
+# cloudflared prints "your version is outdated" on stderr whenever a newer
+# release exists. Under $ErrorActionPreference = 'Stop', Windows PowerShell
+# turns any stderr line from a native command into a terminating error — which
+# aborted this script *after* the API was up but *before* the tunnel started,
+# leaving phaphak.com down (502/530) until someone started cloudflared by hand.
+# So: take stdout only, and judge success by the exit code instead.
+function Invoke-Cloudflared {
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $out = & $cloudflared @args 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "cloudflared $($args -join ' ') failed (exit $LASTEXITCODE)" }
+    return ($out -join "`n")
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+}
+
+$tunnelInfo  = Invoke-Cloudflared tunnel list --output json | ConvertFrom-Json | Where-Object { $_.name -eq 'laostay' }
 if (-not $tunnelInfo) {
   throw "Tunnel 'laostay' not found for the logged-in Cloudflare account. Run 'cloudflared tunnel login' then deploy\tunnel-setup.ps1."
 }
@@ -85,7 +104,7 @@ if (Test-Path $credFile) {
     -RedirectStandardOutput (Join-Path $logs 'tunnel.log') `
     -RedirectStandardError  (Join-Path $logs 'tunnel.err.log')
 } else {
-  $token = & $cloudflared tunnel token laostay
+  $token = (Invoke-Cloudflared tunnel token laostay).Trim()
   if (-not $token) { throw "Could not obtain a run token for tunnel 'laostay'." }
   Start-Process -FilePath $cloudflared -ArgumentList 'tunnel', 'run', '--token', $token `
     -WorkingDirectory $PSScriptRoot -WindowStyle Hidden `
