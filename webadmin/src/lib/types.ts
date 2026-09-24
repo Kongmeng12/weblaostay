@@ -73,6 +73,12 @@ export interface BookingDetail {
   commission: number;
   payout: number;
   status: string;
+  /**
+   * The front-desk moves the API accepts for this booking *today* (check-in,
+   * check-out, undo check-in, no-show) — it applies the date windows itself,
+   * so the panel offers exactly these and nothing else.
+   */
+  nextStatus: string[];
   source: string;
   holdExpiresAt: string | null;
   specialRequest: string | null;
@@ -86,7 +92,14 @@ export interface BookingDetail {
     phone: string | null;
     host: string;
   };
-  roomType: { id: string; name: string; quantity: number; pricePerNight: number } | null;
+  roomType: {
+    id: string;
+    name: string;
+    quantity: number;
+    pricePerNight: number;
+    /** Empty when no specific room was assigned; otherwise the assigned room number(s). */
+    roomNumbers: string[];
+  } | null;
   guest: { name: string | null; email: string; phone: string | null };
   payments: { id: string; method: string; amount: number; status: string; paidAt: string | null }[];
 }
@@ -156,6 +169,21 @@ export interface ProvinceCount {
   id: number | null;
   province: string;
   count: number;
+}
+
+/**
+ * `GET /locations/provinces` — every province, for the Home "Explore
+ * regions" photo manager. `imageUrl` is the admin-set photo when there is
+ * one, else the auto-derived cover of the province's best-rated property,
+ * else null.
+ */
+export interface RegionRow {
+  id: string;
+  code: string;
+  name: string;
+  nameEn: string;
+  propertyCount: number;
+  imageUrl: string | null;
 }
 
 /**

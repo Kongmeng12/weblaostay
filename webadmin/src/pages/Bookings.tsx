@@ -70,6 +70,17 @@ export function Bookings() {
     },
   });
 
+  // Check-in / check-out on a property's behalf — the same rules and windows
+  // as the partner app, enforced by the API (`booking-lifecycle.ts`).
+  const moveStatus = useMutation({
+    mutationFn: (vars: { id: string; status: 'staying' | 'completed' | 'confirmed' }) =>
+      api.patch(`/admin/bookings/${vars.id}/status`, { status: vars.status }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['bookings'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+
   if (list.isError) return <ErrorState error={list.error} onRetry={() => void list.refetch()} />;
 
   const cnt = counts.data ?? {};
@@ -200,6 +211,33 @@ export function Bookings() {
           onClose={() => setDetailId(null)}
           footer={
             <>
+              {/* Only the moves the API says are open today. `pending` has none
+                  on purpose: payment confirms it, an expired hold cancels it. */}
+              {detail.data?.status === 'confirmed' && detail.data.nextStatus.includes('staying') && (
+                <Button
+                  disabled={moveStatus.isPending}
+                  onClick={() => moveStatus.mutate({ id: detail.data!.id, status: 'staying' })}
+                >
+                  ເຊັກອິນ
+                </Button>
+              )}
+              {detail.data?.status === 'staying' && detail.data.nextStatus.includes('completed') && (
+                <Button
+                  disabled={moveStatus.isPending}
+                  onClick={() => moveStatus.mutate({ id: detail.data!.id, status: 'completed' })}
+                >
+                  ເຊັກເອົາ
+                </Button>
+              )}
+              {detail.data?.status === 'staying' && detail.data.nextStatus.includes('confirmed') && (
+                <Button
+                  variant="ghost"
+                  disabled={moveStatus.isPending}
+                  onClick={() => moveStatus.mutate({ id: detail.data!.id, status: 'confirmed' })}
+                >
+                  ຍົກເລີກເຊັກອິນ
+                </Button>
+              )}
               {/* The API refuses to cancel a stay that is already over or
                   already cancelled, so the button is not offered for those. */}
               {can('super_admin', 'finance') &&
@@ -227,7 +265,14 @@ export function Bookings() {
           {detail.isLoading ? (
             <div style={{ font: f(400, 13), color: c.muted }}>ກຳລັງໂຫຼດ...</div>
           ) : detail.data ? (
-            <BookingDetail data={detail.data} />
+            <>
+              {moveStatus.isError && (
+                <div style={{ font: f(500, 13), color: c.dangerFg, marginBottom: 12 }}>
+                  {moveStatus.error instanceof Error ? moveStatus.error.message : 'ປ່ຽນສະຖານະບໍ່ໄດ້'}
+                </div>
+              )}
+              <BookingDetail data={detail.data} />
+            </>
           ) : (
             <div style={{ font: f(400, 13), color: c.dangerFg }}>ໂຫຼດບໍ່ໄດ້</div>
           )}
@@ -271,6 +316,9 @@ function BookingDetail({ data: d }: { data: BookingDetailData }) {
             label="ຫ້ອງ"
             value={`${d.roomType.name} × ${d.roomType.quantity} · ${kip(d.roomType.pricePerNight)}/ຄືນ`}
           />
+        )}
+        {d.roomType && d.roomType.roomNumbers.length > 0 && (
+          <Row label="ເລກຫ້ອງ" value={d.roomType.roomNumbers.join(', ')} />
         )}
         <Row
           label="Partner"

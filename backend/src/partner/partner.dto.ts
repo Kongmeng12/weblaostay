@@ -178,6 +178,12 @@ export class DateRangeDto {
   to!: string;
 }
 
+/** One calendar day — the Today Board. */
+export class BoardQueryDto {
+  @IsISO8601()
+  date!: string;
+}
+
 export class SetInventoryDto extends DateRangeDto {
   @IsOptional()
   @Type(() => Number)

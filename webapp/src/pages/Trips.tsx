@@ -10,7 +10,9 @@ import type { BookingRow, Paged } from '../lib/types';
 type Tab = 'upcoming' | 'history';
 
 const UPCOMING_STATUSES = new Set(['pending', 'confirmed', 'staying']);
-const HISTORY_STATUSES = new Set(['completed', 'cancelled']);
+// A booking the guest never turned up for is over too — leaving `no_show` out
+// made it vanish from both tabs whenever the sub-filter was "all".
+const HISTORY_STATUSES = new Set(['completed', 'cancelled', 'no_show']);
 
 const UPCOMING_FILTERS = [
   { value: '', label: 'ທັງໝົດ' },
@@ -23,6 +25,7 @@ const HISTORY_FILTERS = [
   { value: '', label: 'ທັງໝົດ' },
   { value: 'completed', label: 'ພັກຈົບ' },
   { value: 'cancelled', label: 'ຍົກເລີກ' },
+  { value: 'no_show', label: 'ບໍ່ໄດ້ໄປ' },
 ] as const;
 
 export function TripsPage() {

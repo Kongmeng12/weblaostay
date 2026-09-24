@@ -918,6 +918,15 @@ model provinces {
   province_code    String       @unique @db.VarChar(20)
   province_name_lo String       @db.VarChar(120)
   province_name_en String       @db.VarChar(120)
+  /// Admin-curated photo for the Home "Explore regions" rail. Null falls
+  /// back to the cover photo of the province's best-rated property — see
+  /// CatalogService.provinces().
+  image_url        String?      @db.VarChar(500)
+  /// Position in the Home "Explore regions" rail — lower shows first.
+  /// Every province starts at 0, so until an admin sets an order the rail
+  /// falls through to alphabetical (see CatalogService.provinces()'s
+  /// orderBy), rather than every untouched province bunching at position 0.
+  display_order    Int          @default(0)
   created_at       DateTime     @default(now()) @db.Timestamptz(6)
   updated_at       DateTime     @default(now()) @db.Timestamptz(6)
   districts        districts[]
@@ -1530,6 +1539,9 @@ enum room_status {
   available
   maintenance
   inactive
+  /// Set automatically by HousekeepingSweeperService once a stay's checkout
+  /// date has passed; cleared by hand via `PATCH /partner/rooms/:id/clean`.
+  needs_cleaning
 
   @@schema("public")
 }

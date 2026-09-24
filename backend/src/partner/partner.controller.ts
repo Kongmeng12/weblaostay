@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } fr
 import { user_role } from '@prisma/client';
 import { PartnerService } from './partner.service';
 import { OwnershipService } from './ownership.service';
+import { CalendarService } from './calendar.service';
 import { BookingService } from '../booking/booking.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -9,6 +10,7 @@ import { Audit, CurrentUser, Roles, type AuthedUser } from '../common/decorators
 import { rateOf } from '../common/money';
 import {
   BankAccountDto,
+  BoardQueryDto,
   CreateRoomDto,
   DateRangeDto,
   RoomTypeDto,
@@ -20,6 +22,7 @@ import {
   UpdateRoomTypeDto,
 } from './partner.dto';
 import {
+  AssignRoomDto,
   CancelBookingDto,
   ListBookingsDto,
   SetBookingStatusDto,
@@ -31,6 +34,8 @@ import {
 export class PartnerController {
   constructor(
     private readonly partner: PartnerService,
+    // Not `calendar` — that is already the pricing-calendar route handler here.
+    private readonly occupancy: CalendarService,
     private readonly bookings: BookingService,
     private readonly own: OwnershipService,
     private readonly prisma: PrismaService,
@@ -184,6 +189,24 @@ export class PartnerController {
     return this.partner.removeRoom(this.own.partnerId(user), BigInt(roomId));
   }
 
+  // ── calendar: month summary, day board & housekeeping ────────────────────────────────────
+
+  @Get('properties/:id/calendar-month')
+  calendarMonth(@CurrentUser() user: AuthedUser, @Param('id') id: string, @Query() query: DateRangeDto) {
+    return this.occupancy.monthSummary(this.own.partnerId(user), BigInt(id), query.from, query.to);
+  }
+
+  @Get('properties/:id/board')
+  board(@CurrentUser() user: AuthedUser, @Param('id') id: string, @Query() query: BoardQueryDto) {
+    return this.occupancy.dayBoard(this.own.partnerId(user), BigInt(id), query.date);
+  }
+
+  @Patch('rooms/:roomId/clean')
+  @Audit('partner_room_mark_clean', 'partner', 'rooms', 'roomId')
+  markRoomClean(@CurrentUser() user: AuthedUser, @Param('roomId') roomId: string) {
+    return this.partner.markRoomClean(this.own.partnerId(user), BigInt(roomId));
+  }
+
   // ── inventory & prices ────────────────────────────────────────────────────
 
   @Get('room-types/:roomTypeId/calendar')
@@ -244,6 +267,33 @@ export class PartnerController {
     const partnerId = this.own.partnerId(user);
     await this.own.assertOwnsBooking(partnerId, BigInt(id));
     return this.bookings.findOne(BigInt(id));
+  }
+
+  /** The room-picker list for the "assign a room" sheet — free rooms for this booking's own dates. */
+  @Get('bookings/:id/available-rooms')
+  async availableRooms(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
+    const partnerId = this.own.partnerId(user);
+    await this.own.assertOwnsBooking(partnerId, BigInt(id));
+    return this.bookings.availableRoomsFor(BigInt(id));
+  }
+
+  /**
+   * Front-desk room assignment: the guest let the property choose, or the
+   * property wants to move them — either way, this is the same
+   * `room_assignments` a guest's own at-booking-time pick writes to, so the
+   * same exclusion constraint is what actually stops two bookings landing on
+   * the same physical room.
+   */
+  @Patch('bookings/:id/room')
+  @Audit('partner_booking_room_assign', 'partner', 'bookings')
+  async assignRoom(
+    @CurrentUser() user: AuthedUser,
+    @Param('id') id: string,
+    @Body() dto: AssignRoomDto,
+  ) {
+    const partnerId = this.own.partnerId(user);
+    await this.own.assertOwnsBooking(partnerId, BigInt(id));
+    return this.bookings.assignRoom(BigInt(id), (dto.roomIds ?? []).map((r) => BigInt(r)));
   }
 
   @Patch('bookings/:id/status')

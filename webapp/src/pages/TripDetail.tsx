@@ -112,6 +112,23 @@ export function TripDetailPage() {
         </div>
       )}
 
+      {(b.status === 'staying' || b.status === 'no_show') && (
+        <div
+          style={{
+            background: b.status === 'staying' ? c.accentSoft : c.neutralBg,
+            borderRadius: radius.md,
+            padding: '14px 16px',
+            marginBottom: 18,
+            font: f(600, 13, 20),
+            color: b.status === 'staying' ? c.accentDark : c.neutralFg,
+          }}
+        >
+          {b.status === 'staying'
+            ? 'ເຊັກອິນແລ້ວ — ຂໍໃຫ້ພັກສະບາຍ. ຖ້າຕ້ອງການການຊ່ວຍເຫຼືອ ຕິດຕໍ່ທີ່ພັກໄດ້ທຸກເວລາ.'
+            : 'ທີ່ພັກບັນທຶກວ່າທ່ານບໍ່ໄດ້ມາເຂົ້າພັກຕາມການຈອງນີ້.'}
+        </div>
+      )}
+
       <div className="phaphak-split">
         <div style={{ display: 'grid', gap: 16 }}>
           <Card>

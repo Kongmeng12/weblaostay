@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { booking_status } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { todayInLaos } from '../common/dates';
 
 /**
  * Completes bookings once their checkout date has passed.
@@ -16,11 +17,12 @@ import { NotificationsService } from '../notifications/notifications.service';
  * requires `status === completed`).
  *
  * Goes straight from `confirmed` (or `staying`, for the properties that do
- * check guests in) to `completed` — never routes through `staying` itself.
- * `lib/models/booking.dart`'s status parser on the Flutter side doesn't
- * recognise `staying` and would silently show the booking as "Unpaid" if
- * this ever wrote it. `no_show` is left untouched: that's a human judgment
- * call, not something a date-based sweep should infer.
+ * check guests in) to `completed`. `no_show` is left untouched: that's a
+ * human judgment call, not something a date-based sweep should infer.
+ *
+ * "Past checkout" is judged against the Lao calendar day (UTC+7), so a stay
+ * that ends on the 12th is closed out when the 13th begins in Vientiane —
+ * not seven hours into the 13th, which is when the UTC date would flip.
  */
 @Injectable()
 export class CheckoutSweeperService {
@@ -59,7 +61,7 @@ export class CheckoutSweeperService {
    * @returns how many bookings were completed.
    */
   async completeExpired(now = new Date()): Promise<number> {
-    const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const startOfToday = todayInLaos(now);
 
     const dueOut = await this.prisma.bookings.findMany({
       where: {

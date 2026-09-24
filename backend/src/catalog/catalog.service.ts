@@ -459,17 +459,73 @@ export class CatalogService {
   // ── master data ───────────────────────────────────────────────────────────
 
   async provinces() {
-    const rows = await this.prisma.provinces.findMany({
-      orderBy: { province_name_en: 'asc' },
-      include: { _count: { select: { properties: true } } },
-    });
+    const [rows, covers] = await Promise.all([
+      this.prisma.provinces.findMany({
+        // `display_order` starts at 0 for every province, so this only
+        // reorders the rail once an admin actually sets one — until then
+        // every row ties and the alphabetical tiebreaker is all that's
+        // visible, unchanged from before `display_order` existed.
+        orderBy: [{ display_order: 'asc' }, { province_name_en: 'asc' }],
+        include: { _count: { select: { properties: true } } },
+      }),
+      // Fallback for provinces with no admin-curated `image_url` (see
+      // AdminLocationsController.setProvincePhoto) — the cover photo of
+      // whichever active property in that province has the best rating,
+      // one row per province via DISTINCT ON. Real, already-hosted photos
+      // with no curation step to fall behind, for every province an admin
+      // hasn't gotten to yet.
+      this.prisma.$queryRaw<{ province_id: bigint; image_url: string }[]>`
+        SELECT DISTINCT ON (p.province_id) p.province_id,
+               COALESCE(pi.thumbnail_url, pi.image_url) AS image_url
+        FROM properties p
+        JOIN property_images pi ON pi.property_id = p.property_id AND pi.is_cover = true
+        WHERE p.status = 'active' AND p.deleted_at IS NULL AND p.province_id IS NOT NULL
+        ORDER BY p.province_id, p.rating_avg DESC, p.review_count DESC
+      `,
+    ]);
+
+    const coverByProvince = new Map(covers.map((c) => [c.province_id.toString(), c.image_url]));
+
     return rows.map((p) => ({
       id: p.province_id.toString(),
       code: p.province_code,
       name: p.province_name_lo,
       nameEn: p.province_name_en,
       propertyCount: p._count.properties,
+      imageUrl: p.image_url ?? coverByProvince.get(p.province_id.toString()) ?? null,
     }));
+  }
+
+  /**
+   * Applies a full front-to-back order for the Home "Explore regions" rail
+   * in one go — the same "send the whole list, first item wins position 0"
+   * convention `UploadsService.reorderPhotos` uses for property photos.
+   *
+   * `provinceIds` must be exactly every province's id, one each — verified
+   * against the DB rather than trusted, so a dropped id can't silently
+   * leave a province stranded at a stale position instead of failing loudly.
+   */
+  async setProvinceOrder(provinceIds: bigint[]) {
+    if (new Set(provinceIds).size !== provinceIds.length) {
+      throw new BadRequestException('ມີແຂວງຊ້ຳໃນລາຍການ · Duplicate province in the list');
+    }
+
+    const existing = await this.prisma.provinces.findMany({ select: { province_id: true } });
+    const existingIds = new Set(existing.map((row) => row.province_id));
+    const matches =
+      provinceIds.length === existing.length && provinceIds.every((id) => existingIds.has(id));
+    if (!matches) {
+      throw new BadRequestException(
+        'ລາຍການແຂວງບໍ່ຄົບຖ້ວນ · The province list does not match every province',
+      );
+    }
+
+    await this.prisma.$transaction(
+      provinceIds.map((id, index) =>
+        this.prisma.provinces.update({ where: { province_id: id }, data: { display_order: index } }),
+      ),
+    );
+    return this.provinces();
   }
 
   async districts(provinceId?: number) {

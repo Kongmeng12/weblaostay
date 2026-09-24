@@ -1,9 +1,11 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import { user_role } from '@prisma/client';
 import { CatalogService } from './catalog.service';
-import { Public } from '../common/decorators';
+import { Audit, Public, Roles } from '../common/decorators';
 import {
   CalendarQueryDto,
   DistrictQueryDto,
+  ReorderProvincesDto,
   RoomAvailabilityQueryDto,
   SearchDto,
   StayRangeDto,
@@ -57,5 +59,18 @@ export class CatalogController {
   @Get('amenities')
   amenities() {
     return this.catalog.amenities();
+  }
+}
+
+/** Reordering the Home "Explore regions" rail — see webadmin's "ຮູບແຂວງ" page. */
+@Controller('admin/locations/provinces')
+@Roles(user_role.ADMIN)
+export class AdminLocationsController {
+  constructor(private readonly catalog: CatalogService) {}
+
+  @Patch('order')
+  @Audit('admin_province_reorder', 'admin', 'provinces')
+  reorder(@Body() dto: ReorderProvincesDto) {
+    return this.catalog.setProvinceOrder(dto.provinceIds.map(BigInt));
   }
 }

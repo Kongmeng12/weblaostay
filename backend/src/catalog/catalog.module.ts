@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { CatalogController } from './catalog.controller';
+import { AdminLocationsController, CatalogController } from './catalog.controller';
 import { CatalogService } from './catalog.service';
 import { PlaceResolverService } from './place-resolver.service';
 import { BookingModule } from '../booking/booking.module';
@@ -7,7 +7,7 @@ import { BookingModule } from '../booking/booking.module';
 /** Public browsing: search, property detail, availability calendar, master data. */
 @Module({
   imports: [BookingModule],
-  controllers: [CatalogController],
+  controllers: [CatalogController, AdminLocationsController],
   providers: [CatalogService, PlaceResolverService],
   exports: [CatalogService],
 })

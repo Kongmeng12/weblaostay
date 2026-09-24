@@ -52,11 +52,11 @@ import { PasswordService } from '../auth/password.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminRoles, Audit, CurrentUser, Roles, type AuthedUser } from '../common/decorators';
 import { recordChange } from '../common/interceptors/audit-log.interceptor';
-import { MONEY_ROLES, REVENUE_STATUSES } from '../common/enums';
+import { ALL_ADMIN_ROLES, MONEY_ROLES, REVENUE_STATUSES } from '../common/enums';
 import { kipOf, rateOf } from '../common/money';
 import { isoDayUtc } from '../common/dates';
 import { PaginationDto, paged } from '../common/dto/pagination.dto';
-import { CancelBookingDto } from '../booking/booking.dto';
+import { CancelBookingDto, SetBookingStatusDto } from '../booking/booking.dto';
 
 class ListPartnersDto extends PaginationDto {
   @IsOptional()
@@ -879,6 +879,22 @@ export class AdminController {
   @Get('bookings/:id')
   bookingDetail(@Param('id') id: string) {
     return this.bookings.findOne(BigInt(id));
+  }
+
+  /**
+   * Check-in, check-out and their corrections, on a property's behalf — for
+   * support calls where the front desk forgot or mis-tapped. Same rules as the
+   * partner app (`booking-lifecycle.ts`), including the date windows.
+   */
+  @Patch('bookings/:id/status')
+  @AdminRoles(...ALL_ADMIN_ROLES)
+  @Audit('booking_status', 'admin', 'bookings')
+  setBookingStatus(
+    @Param('id') id: string,
+    @Body() dto: SetBookingStatusDto,
+    @CurrentUser() user: AuthedUser,
+  ) {
+    return this.bookings.setStatus(BigInt(id), dto.status, user.userId);
   }
 
   /** Cancelling moves money, so finance and above only. */

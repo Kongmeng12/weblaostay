@@ -146,11 +146,40 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   return (await res.json()) as T;
 }
 
+/**
+ * Multipart upload — separate from `request()` because a JSON body and a
+ * file body cannot share one `Content-Type` header. `fetch` sets the
+ * multipart boundary itself as long as this never sets `Content-Type`
+ * explicitly, so the header is left out entirely rather than guessed at.
+ */
+async function upload<T>(path: string, file: File): Promise<T> {
+  const send = async (): Promise<Response> => {
+    const form = new FormData();
+    form.append('file', file);
+    const access = tokens.access();
+    return fetch(BASE + path, {
+      method: 'POST',
+      headers: access ? { Authorization: `Bearer ${access}` } : {},
+      body: form,
+    });
+  };
+
+  let res = await send();
+  if (res.status === 401 && tokens.refresh()) {
+    const renewed = await refreshOnce();
+    res = renewed ? await send() : res;
+  }
+  if (res.status === 401) onAuthLost();
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as T;
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  upload: <T>(path: string, file: File) => upload<T>(path, file),
 };
 
 // ── auth calls ───────────────────────────────────────────────────────────────

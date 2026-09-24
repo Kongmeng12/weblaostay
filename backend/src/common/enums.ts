@@ -76,14 +76,21 @@ export const OCCUPYING_STATUSES: booking_status[] = [
 ];
 
 /**
- * The one-way ladder a booking climbs. Anything not listed here is refused, so
- * a client cannot walk a completed stay back to `confirmed`.
+ * The moves a person can make on a booking by hand. Anything not listed here
+ * is refused, so a client cannot walk a completed stay back to `confirmed`.
+ * `booking/booking-lifecycle.ts` narrows this further by date and explains why.
  *
- * Cancellation is absent on purpose: it moves money and releases inventory, so
- * it goes through its own endpoint rather than a status change.
+ * Deliberately absent:
+ *  - `pending → confirmed`: only a settled payment does that, because it is
+ *    also what turns held nights into sold ones.
+ *  - `→ cancelled`: it moves money and releases inventory, so it goes through
+ *    its own endpoint rather than a status change.
+ *  - `completed → staying`: a closed-out stay has already prompted a review
+ *    and may already sit in a payout.
+ * `staying → confirmed` is the "undo check-in" for a mis-tap at the desk.
  */
 export const BOOKING_TRANSITIONS: Partial<Record<booking_status, booking_status[]>> = {
-  [booking_status.pending]: [booking_status.confirmed],
+  [booking_status.pending]: [],
   [booking_status.confirmed]: [booking_status.staying, booking_status.no_show],
-  [booking_status.staying]: [booking_status.completed],
+  [booking_status.staying]: [booking_status.completed, booking_status.confirmed],
 };

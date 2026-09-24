@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { Announcement, AppPage, Audience, Banner, BannerTarget, Faq } from '../lib/types';
+import type { Announcement, AppPage, Audience, Banner, BannerTarget, Faq, RegionRow } from '../lib/types';
 import { c, f, radius } from '../theme';
 import { laoDate, laoDateTime } from '../lib/format';
 import {
@@ -870,6 +870,289 @@ export function ContentPages() {
             <SaveError error={save.error} />
           </div>
         </Modal>
+      )}
+    </Card>
+  );
+}
+
+// ── region photos ────────────────────────────────────────────────────────────
+
+/**
+ * One province's card: its current photo (admin-set, or the auto-derived
+ * cover of its best-rated property, or nothing yet), a button to replace
+ * it, a button (only once there's a photo to lose) to drop back to whatever
+ * CatalogService.provinces() derives on its own, and a drag handle — the
+ * whole card is a native HTML5 drag source, so reordering is one drag from
+ * wherever a province is to wherever it should be, not N clicks of a
+ * one-step-at-a-time button.
+ */
+function RegionCard({
+  region,
+  position,
+  dragging,
+  reordering,
+  dragHandlers,
+}: {
+  region: RegionRow;
+  position: number;
+  /** True while *this* card is the one being dragged — dims it in place so
+   * the list reads as "this one is moving" rather than just disappearing. */
+  dragging: boolean;
+  reordering: boolean;
+  dragHandlers: {
+    draggable: true;
+    onDragStart: () => void;
+    onDragEnter: () => void;
+    onDragEnd: () => void;
+    onDragOver: (e: DragEvent) => void;
+  };
+}) {
+  const qc = useQueryClient();
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const upload = useMutation({
+    mutationFn: (file: File) => api.upload(`/admin/locations/provinces/${region.id}/photo`, file),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['regions'] }),
+  });
+  const clear = useMutation({
+    mutationFn: () => api.del(`/admin/locations/provinces/${region.id}/photo`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['regions'] }),
+  });
+
+  const busy = upload.isPending || clear.isPending || reordering;
+
+  return (
+    <div
+      {...dragHandlers}
+      style={{
+        opacity: dragging ? 0.35 : 1,
+        cursor: 'grab',
+        transition: 'opacity 120ms',
+      }}
+    >
+      <div
+        style={{
+          position: 'relative',
+          aspectRatio: '4 / 3',
+          borderRadius: radius.md,
+          overflow: 'hidden',
+          background: c.bg,
+          border: `1px solid ${c.border}`,
+          // The image itself must not be what the browser drags (that starts
+          // a native "drag this image out" instead of the card reorder).
+          pointerEvents: 'none',
+        }}
+      >
+        {region.imageUrl ? (
+          <img
+            src={region.imageUrl}
+            alt={region.name}
+            draggable={false}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              font: f(500, 12),
+              color: c.faint,
+            }}
+          >
+            ຍັງບໍ່ມີຮູບ
+          </div>
+        )}
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            height: 22,
+            minWidth: 22,
+            padding: '0 6px',
+            borderRadius: 11,
+            background: 'rgba(43,37,33,0.72)',
+            color: '#fff',
+            font: f(700, 11.5),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {position}
+        </div>
+        <div
+          title="ລາກເພື່ອຈັດລຳດັບ"
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            height: 22,
+            width: 22,
+            borderRadius: 6,
+            background: 'rgba(43,37,33,0.72)',
+            color: '#fff',
+            font: f(700, 13),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          ⠿
+        </div>
+        {busy && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(255,255,255,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              font: f(600, 12),
+              color: c.soft,
+            }}
+          >
+            ກຳລັງໂຫຼດ...
+          </div>
+        )}
+      </div>
+
+      <div style={{ font: f(700, 13.5), color: c.text, marginTop: 8, pointerEvents: 'none' }}>
+        {region.name}
+      </div>
+      <div style={{ font: f(400, 11.5), color: c.faint, marginBottom: 8, pointerEvents: 'none' }}>
+        {region.nameEn} · {region.propertyCount} ທີ່ພັກ
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', pointerEvents: busy ? 'none' : 'auto' }}>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = ''; // lets the same file be re-picked after an error
+            if (file) upload.mutate(file);
+          }}
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => fileInput.current?.click()}
+        >
+          {region.imageUrl ? 'ປ່ຽນຮູບ' : 'ອັບໂຫຼດຮູບ'}
+        </Button>
+        {region.imageUrl && (
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => clear.mutate()}>
+            ລຶບ
+          </Button>
+        )}
+      </div>
+      {upload.isError && (
+        <div style={{ font: f(500, 11.5), color: c.dangerFg, marginTop: 6 }}>
+          {upload.error instanceof Error ? upload.error.message : 'ອັບໂຫຼດບໍ່ສຳເລັດ'}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ContentRegions() {
+  const qc = useQueryClient();
+  const regions = useQuery({
+    queryKey: ['regions'],
+    queryFn: () => api.get<RegionRow[]>('/locations/provinces'),
+  });
+
+  // A local, optimistically-reordered copy so dragging over the grid
+  // reshuffles cards live (Trello-style) instead of waiting on a round trip
+  // per hover — synced from the server on load and after every save.
+  const [order, setOrder] = useState<RegionRow[]>([]);
+  useEffect(() => {
+    if (regions.data) setOrder(regions.data);
+  }, [regions.data]);
+
+  const dragFrom = useRef<number | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  const reorder = useMutation({
+    mutationFn: (provinceIds: string[]) =>
+      api.patch<RegionRow[]>('/admin/locations/provinces/order', { provinceIds }),
+    // The reorder endpoint hands back the freshly-ordered list — write it
+    // straight into the cache so a slow network can't show a stale order
+    // after the drag has already visually settled.
+    onSuccess: (rows) => {
+      qc.setQueryData(['regions'], rows);
+      setOrder(rows);
+    },
+  });
+
+  const handlersFor = (index: number, region: RegionRow) => ({
+    draggable: true as const,
+    onDragStart: () => {
+      dragFrom.current = index;
+      setDraggingId(region.id);
+    },
+    onDragOver: (e: DragEvent) => e.preventDefault(), // required for this to be a valid drop target
+    onDragEnter: () => {
+      const from = dragFrom.current;
+      if (from === null || from === index) return;
+      setOrder((prev) => {
+        const next = prev.slice();
+        const [moved] = next.splice(from, 1);
+        next.splice(index, 0, moved);
+        return next;
+      });
+      dragFrom.current = index;
+    },
+    onDragEnd: () => {
+      dragFrom.current = null;
+      setDraggingId(null);
+      reorder.mutate(order.map((r) => r.id));
+    },
+  });
+
+  return (
+    <Card>
+      <CardTitle>ຮູບແຂວງ</CardTitle>
+      <div style={{ font: f(400, 12.5), color: c.muted, marginTop: -10, marginBottom: 18 }}>
+        ຮູບ ແລະ ລຳດັບແຂວງທີ່ສະແດງຢູ່ &quot;ສຳຫຼວດແຂວງ&quot; ໃນໜ້າຫຼັກຂອງແອັບລູກຄ້າ — ລາກກ່ອງເພື່ອຈັດລຳດັບ.
+        ແຂວງໃດບໍ່ມີຮູບ ຈະໃຊ້ຮູບປົກຂອງທີ່ພັກທີ່ຄະແນນດີສຸດແທນອັດຕະໂນມັດ
+      </div>
+      {regions.isError ? (
+        <ErrorState error={regions.error} onRetry={() => void regions.refetch()} />
+      ) : order.length === 0 ? (
+        <EmptyState message="ບໍ່ພົບແຂວງ" />
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+            gap: 18,
+          }}
+        >
+          {order.map((region, i) => (
+            <RegionCard
+              key={region.id}
+              region={region}
+              position={i + 1}
+              dragging={draggingId === region.id}
+              reordering={reorder.isPending}
+              dragHandlers={handlersFor(i, region)}
+            />
+          ))}
+        </div>
+      )}
+      {reorder.isError && (
+        <div style={{ font: f(500, 12), color: c.dangerFg, marginTop: 14 }}>
+          {reorder.error instanceof Error ? reorder.error.message : 'ຈັດລຳດັບບໍ່ສຳເລັດ'}
+        </div>
       )}
     </Card>
   );

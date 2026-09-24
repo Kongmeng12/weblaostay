@@ -357,6 +357,13 @@ export class InventoryService {
     roomTypeId: bigint,
     checkIn: Date,
     checkOut: Date,
+    /**
+     * Excludes one booking item's own existing assignments from the overlap
+     * check — so reassigning a booking (partner.service's flow) still shows
+     * the room it already holds as pickable, instead of that room looking
+     * "taken" by the very booking asking to keep or change it.
+     */
+    excludeBookingItemId?: bigint,
   ): Promise<{ roomId: bigint; roomNumber: string; floor: string | null }[]> {
     const rows = await this.prisma.$queryRaw<
       { room_id: bigint; room_number: string; floor: string | null }[]
@@ -370,6 +377,8 @@ export class InventoryService {
           WHERE ra.room_id = r.room_id
             AND ra.check_in < ${checkOut}::date
             AND ra.check_out > ${checkIn}::date
+            AND (${excludeBookingItemId ?? null}::bigint IS NULL
+                 OR ra.booking_item_id != ${excludeBookingItemId ?? null}::bigint)
         )
       ORDER BY r.room_number
     `;

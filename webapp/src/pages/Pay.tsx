@@ -272,6 +272,12 @@ export function PayPage() {
             <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>ລາຍລະອຽດ</div>
             <Row label="ທີ່ພັກ" value={b.property.name} />
             <Row label="ຫ້ອງ" value={b.roomType?.name ?? '—'} />
+            {/* Empty for the ordinary flow, where the partner assigns a room
+                after booking — only a guest who picked a specific room at
+                booking time sees a number here. */}
+            {b.roomType && b.roomType.roomNumbers.length > 0 && (
+              <Row label="ເລກຫ້ອງ" value={b.roomType.roomNumbers.join(', ')} />
+            )}
             <Row label="ເຂົ້າພັກ" value={laoDateFull(b.checkIn)} />
             <Row label="ອອກ" value={laoDateFull(b.checkOut)} />
             <Row label="ຄືນ / ຄົນ" value={`${b.nights} ຄືນ · ${b.guests} ຄົນ`} />

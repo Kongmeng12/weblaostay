@@ -18,11 +18,19 @@ import { SettingsService } from '../common/settings.service';
 import { InventoryService } from './inventory.service';
 import { PricingService } from './pricing.service';
 import { LedgerService } from './ledger.service';
-import { BOOKING_TRANSITIONS } from '../common/enums';
+import { allowedStatusMoves, blockedReason } from './booking-lifecycle';
 import { bookingCode, cancellationSplit, formatKip, kipOf, rateOf } from '../common/money';
 import { NotificationsService } from '../notifications/notifications.service';
 import { utcMidnight } from '../common/dates';
 import type { CreateBookingDto, WalkInDto } from './booking.dto';
+
+/** What the status log records for each front-desk move, keyed `from>to`. */
+const STATUS_MOVE_NOTE: Record<string, string> = {
+  'confirmed>staying': 'ເຊັກອິນ · Checked in',
+  'staying>completed': 'ເຊັກເອົາ · Checked out',
+  'staying>confirmed': 'ຍົກເລີກການເຊັກອິນ · Check-in undone',
+  'confirmed>no_show': 'ແຂກບໍ່ມາ · Marked no-show',
+};
 
 /**
  * Creating, moving and cancelling a booking.
@@ -393,7 +401,15 @@ export class BookingService {
         email: booking.users.email,
         phone: booking.users.phone,
       },
-      guests: booking.booking_guests.map((g) => ({
+      // Named individually, unlike `guests` (the headcount, from
+      // `...toBookingView(booking)` above) — kept as a distinct key on
+      // purpose. This used to be spelled `guests` too, which silently
+      // clobbered the real headcount with `booking_guests.length` (almost
+      // always 1, since only the primary guest ever gets a named row here):
+      // every client that showed "how many guests" on a booking's detail
+      // view was actually showing this array's length, not what the guest
+      // booked for.
+      guestList: booking.booking_guests.map((g) => ({
         name: g.full_name,
         type: g.guest_type,
         isPrimary: g.is_primary,
@@ -432,41 +448,78 @@ export class BookingService {
       review: booking.reviews
         ? { id: booking.reviews.review_id.toString(), stars: rateOf(booking.reviews.overall_rating) }
         : null,
-      nextStatus: BOOKING_TRANSITIONS[booking.status] ?? [],
+      // Only the moves open *today* — a client offering a button for anything
+      // else would be offering one the API is about to refuse.
+      nextStatus: allowedStatusMoves(booking),
     };
   }
 
   // ── status ────────────────────────────────────────────────────────────────
 
   /**
-   * Moves a booking along the one-way ladder. Cancellation is deliberately not
-   * reachable from here — it moves money, so it has its own path.
+   * The front desk's moves — check-in, check-out, undo check-in, no-show.
+   * `booking-lifecycle.ts` says which are open for this booking today and
+   * why not otherwise. Cancellation is deliberately not reachable from here —
+   * it moves money, so it has its own path.
    */
   async setStatus(bookingId: bigint, to: booking_status, actorId: bigint | null) {
-    const booking = await this.prisma.bookings.findUnique({ where: { booking_id: bookingId } });
+    const booking = await this.prisma.bookings.findUnique({
+      where: { booking_id: bookingId },
+      include: { properties: { select: { property_name: true } } },
+    });
     if (!booking) throw new NotFoundException(`ບໍ່ພົບການຈອງ #${bookingId} · Booking not found`);
 
-    const allowed = BOOKING_TRANSITIONS[booking.status] ?? [];
-    if (!allowed.includes(to)) {
-      throw new BadRequestException(
-        `ປ່ຽນຈາກ "${booking.status}" ໄປ "${to}" ບໍ່ໄດ້ · Cannot move a booking from "${booking.status}" to "${to}"` +
-          (allowed.length ? ` (allowed: ${allowed.join(', ')})` : ''),
-      );
-    }
+    const blocked = blockedReason(booking, to);
+    if (blocked) throw new BadRequestException(blocked);
 
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.bookings.update({
-        where: { booking_id: bookingId },
+      // Guarded on the status we read, so two taps (or the partner and the
+      // checkout sweeper) cannot both apply a move to the same booking.
+      const moved = await tx.bookings.updateMany({
+        where: { booking_id: bookingId, status: booking.status },
         data: { status: to },
       });
+      if (moved.count === 0) {
+        throw new ConflictException(
+          'ສະຖານະການຈອງຖືກປ່ຽນແລ້ວ ກະລຸນາໂຫຼດໃໝ່ · The booking was just updated — reload and try again',
+        );
+      }
+
       await tx.booking_status_logs.create({
         data: {
           booking_id: bookingId,
           from_status: booking.status,
           to_status: to,
           changed_by: actorId,
+          note: STATUS_MOVE_NOTE[`${booking.status}>${to}`] ?? null,
         },
       });
+
+      if (to === booking_status.completed) {
+        // Check-out: the guest is asked for a review (the checkout sweeper
+        // sends the same prompt when nobody presses the button), and any room
+        // that was assigned to the stay is flagged dirty straight away rather
+        // than waiting for the housekeeping sweep.
+        await tx.$executeRaw`
+          UPDATE rooms SET status = 'needs_cleaning', updated_at = now()
+          WHERE status = 'available'
+            AND room_id IN (
+              SELECT ra.room_id
+              FROM room_assignments ra
+              JOIN booking_items bi ON bi.booking_item_id = ra.booking_item_id
+              WHERE bi.booking_id = ${bookingId}
+            )
+        `;
+        await this.notifications.send(tx, {
+          userId: booking.customer_id,
+          templateCode: 'stay_completed_review_prompt',
+          vars: { property: booking.properties.property_name },
+          referenceType: 'booking',
+          referenceId: bookingId,
+        });
+      }
+
+      const updated = await tx.bookings.findUniqueOrThrow({ where: { booking_id: bookingId } });
       return toBookingView(updated);
     });
   }
@@ -499,6 +552,11 @@ export class BookingService {
       if (booking.status === booking_status.completed) {
         throw new BadRequestException(
           'ພັກຈົບແລ້ວ ຍົກເລີກບໍ່ໄດ້ · A completed stay cannot be cancelled',
+        );
+      }
+      if (booking.status === booking_status.no_show) {
+        throw new BadRequestException(
+          'ບັນທຶກວ່າແຂກບໍ່ມາແລ້ວ ຍົກເລີກບໍ່ໄດ້ · A no-show cannot be cancelled',
         );
       }
       // Once the guest has checked in, only the property can settle up.
@@ -649,6 +707,108 @@ export class BookingService {
         refund: kipOf(refund),
       };
     });
+  }
+
+  // ── room assignment ──────────────────────────────────────────────────────
+
+  /**
+   * The rooms a partner could assign to this booking right now — its own
+   * room type's numbered inventory, filtered to what's actually free for its
+   * dates. `excludeBookingItemId` (inside `InventoryService.availableRooms`)
+   * means whatever this booking already holds shows up as pickable rather
+   * than looking "taken" by the very booking asking to keep or change it.
+   */
+  async availableRoomsFor(bookingId: bigint) {
+    const booking = await this.prisma.bookings.findUnique({
+      where: { booking_id: bookingId },
+      select: {
+        check_in: true,
+        check_out: true,
+        booking_items: {
+          select: {
+            booking_item_id: true,
+            room_type_id: true,
+            quantity: true,
+            room_assignments: { select: { room_id: true } },
+          },
+        },
+      },
+    });
+    if (!booking) throw new NotFoundException(`ບໍ່ພົບການຈອງ #${bookingId} · Booking not found`);
+
+    const item = booking.booking_items[0];
+    if (!item) throw new NotFoundException(`ບໍ່ພົບລາຍການຈອງ #${bookingId} · Booking has no room line`);
+
+    const rooms = await this.inventory.availableRooms(
+      item.room_type_id,
+      booking.check_in,
+      booking.check_out,
+      item.booking_item_id,
+    );
+
+    return {
+      roomTypeId: item.room_type_id.toString(),
+      quantity: item.quantity,
+      currentRoomIds: item.room_assignments.map((ra) => ra.room_id.toString()),
+      rooms: rooms.map((r) => ({ id: r.roomId.toString(), roomNumber: r.roomNumber, floor: r.floor })),
+    };
+  }
+
+  /**
+   * Sets, replaces or clears which physical room(s) a booking holds — the
+   * front-desk half of room selection: a guest who let the property choose
+   * still ends up in a specific room, the partner just says which one instead
+   * of the guest picking it at booking time. Goes through the same
+   * `assignRooms` an at-booking-time pick does, so the exclusion constraint
+   * that actually prevents two bookings landing on the same room is exercised
+   * exactly once, from one place — this method only orchestrates around it:
+   * replace whatever the booking currently holds with `roomIds` (or clear it
+   * entirely when `roomIds` is empty).
+   */
+  async assignRoom(bookingId: bigint, roomIds: bigint[]) {
+    const booking = await this.prisma.bookings.findUnique({
+      where: { booking_id: bookingId },
+      select: {
+        status: true,
+        check_in: true,
+        check_out: true,
+        booking_items: { select: { booking_item_id: true, room_type_id: true, quantity: true } },
+      },
+    });
+    if (!booking) throw new NotFoundException(`ບໍ່ພົບການຈອງ #${bookingId} · Booking not found`);
+    if (booking.status === booking_status.cancelled) {
+      throw new BadRequestException(
+        'ການຈອງນີ້ຍົກເລີກໄປແລ້ວ ກຳນົດຫ້ອງບໍ່ໄດ້ · ' +
+          'This booking is cancelled — there is nothing to assign a room to',
+      );
+    }
+
+    const item = booking.booking_items[0];
+    if (!item) throw new NotFoundException(`ບໍ່ພົບລາຍການຈອງ #${bookingId} · Booking has no room line`);
+    if (roomIds.length > 0 && roomIds.length !== item.quantity) {
+      throw new BadRequestException(
+        `ຕ້ອງເລືອກ ${item.quantity} ຫ້ອງ · You must select exactly ${item.quantity} room(s)`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Replace, not merge: whatever this booking item held before is gone
+      // the moment a new set is asked for, same "resend the whole thing"
+      // semantics the rest of this app already uses for a set of rows.
+      await tx.room_assignments.deleteMany({ where: { booking_item_id: item.booking_item_id } });
+      if (roomIds.length > 0) {
+        await this.inventory.assignRooms(
+          tx,
+          item.booking_item_id,
+          item.room_type_id,
+          roomIds,
+          booking.check_in,
+          booking.check_out,
+        );
+      }
+    });
+
+    return this.findOne(bookingId);
   }
 
   /**

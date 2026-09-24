@@ -16,10 +16,26 @@
  * unchanged, whatever timezone the server runs in.
  */
 
+import { BadRequestException } from '@nestjs/common';
+
 /** Today as UTC midnight. */
 export function todayUtc(): Date {
   const n = new Date();
   return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
+}
+
+/**
+ * Today's calendar day in Laos (UTC+7, no DST), as UTC midnight.
+ *
+ * A stay's `check_in`/`check_out` are calendar days the guest and the front
+ * desk experience in Vientiane time. Comparing them against the *UTC* day
+ * would call it yesterday for the first seven hours of every Lao morning —
+ * a guest arriving at 06:00 could not be checked in, and a departure would
+ * only be closed out seven hours late.
+ */
+export function todayInLaos(now: Date = new Date()): Date {
+  const laos = new Date(now.getTime() + 7 * 3_600_000);
+  return new Date(Date.UTC(laos.getUTCFullYear(), laos.getUTCMonth(), laos.getUTCDate()));
 }
 
 /** `n` days before today, as UTC midnight. */
@@ -82,4 +98,28 @@ export function eachNightUtc(from: Date, toExclusive: Date): Date[] {
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
+}
+
+/**
+ * Parses a `from`/`to` range shared by every range-filtered endpoint (partner
+ * calendar, reports): both ends are calendar days, `to` is exclusive like a
+ * stay's check-out, and the span is capped so a mistyped range can't run an
+ * unbounded scan.
+ */
+export function parseDateRange(
+  fromIso: string,
+  toIso: string,
+  maxDays = 366,
+): { from: Date; to: Date } {
+  const from = utcMidnight(fromIso);
+  const to = utcMidnight(toIso);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from) {
+    throw new BadRequestException('ຊ່ວງວັນທີບໍ່ຖືກຕ້ອງ · Invalid date range');
+  }
+  if ((to.getTime() - from.getTime()) / 86_400_000 > maxDays) {
+    throw new BadRequestException(
+      `ຊ່ວງສູງສຸດ ${maxDays} ວັນ · Range may not exceed ${maxDays} days`,
+    );
+  }
+  return { from, to };
 }

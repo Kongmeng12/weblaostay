@@ -124,6 +124,14 @@ export class CancelBookingDto {
   reason?: string;
 }
 
+/** Omit `roomIds` (or send an empty array) to clear the booking's assigned room(s). */
+export class AssignRoomDto {
+  @IsOptional()
+  @IsString({ each: true })
+  @ArrayMaxSize(10)
+  roomIds?: string[];
+}
+
 export class CreateReviewDto {
   @Type(() => Number)
   @IsInt()

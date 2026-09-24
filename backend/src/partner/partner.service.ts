@@ -5,7 +5,7 @@ import { InventoryService } from '../booking/inventory.service';
 import { OwnershipService } from './ownership.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { kipOf, rateOf, toKip } from '../common/money';
-import { addDaysUtc, todayUtc, utcMidnight } from '../common/dates';
+import { addDaysUtc, parseDateRange, todayUtc } from '../common/dates';
 import { REVENUE_STATUSES } from '../common/enums';
 import type {
   CreateRoomDto,
@@ -324,6 +324,23 @@ export class PartnerService {
     };
   }
 
+  // ── housekeeping ─────────────────────────────────────────────────────────
+
+  /** Clears the housekeeping flag once the room has actually been cleaned. */
+  async markRoomClean(partnerId: bigint, roomId: bigint) {
+    await this.own.assertOwnsRoom(partnerId, roomId);
+    const { count } = await this.prisma.rooms.updateMany({
+      where: { room_id: roomId, status: 'needs_cleaning' },
+      data: { status: 'available' },
+    });
+    if (!count) {
+      throw new BadRequestException(
+        'ຫ້ອງນີ້ບໍ່ໄດ້ຢູ່ໃນສະຖານະຕ້ອງທຳຄວາມສະອາດ · This room is not marked as needing cleaning',
+      );
+    }
+    return { roomId: roomId.toString(), status: 'available' };
+  }
+
   // ── bookings ──────────────────────────────────────────────────────────────
 
   async bookings(
@@ -587,15 +604,7 @@ export class PartnerService {
 
   /** Both ends are calendar days; `to` is exclusive, like a stay's check-out. */
   private parseRange(fromIso: string, toIso: string) {
-    const from = utcMidnight(fromIso);
-    const to = utcMidnight(toIso);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from) {
-      throw new BadRequestException('ຊ່ວງວັນທີບໍ່ຖືກຕ້ອງ · Invalid date range');
-    }
-    if ((to.getTime() - from.getTime()) / 86_400_000 > 366) {
-      throw new BadRequestException('ຊ່ວງສູງສຸດ 366 ວັນ · Range may not exceed 366 days');
-    }
-    return { from, to };
+    return parseDateRange(fromIso, toIso);
   }
 }
 

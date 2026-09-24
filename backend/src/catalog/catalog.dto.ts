@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
+  IsArray,
   IsEnum,
   IsISO8601,
   IsInt,
@@ -133,4 +135,15 @@ export class DistrictQueryDto {
   @Type(() => Number)
   @IsInt()
   provinceId?: number;
+}
+
+/**
+ * The full new province order for the Home "Explore regions" rail, front to
+ * back — see CatalogService.setProvinceOrder.
+ */
+export class ReorderProvincesDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  provinceIds!: string[];
 }

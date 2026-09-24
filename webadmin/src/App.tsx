@@ -19,6 +19,7 @@ import {
   ContentBanners,
   ContentFaqs,
   ContentPages,
+  ContentRegions,
 } from './pages/Content';
 import {
   SettingsAdmins,
@@ -91,6 +92,7 @@ function Root() {
         <Route path="content/announcements" element={<ContentAnnouncements />} />
         <Route path="content/faqs" element={<ContentFaqs />} />
         <Route path="content/pages" element={<ContentPages />} />
+        <Route path="content/regions" element={<ContentRegions />} />
 
         <Route path="settings" element={<Navigate to="/settings/platform" replace />} />
         <Route path="settings/platform" element={<SettingsPlatform />} />

@@ -177,6 +177,14 @@ export const NAV_GROUPS: NavGroup[] = [
         subtitle: 'ເງື່ອນໄຂການໃຊ້ງານ, ນະໂຍບາຍ ແລະ ໜ້າກ່ຽວກັບ',
       },
       {
+        to: '/content/regions',
+        width: 'medium',
+        name: 'ຮູບແຂວງ',
+        emoji: '🗺️',
+        title: 'ຮູບແຂວງ',
+        subtitle: 'ຮູບປົກແຂວງໃນໜ້າຫຼັກ "ສຳຫຼວດແຂວງ"',
+      },
+      {
         to: '/promos',
         name: 'ໂຄ້ດສ່ວນຫຼຸດ',
         emoji: '🎟️',
