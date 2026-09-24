@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { c, radius, shadow, type as t, TAP } from '../theme';
-import { Button, ErrorNote, Field, Page, Spinner, inputStyle } from '../components/ui';
+import { Button, ErrorNote, Field, Page, PasswordInput, Spinner, inputStyle } from '../components/ui';
 import { isValidIdentifier } from '../lib/validation';
 
 export function SignInPage() {
@@ -69,14 +69,12 @@ export function SignInPage() {
         </Field>
 
         <Field label="ລະຫັດຜ່ານ">
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
             placeholder="••••••••"
-            style={inputStyle}
           />
         </Field>
 

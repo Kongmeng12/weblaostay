@@ -10,6 +10,7 @@ import {
   Button,
   Field,
   inputStyle,
+  PasswordInput,
   ErrorState,
   Avatar,
   Modal,
@@ -707,11 +708,10 @@ function CreateAdminDialog({
           />
         </Field>
         <Field label="ລະຫັດຜ່ານ" hint="ຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ">
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={inputStyle}
+            autoComplete="new-password"
           />
         </Field>
         <Field label="ສິດ">

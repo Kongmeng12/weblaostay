@@ -263,6 +263,8 @@ export class AuthService {
           province_id: BigInt(dto.provinceId),
           district_id: dto.districtId ? BigInt(dto.districtId) : null,
           address_detail: dto.address,
+          ...(dto.lat !== undefined && { latitude: new Prisma.Decimal(dto.lat) }),
+          ...(dto.lng !== undefined && { longitude: new Prisma.Decimal(dto.lng) }),
           // Not sellable until an admin approves the partner.
           status: 'draft',
         },

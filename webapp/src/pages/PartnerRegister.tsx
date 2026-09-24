@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, request } from '../lib/api';
 import { c, f, radius, shadow, type as t, TAP, PROPERTY_TYPE_LABEL } from '../theme';
-import { Button, ErrorNote, Field, Page, Spinner, inputStyle } from '../components/ui';
+import { Button, ErrorNote, Field, Page, PasswordInput, Spinner, inputStyle } from '../components/ui';
 import { looksLikeEmail, looksLikePhone } from '../lib/validation';
 import type { District, Province } from '../lib/types';
 
@@ -179,15 +179,13 @@ export function PartnerRegisterPage() {
           </div>
 
           <Field label="ລະຫັດຜ່ານ" hint="ຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ">
-            <input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
               autoComplete="new-password"
               placeholder="••••••••"
-              style={inputStyle}
             />
           </Field>
 

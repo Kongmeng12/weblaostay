@@ -430,7 +430,12 @@ export class PartnerService {
         include: {
           properties: { select: { property_id: true, property_name: true } },
           users: { include: { user_profiles: { select: { full_name: true } } } },
-          booking_items: { include: { room_types: { select: { type_name: true } } } },
+          booking_items: {
+            include: {
+              room_types: { select: { type_name: true } },
+              room_assignments: { select: { rooms: { select: { room_number: true } } } },
+            },
+          },
           payments: { select: { status: true }, orderBy: { created_at: 'desc' }, take: 1 },
         },
       }),
@@ -447,6 +452,11 @@ export class PartnerService {
         guestPhone: b.users.phone,
         roomType: b.booking_items[0]?.room_types.type_name ?? null,
         quantity: b.booking_items[0]?.quantity ?? 1,
+        // Every room assigned across the booking, so the list shows who is in
+        // which room without opening each booking. Empty until assigned.
+        roomNumbers: b.booking_items
+          .flatMap((item) => item.room_assignments.map((ra) => ra.rooms.room_number))
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
         checkIn: b.check_in,
         checkOut: b.check_out,
         nights: b.nights,

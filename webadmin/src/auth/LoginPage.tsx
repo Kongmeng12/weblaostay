@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useAuth } from './AuthContext';
 import { c, f, radius } from '../theme';
-import { Button, inputStyle } from '../components/ui';
+import { Button, PasswordInput, inputStyle } from '../components/ui';
 
 /**
  * Sign-in, laid out as the two-panel card from the design: dark brand side on
@@ -101,14 +101,12 @@ export function LoginPage() {
               <span style={{ font: f(600, 13), color: c.text, display: 'block', marginBottom: 8 }}>
                 ລະຫັດຜ່ານ
               </span>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
                 autoComplete="current-password"
-                style={inputStyle}
                 placeholder="••••••••"
               />
             </label>

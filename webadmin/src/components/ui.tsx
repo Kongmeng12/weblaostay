@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { useState, type CSSProperties, type InputHTMLAttributes, type ReactNode } from 'react';
 import { c, f, radius } from '../theme';
 
 // ── Card ─────────────────────────────────────────────────────────────────────
@@ -141,6 +141,61 @@ export const inputStyle: CSSProperties = {
   outline: 'none',
   boxSizing: 'border-box',
 };
+
+/**
+ * A password input with a show/hide eye, for every form that takes one. The
+ * type starts as `password`, so browsers still offer to save it.
+ */
+export function PasswordInput({
+  style,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  const [shown, setShown] = useState(false);
+  return (
+    <span style={{ position: 'relative', display: 'block' }}>
+      <input
+        {...props}
+        type={shown ? 'text' : 'password'}
+        style={{ ...inputStyle, paddingRight: 46, ...style }}
+      />
+      <button
+        type="button"
+        onClick={() => setShown((s) => !s)}
+        aria-label={shown ? 'ເຊື່ອງລະຫັດຜ່ານ' : 'ສະແດງລະຫັດຜ່ານ'}
+        aria-pressed={shown}
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: 44,
+          display: 'grid',
+          placeItems: 'center',
+          background: 'none',
+          border: 'none',
+          color: c.muted,
+          cursor: 'pointer',
+        }}
+      >
+        <svg
+          width="19"
+          height="19"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+          <circle cx="12" cy="12" r="3" />
+          {shown && <path d="M3 3l18 18" />}
+        </svg>
+      </button>
+    </span>
+  );
+}
 
 export function Field({
   label,

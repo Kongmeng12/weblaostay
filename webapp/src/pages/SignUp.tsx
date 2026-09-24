@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { c, f, type as t, TAP } from '../theme';
-import { Button, ErrorNote, Field, inputStyle, Spinner } from '../components/ui';
+import { Button, ErrorNote, Field, inputStyle, PasswordInput, Spinner } from '../components/ui';
 import { looksLikeEmail, looksLikePhone } from '../lib/validation';
 import { AuthShell } from './SignIn';
 
@@ -101,15 +101,13 @@ export function SignUpPage() {
         </Field>
 
         <Field label="ລະຫັດຜ່ານ" hint="ຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ">
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
             autoComplete="new-password"
             placeholder="••••••••"
-            style={inputStyle}
           />
         </Field>
 

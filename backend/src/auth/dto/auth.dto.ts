@@ -3,6 +3,8 @@ import {
   IsEmail,
   IsEnum,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   Matches,
@@ -114,6 +116,22 @@ export class RegisterPartnerDto {
   @MinLength(4)
   @MaxLength(500)
   address!: string;
+
+  /**
+   * The pin the partner drops on the sign-up map. Optional so an older app
+   * build can still apply; the property then shows up under the admin's
+   * "missing location" filter instead.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsLatitude()
+  lat?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsLongitude()
+  lng?: number;
+
   /**
    * Ticking the box. `@Equals(true)` rather than `@IsBoolean()`: an unticked
    * box must fail here, not silently create an account with no agreement.
