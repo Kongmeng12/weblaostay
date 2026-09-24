@@ -147,6 +147,7 @@ export const PROPERTY_TYPE_LABEL: Record<string, string> = {
   villa: 'ວິນລ່າ',
   resort: 'ຣີສອດ',
   guesthouse: 'ເຮືອນພັກ',
+  hotel: 'ໂຮງແຮມ',
 };
 
 export const BED_TYPE_LABEL: Record<string, string> = {

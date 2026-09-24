@@ -569,7 +569,15 @@ export class PartnerService {
 
     if (!propertyIds.length) {
       return {
-        today: { arrivals: [], arrivalCount: 0, departureCount: 0, stayingCount: 0 },
+        today: {
+          arrivals: [],
+          arrivalCount: 0,
+          departureCount: 0,
+          stayingCount: 0,
+          guestChoseCount: 0,
+          propertyChoosesCount: 0,
+        },
+        roomsToAssign: { count: 0, items: [] },
         pendingBookings: 0,
         occupancy: { soldTonight: 0, capacity: 0, percent: 0 },
         week: { bookings: 0, gross: 0, commission: 0, net: 0 },
@@ -579,6 +587,19 @@ export class PartnerService {
     }
 
     const scope = { property_id: { in: propertyIds }, deleted_at: null };
+
+    // Bookings the front desk still has to put in a room: the guest left the
+    // choice to the property, nothing is assigned yet, and the room type has
+    // numbered rooms to choose from. Today's arrivals first.
+    const toAssignWhere: Prisma.bookingsWhereInput = {
+      ...scope,
+      guest_chose_room: false,
+      check_in: { gte: today },
+      status: { in: [booking_status.pending, booking_status.confirmed, booking_status.staying] },
+      booking_items: {
+        some: { room_types: { rooms: { some: {} } }, room_assignments: { none: {} } },
+      },
+    };
 
     const [
       arrivals,
@@ -590,12 +611,21 @@ export class PartnerService {
       soldTonight,
       payoutAgg,
       unread,
+      toAssign,
+      toAssignCount,
     ] = await Promise.all([
         this.prisma.bookings.findMany({
           where: { ...scope, check_in: today, status: { not: booking_status.cancelled } },
           include: {
             users: { include: { user_profiles: { select: { full_name: true } } } },
-            booking_items: { include: { room_types: { select: { type_name: true } } } },
+            booking_items: {
+              include: {
+                room_types: {
+                  select: { type_name: true, _count: { select: { rooms: true } } },
+                },
+                room_assignments: { select: { rooms: { select: { room_number: true } } } },
+              },
+            },
           },
           orderBy: { booking_id: 'asc' },
         }),
@@ -626,26 +656,65 @@ export class PartnerService {
           _count: true,
         }),
         this.notifications.unreadCount(userId),
+        this.prisma.bookings.findMany({
+          where: toAssignWhere,
+          include: {
+            users: { include: { user_profiles: { select: { full_name: true } } } },
+            booking_items: { include: { room_types: { select: { type_name: true } } } },
+          },
+          orderBy: [{ check_in: 'asc' }, { booking_id: 'asc' }],
+          take: 20,
+        }),
+        this.prisma.bookings.count({ where: toAssignWhere }),
       ]);
 
     const totalRooms = capacity._sum.total_count ?? 0;
     const sold = soldTonight._sum.booked_count ?? 0;
 
+    const arrivalViews = arrivals.map((b) => {
+      const item = b.booking_items[0];
+      // Who chooses only means something where there are numbered rooms to
+      // choose between; elsewhere the booking is just "a room of this type".
+      const numbered = b.booking_items.some((i) => i.room_types._count.rooms > 0);
+      return {
+        id: b.booking_id.toString(),
+        code: b.booking_code,
+        guest: b.users.user_profiles?.full_name ?? '—',
+        phone: b.users.phone,
+        roomType: item?.room_types.type_name ?? null,
+        quantity: item?.quantity ?? 1,
+        roomNumbers: b.booking_items
+          .flatMap((i) => i.room_assignments.map((ra) => ra.rooms.room_number))
+          .sort((x, y) => x.localeCompare(y, undefined, { numeric: true })),
+        roomChoice: !numbered ? null : b.guest_chose_room ? 'guest' : 'property',
+        guests: b.total_guests,
+        status: b.status,
+      };
+    });
+
     return {
       today: {
         date: today,
-        arrivals: arrivals.map((b) => ({
-          id: b.booking_id.toString(),
-          code: b.booking_code,
-          guest: b.users.user_profiles?.full_name ?? '—',
-          phone: b.users.phone,
-          roomType: b.booking_items[0]?.room_types.type_name ?? null,
-          guests: b.total_guests,
-          status: b.status,
-        })),
+        arrivals: arrivalViews,
         arrivalCount: arrivals.length,
         departureCount: departures,
         stayingCount: staying,
+        guestChoseCount: arrivalViews.filter((a) => a.roomChoice === 'guest').length,
+        propertyChoosesCount: arrivalViews.filter((a) => a.roomChoice === 'property').length,
+      },
+      roomsToAssign: {
+        count: toAssignCount,
+        items: toAssign.map((b) => ({
+          id: b.booking_id.toString(),
+          code: b.booking_code,
+          guest: b.users.user_profiles?.full_name ?? '—',
+          roomType: b.booking_items[0]?.room_types.type_name ?? null,
+          quantity: b.booking_items[0]?.quantity ?? 1,
+          checkIn: b.check_in,
+          nights: b.nights,
+          guests: b.total_guests,
+          status: b.status,
+        })),
       },
       pendingBookings: pending,
       occupancy: {

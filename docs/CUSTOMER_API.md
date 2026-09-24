@@ -132,7 +132,7 @@ POST /auth/refresh
 |---|---|
 | `q` | ຄົ້ນຫາຕົວອັກສອນ (full-text) |
 | `provinceId` · `districtId` | int |
-| `type` | `homestay` `villa` `resort` `guesthouse` — ໝົດເທົ່ານີ້ |
+| `type` | `homestay` `villa` `resort` `guesthouse` `hotel` — ໝົດເທົ່ານີ້ |
 | `checkIn` · `checkOut` | `YYYY-MM-DD` — **ໃສ່ຄູ່ ຫຼື ບໍ່ໃສ່ເລີຍ** |
 | `guests` | 1–30 |
 | `minPrice` · `maxPrice` | ກີບ |

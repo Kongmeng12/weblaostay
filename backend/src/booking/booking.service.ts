@@ -167,6 +167,9 @@ export class BookingService {
           hold_expires_at: new Date(Date.now() + settings.hold_ttl_minutes * 60_000),
           special_request: dto.specialRequest ?? null,
           idempotency_key: dto.idempotencyKey ?? null,
+          // Kept even if the partner later moves them: the dashboard counts
+          // who made the choice, not who holds the room now.
+          guest_chose_room: (roomIds?.length ?? 0) > 0,
         },
       });
 

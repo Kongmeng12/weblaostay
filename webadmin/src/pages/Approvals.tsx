@@ -11,6 +11,7 @@ const TYPE_LABEL: Record<string, string> = {
   villa: 'ວິນລ່າ',
   resort: 'ຣີສອດ',
   guesthouse: 'ເຮືອນພັກ',
+  hotel: 'ໂຮງແຮມ',
 };
 
 const BUSINESS_TYPE_LABEL: Record<string, string> = {
