@@ -91,7 +91,6 @@ export class CatalogService {
     const sort = overrides.sort ?? dto.sort;
 
     const range = this.parseRange(dto.checkIn, dto.checkOut);
-    const guests = dto.guests ?? 1;
     const offset = (dto.page - 1) * dto.limit;
 
     // `nights` drives both the price sum and the availability count.
@@ -127,7 +126,6 @@ export class CatalogService {
                ON ri.room_type_id = rt.room_type_id AND ri.date = n.d
         WHERE rt.status = 'active'
           AND rt.deleted_at IS NULL
-          AND rt.max_occupancy >= ${guests}
           AND (
             -- With no dates asked for, inventory is not consulted at all.
             ${from}::date IS NULL

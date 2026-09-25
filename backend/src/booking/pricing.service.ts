@@ -86,12 +86,10 @@ export class PricingService {
       );
     }
 
-    // Occupancy is per room; asking for two rooms doubles what they hold.
-    const capacity = roomType.max_occupancy * quantity;
-    if (input.guests < 1 || input.guests > capacity) {
-      throw new BadRequestException(
-        `ຮັບໄດ້ 1–${capacity} ຄົນ · This selection takes 1–${capacity} guests`,
-      );
+    // Headcount is not capped: `max_occupancy` describes the room, it does not
+    // limit who may book it. The price is per room, so it never depends on it.
+    if (input.guests < 1) {
+      throw new BadRequestException('ຕ້ອງມີຢ່າງໜ້ອຍ 1 ຄົນ · At least 1 guest is required');
     }
 
     const { perNight, subtotal } = await this.inventory.priceStay(

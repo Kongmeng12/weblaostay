@@ -220,17 +220,15 @@ export function SearchBar({
       </Cell>
 
       <Cell label="ຜູ້ເຂົ້າພັກ">
-        <select
+        <input
+          type="number"
+          min={1}
+          step={1}
+          inputMode="numeric"
           value={draft.guests}
-          onChange={(e) => set('guests', Number(e.target.value))}
+          onChange={(e) => set('guests', Math.max(1, Math.floor(Number(e.target.value)) || 1))}
           style={cellInput}
-        >
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-            <option key={n} value={n}>
-              {n} ຄົນ
-            </option>
-          ))}
-        </select>
+        />
       </Cell>
 
       {/* Takes the whole row: a two-month calendar has nowhere to open inside

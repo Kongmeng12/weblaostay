@@ -281,7 +281,6 @@ export function PropertyPage() {
                 key={rt.id}
                 room={rt}
                 nights={nights}
-                guests={guests}
                 hasRange={hasRange}
                 checkIn={checkIn}
                 checkOut={checkOut}
@@ -439,17 +438,17 @@ export function PropertyPage() {
               <span style={{ font: t.label, color: c.muted, display: 'block', marginBottom: space[1] }}>
                 ຜູ້ເຂົ້າພັກ
               </span>
-              <select
+              <input
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
                 value={guests}
-                onChange={(e) => setDates({ guests: Number(e.target.value) })}
+                onChange={(e) =>
+                  setDates({ guests: Math.max(1, Math.floor(Number(e.target.value)) || 1) })
+                }
                 style={dateInput}
-              >
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>
-                    {n} ຄົນ
-                  </option>
-                ))}
-              </select>
+              />
             </label>
 
             {!hasRange && (
@@ -588,7 +587,6 @@ function LocationSection({ property }: { property: PropertyDetail }) {
 function RoomRow({
   room,
   nights,
-  guests,
   hasRange,
   checkIn,
   checkOut,
@@ -599,7 +597,6 @@ function RoomRow({
 }: {
   room: RoomOffer;
   nights: number;
-  guests: number;
   hasRange: boolean;
   checkIn: string;
   checkOut: string;
@@ -608,10 +605,9 @@ function RoomRow({
   selectedUnit: string | null;
   onSelectUnit: (unitId: string | null) => void;
 }) {
-  const tooSmall = guests > room.maxOccupancy;
   const soldOut = hasRange && room.available === false;
   const tooShort = hasRange && nights > 0 && nights < room.minNights;
-  const blocked = soldOut || tooSmall || tooShort;
+  const blocked = soldOut || tooShort;
 
   // The room-number picker only makes sense once this offer is the one being
   // booked, is actually bookable, and dates are known (the endpoint 400s
@@ -647,16 +643,14 @@ function RoomRow({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ font: t.h3, color: c.text, marginBottom: 3 }}>{room.name}</div>
           <div style={{ font: t.caption, color: c.muted, marginBottom: 6 }}>
-            {BED_TYPE_LABEL[room.bedType] ?? room.bedType} · ຮັບໄດ້ {room.maxOccupancy} ຄົນ
+            {BED_TYPE_LABEL[room.bedType] ?? room.bedType}
             {room.hasAc ? ' · ມີແອ' : ''}
             {room.sizeSqm ? ` · ${room.sizeSqm} ຕ.ມ.` : ''}
           </div>
 
           {/* Say exactly why a room cannot be booked. "Unavailable" makes the
               guest change the wrong thing. */}
-          {tooSmall ? (
-            <Pill bg={c.warnBg} fg={c.warnFg}>ຮັບໄດ້ສູງສຸດ {room.maxOccupancy} ຄົນ</Pill>
-          ) : tooShort ? (
+          {tooShort ? (
             <Pill bg={c.warnBg} fg={c.warnFg}>ຕ້ອງພັກຢ່າງໜ້ອຍ {room.minNights} ຄືນ</Pill>
           ) : soldOut ? (
             <Pill bg={c.neutralBg} fg={c.neutralFg}>ເຕັມໃນວັນທີ່ເລືອກ</Pill>

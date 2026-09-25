@@ -26,10 +26,11 @@ export class CreateBookingDto {
   @IsISO8601()
   checkOut!: string;
 
+  /** Not a capacity rule — only keeps the value inside the `int` column. */
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(30)
+  @Max(100000)
   guests!: number;
 
   @IsOptional()
@@ -76,10 +77,11 @@ export class WalkInDto {
   @IsISO8601()
   checkOut!: string;
 
+  /** Not a capacity rule — only keeps the value inside the `int` column. */
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(30)
+  @Max(100000)
   guests!: number;
 
   @IsOptional()
