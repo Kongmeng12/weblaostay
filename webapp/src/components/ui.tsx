@@ -161,16 +161,18 @@ export function Card({
 }
 
 export function Section({
+  id,
   title,
   right,
   children,
 }: {
+  id?: string;
   title: string;
   right?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section style={{ marginBottom: 26 }}>
+    <section id={id} style={{ marginBottom: 26 }}>
       <div
         style={{
           display: 'flex',

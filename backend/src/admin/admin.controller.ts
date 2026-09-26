@@ -147,6 +147,15 @@ class ListReviewsDto extends PaginationDto {
   @IsOptional()
   @IsIn(REVIEW_SORTS)
   sort?: ReviewSort;
+
+  /**
+   * `true`: only reviews with an open hide request (a pending report), which
+   * is what the Reviews page's "ລໍກວດ" tab lists. No review is ever put in
+   * the `pending` status itself, so filtering on that showed nothing.
+   */
+  @IsOptional()
+  @IsIn(['true', '1'])
+  awaiting?: string;
 }
 
 class RejectDto {
@@ -1034,9 +1043,12 @@ export class AdminController {
 
   @Get('reviews/counts')
   async reviewCounts() {
-    const [rows, average] = await Promise.all([
+    const [rows, average, awaiting] = await Promise.all([
       this.prisma.reviews.groupBy({ by: ['status'], _count: true }),
       this.prisma.reviews.aggregate({ _avg: { overall_rating: true } }),
+      this.prisma.reviews.count({
+        where: { review_reports: { some: { status: report_status.pending } } },
+      }),
     ]);
     const byStatus = Object.fromEntries(rows.map((r) => [r.status, r._count]));
 
@@ -1046,6 +1058,7 @@ export class AdminController {
       hidden: byStatus.hidden ?? 0,
       flagged: byStatus.flagged ?? 0,
       pending: byStatus.pending ?? 0,
+      awaiting,
       averageStars: average._avg.overall_rating
         ? Math.round(rateOf(average._avg.overall_rating) * 10) / 10
         : null,
@@ -1087,6 +1100,9 @@ export class AdminController {
       ...(query.status ? { status: query.status } : {}),
       ...(query.propertyId ? { property_id: BigInt(query.propertyId) } : {}),
       ...(query.stars ? { overall_rating: { gte: query.stars, lt: query.stars + 1 } } : {}),
+      ...(query.awaiting
+        ? { review_reports: { some: { status: report_status.pending } } }
+        : {}),
       ...(term
         ? {
             OR: [
@@ -1120,7 +1136,21 @@ export class AdminController {
         include: {
           properties: { select: { property_name: true } },
           users: { include: { user_profiles: { select: { full_name: true } } } },
-          _count: { select: { review_reports: { where: { status: report_status.pending } } } },
+          // The open requests themselves, so the moderator can decide from
+          // the card: who asked, why, and in their own words.
+          review_reports: {
+            where: { status: report_status.pending },
+            orderBy: { created_at: 'asc' },
+            select: {
+              report_id: true,
+              reason: true,
+              detail: true,
+              created_at: true,
+              users_review_reports_reported_byTousers: {
+                select: { email: true, role: true, user_profiles: { select: { full_name: true } } },
+              },
+            },
+          },
         },
       }),
       this.prisma.reviews.count({ where }),
@@ -1135,7 +1165,18 @@ export class AdminController {
         property: r.properties.property_name,
         guest: r.users.user_profiles?.full_name ?? '—',
         status: r.status,
-        reports: r._count.review_reports,
+        reports: r.review_reports.length,
+        requests: r.review_reports.map((rr) => {
+          const by = rr.users_review_reports_reported_byTousers;
+          return {
+            id: rr.report_id.toString(),
+            reason: rr.reason,
+            detail: rr.detail,
+            reportedBy: by.user_profiles?.full_name ?? by.email,
+            reportedByRole: by.role,
+            createdAt: rr.created_at,
+          };
+        }),
         createdAt: r.created_at,
       })),
       total,

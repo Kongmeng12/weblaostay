@@ -267,7 +267,19 @@ export interface ReviewRow {
   guest: string;
   status: string;
   reports: number;
+  /** Open hide requests on this review, oldest first. */
+  requests: ReviewHideRequest[];
   createdAt: string | null;
+}
+
+/** A pending report on a review, as shown in the Reviews page's "ລໍກວດ" tab. */
+export interface ReviewHideRequest {
+  id: string;
+  reason: ReportReason;
+  detail: string | null;
+  reportedBy: string;
+  reportedByRole: 'CUSTOMER' | 'PARTNER' | 'ADMIN';
+  createdAt: string;
 }
 
 /** `GET /admin/reviews/properties` — feeds the property filter dropdown. */

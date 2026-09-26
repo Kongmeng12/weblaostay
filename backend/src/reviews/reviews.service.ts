@@ -166,12 +166,15 @@ export class ReviewsService {
     // Only when the host answers — a guest replying to their own review does
     // not need telling about it.
     if (isHost) {
+      // Points at the property, not the review itself — no client has a route
+      // for a bare review id, but every client can already open a property's
+      // reviews tab, which is where the guest will see this reply appear.
       await this.notifications.send(null, {
         userId: review.customer_id,
         templateCode: 'review_replied',
         vars: { property: review.properties.property_name },
-        referenceType: 'review',
-        referenceId: reviewId,
+        referenceType: 'property',
+        referenceId: review.property_id,
       });
     }
 

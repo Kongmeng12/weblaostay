@@ -443,6 +443,13 @@ export interface AppNotification {
   type: string;
   isRead: boolean;
   createdAt: string | null;
+  /** What clicking this notification should open — `booking`, `conversation`
+   * or `property` (a review reply has no page of its own; this lands on the
+   * property's reviews tab). `referenceId` is that thing's id. Same taxonomy
+   * as the Flutter apps' `NotificationItem`/`AppNotification` — every client
+   * reads the same backend feed. */
+  referenceType: string | null;
+  referenceId: string | null;
 }
 
 export interface NotificationFeed {

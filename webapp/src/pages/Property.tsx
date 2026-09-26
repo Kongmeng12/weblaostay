@@ -1,5 +1,5 @@
-import { lazy, Suspense, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
@@ -43,6 +43,7 @@ import { ReportReview } from '../components/ReportReview';
 
 export function PropertyPage() {
   const { id = '' } = useParams();
+  const location = useLocation();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -113,6 +114,14 @@ export function PropertyPage() {
       { replace: true },
     );
   }
+
+  // A notification about a review reply links here with `#reviews` — once the
+  // page has loaded, land the guest on that section instead of the top.
+  useEffect(() => {
+    if (location.hash === '#reviews' && query.data) {
+      document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [location.hash, query.data]);
 
   if (query.isLoading) return <Loading />;
   if (query.isError) {
@@ -373,7 +382,7 @@ export function PropertyPage() {
         <LocationSection property={p} />
 
         {p.reviews.length > 0 && (
-          <Section title={`ຮີວິວ (${p.reviewCount})`}>
+          <Section id="reviews" title={`ຮີວິວ (${p.reviewCount})`}>
             <div style={{ display: 'grid', gap: 12 }}>
               {p.reviews.map((r) => (
                 <Card key={r.id}>

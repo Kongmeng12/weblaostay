@@ -360,6 +360,14 @@ export class PartnerController {
         include: {
           properties: { select: { property_name: true } },
           users: { include: { user_profiles: { select: { full_name: true } } } },
+          // This partner's latest hide request, so the list can say it is
+          // waiting for an admin or how it was settled.
+          review_reports: {
+            where: { reported_by: user.userId },
+            orderBy: { created_at: 'desc' },
+            take: 1,
+            select: { status: true, reason: true, created_at: true },
+          },
         },
       }),
       this.prisma.reviews.aggregate({
@@ -378,6 +386,13 @@ export class PartnerController {
         property: r.properties.property_name,
         guest: r.users.user_profiles?.full_name ?? '—',
         createdAt: r.created_at,
+        hideRequest: r.review_reports[0]
+          ? {
+              status: r.review_reports[0].status,
+              reason: r.review_reports[0].reason,
+              createdAt: r.review_reports[0].created_at,
+            }
+          : null,
       })),
       total: agg._count,
       averageStars: agg._avg.overall_rating
