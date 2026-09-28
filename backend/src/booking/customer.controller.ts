@@ -15,6 +15,7 @@ import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { booking_status, user_role } from '@prisma/client';
 import { BookingService } from './booking.service';
 import { BookingDocumentsService, type DownloadableFile } from './documents/booking-documents.service';
+import { CheckinQrService, CHECK_IN_QR_STATUSES } from './checkin-qr.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CurrentUser, Roles, type AuthedUser } from '../common/decorators';
@@ -47,6 +48,7 @@ export class CustomerController {
   constructor(
     private readonly bookings: BookingService,
     private readonly documents: BookingDocumentsService,
+    private readonly checkinQr: CheckinQrService,
     private readonly prisma: PrismaService,
     // `notifications_` because `notifications` is already a route handler here.
     private readonly notifications_: NotificationsService,
@@ -128,8 +130,13 @@ export class CustomerController {
   }
 
   @Get('bookings/:id')
-  findOne(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
-    return this.bookings.findOne(BigInt(id), user.userId);
+  async findOne(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
+    const booking = await this.bookings.findOne(BigInt(id), user.userId);
+    return {
+      ...booking,
+      // The signed check-in QR — only while there is a check-in still to do.
+      checkInQr: CHECK_IN_QR_STATUSES.has(booking.status) ? this.checkinQr.urlFor(booking.id) : null,
+    };
   }
 
   /** Booking confirmation + payment receipt, PDF/A-2b. Paid or cancelled bookings only. */

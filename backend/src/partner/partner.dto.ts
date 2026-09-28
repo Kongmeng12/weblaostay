@@ -243,3 +243,11 @@ export class BankAccountDto {
   @MaxLength(255)
   accountNumber!: string;
 }
+
+/** What the partner app's camera read off a guest's check-in QR. */
+export class ScanCheckInDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(512)
+  qr!: string;
+}

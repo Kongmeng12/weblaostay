@@ -232,6 +232,8 @@ export interface BookingDetail {
   source: string;
   holdExpiresAt: string | null;
   specialRequest: string | null;
+  /** Signed check-in QR (a URL) — set only while a check-in is still to come. */
+  checkInQr?: string | null;
   createdAt: string | null;
   property: {
     id: string;

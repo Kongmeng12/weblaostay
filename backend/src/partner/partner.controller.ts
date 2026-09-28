@@ -1,5 +1,18 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { user_role } from '@prisma/client';
+import { CheckinQrService } from '../booking/checkin-qr.service';
 import { PartnerService } from './partner.service';
 import { OwnershipService } from './ownership.service';
 import { CalendarService } from './calendar.service';
@@ -14,6 +27,7 @@ import {
   CreateRoomDto,
   DateRangeDto,
   RoomTypeDto,
+  ScanCheckInDto,
   SetInventoryDto,
   SetPriceDto,
   UpdatePartnerProfileDto,
@@ -38,6 +52,7 @@ export class PartnerController {
     private readonly occupancy: CalendarService,
     private readonly bookings: BookingService,
     private readonly own: OwnershipService,
+    private readonly checkinQr: CheckinQrService,
     private readonly prisma: PrismaService,
     // `notifications_` because `notifications` is already a route handler here.
     private readonly notifications_: NotificationsService,
@@ -294,6 +309,31 @@ export class PartnerController {
     const partnerId = this.own.partnerId(user);
     await this.own.assertOwnsBooking(partnerId, BigInt(id));
     return this.bookings.assignRoom(BigInt(id), (dto.roomIds ?? []).map((r) => BigInt(r)));
+  }
+
+  /**
+   * Front-desk check-in by QR: turns a scanned code into the booking it
+   * vouches for, and nothing more. Checking the guest in stays a separate,
+   * deliberate step (PATCH …/status) after the desk has seen their ID — a
+   * scan alone never changes a booking.
+   *
+   * Only a QR this server signed is accepted (see CheckinQrService), so a
+   * printed `STL-…` code or a guessed booking id gets 400; another property's
+   * booking gets the same 404 as one that does not exist.
+   */
+  @Post('check-in/scan')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async scanCheckIn(@CurrentUser() user: AuthedUser, @Body() dto: ScanCheckInDto) {
+    const partnerId = this.own.partnerId(user);
+    const bookingId = this.checkinQr.verify(dto.qr);
+    if (bookingId === null) {
+      throw new BadRequestException(
+        'QR ນີ້ບໍ່ແມ່ນ QR ເຊັກອິນຂອງ PhaPhak · This is not a PhaPhak check-in QR',
+      );
+    }
+    await this.own.assertOwnsBooking(partnerId, bookingId);
+    return { bookingId: bookingId.toString() };
   }
 
   @Patch('bookings/:id/status')

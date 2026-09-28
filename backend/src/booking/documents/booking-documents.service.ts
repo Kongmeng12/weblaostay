@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { payment_status, refund_status } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BookingService } from '../booking.service';
+import { CHECK_IN_QR_STATUSES, CheckinQrService } from '../checkin-qr.service';
 import { renderConfirmationPdf, type DocStatus } from './confirmation-pdf';
 import { buildStayIcs } from './ics';
 
@@ -40,6 +41,7 @@ export class BookingDocumentsService {
     private readonly bookings: BookingService,
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly checkinQr: CheckinQrService,
   ) {}
 
   async confirmationPdf(bookingId: bigint, customerId: bigint): Promise<DownloadableFile> {
@@ -111,6 +113,7 @@ export class BookingDocumentsService {
           }
         : null,
       url: this.tripUrl(b.id),
+      checkInQr: CHECK_IN_QR_STATUSES.has(b.status) ? this.checkinQr.urlFor(b.id) : null,
     });
 
     return { filename: `PhaPhak-${safeCode(b.code)}.pdf`, contentType: 'application/pdf', body };

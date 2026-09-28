@@ -54,6 +54,8 @@ export interface ConfirmationDoc {
   } | null;
   policy: { daysBeforeCheckin: number; penaltyPercent: number; isRefundable: boolean } | null;
   url: string;
+  /** Signed check-in URL for the QR; null once there is no check-in left to do. */
+  checkInQr: string | null;
 }
 
 // Resolved from dist/booking/documents/ (and src/… under ts-node) to the
@@ -213,22 +215,27 @@ export async function renderConfirmationPdf(d: ConfirmationDoc): Promise<Buffer>
   const status = STATUS[d.status];
   doc.font('semi').fontSize(10.5).fillColor(status.color).text(status.label, x0, y);
 
-  // The code alone, not a URL: the front desk types or scans it into its own
-  // search, and a URL would lead nowhere without the guest's sign-in anyway.
-  const qr = QRCode.create(d.code, { errorCorrectionLevel: 'M' });
-  const cells = qr.modules.size;
-  const cell = QR / cells;
-  const qx = x0 + CONTENT_W - QR;
-  doc.save().fillColor(C.ink);
-  for (let r = 0; r < cells; r++) {
-    for (let c = 0; c < cells; c++) {
-      if (qr.modules.get(r, c)) doc.rect(qx + c * cell, blockTop + r * cell, cell, cell);
+  // The signed check-in QR (see CheckinQrService), only while there is a
+  // check-in still to do — a finished or cancelled stay gets none, rather
+  // than a code the front desk would scan only to be refused.
+  if (d.checkInQr) {
+    const qr = QRCode.create(d.checkInQr, { errorCorrectionLevel: 'M' });
+    const cells = qr.modules.size;
+    const cell = QR / cells;
+    const qx = x0 + CONTENT_W - QR;
+    doc.save().fillColor(C.ink);
+    for (let r = 0; r < cells; r++) {
+      for (let c = 0; c < cells; c++) {
+        if (qr.modules.get(r, c)) doc.rect(qx + c * cell, blockTop + r * cell, cell, cell);
+      }
     }
+    doc.fill().restore();
+    doc.font('reg').fontSize(7.5).fillColor(C.sub)
+      .text('ສະແກນຕອນເຊັກອິນ · Scan at check-in', qx - 40, blockTop + QR + 4, { width: QR + 40, align: 'right' });
+    y = Math.max(y + 18, blockTop + QR + 18);
+  } else {
+    y += 24;
   }
-  doc.fill().restore();
-  doc.font('reg').fontSize(7.5).fillColor(C.sub)
-    .text('ສະແດງຕອນເຊັກອິນ · Show at check-in', qx - 40, blockTop + QR + 4, { width: QR + 40, align: 'right' });
-  y = Math.max(y + 18, blockTop + QR + 18);
 
   // ── the stay ──────────────────────────────────────────────────────────────
   sectionTitle('ລາຍລະອຽດການເຂົ້າພັກ · Stay details');

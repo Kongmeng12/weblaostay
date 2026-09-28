@@ -8,6 +8,7 @@ import { CheckoutSweeperService } from './checkout-sweeper.service';
 import { HousekeepingSweeperService } from './housekeeping-sweeper.service';
 import { CustomerController } from './customer.controller';
 import { BookingDocumentsService } from './documents/booking-documents.service';
+import { CheckinQrService } from './checkin-qr.service';
 
 /**
  * The booking domain: pricing, inventory holds, the ledger, and the sweeper
@@ -27,8 +28,10 @@ import { BookingDocumentsService } from './documents/booking-documents.service';
     CheckoutSweeperService,
     HousekeepingSweeperService,
     BookingDocumentsService,
+    CheckinQrService,
   ],
   exports: [
+    CheckinQrService,
     BookingService,
     InventoryService,
     PricingService,

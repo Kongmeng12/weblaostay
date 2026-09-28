@@ -23,6 +23,7 @@ import { SignUpPage } from './pages/SignUp';
 import { ForgotPasswordPage } from './pages/ForgotPassword';
 import { HelpPage, StaticPage } from './pages/Content';
 import { PartnerRegisterPage } from './pages/PartnerRegister';
+import { CheckInQrPage } from './pages/CheckInQr';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +58,8 @@ export default function App() {
               <Route path="help" element={<HelpPage />} />
               <Route path="p/:slug" element={<StaticPage />} />
               <Route path="partner-register" element={<PartnerRegisterPage />} />
+              {/* A check-in QR scanned by an ordinary camera — public, shows no booking data. */}
+              <Route path="c/:token" element={<CheckInQrPage />} />
 
               {/* Everything that touches a real booking. */}
               <Route

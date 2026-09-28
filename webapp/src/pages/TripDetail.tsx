@@ -20,6 +20,7 @@ import {
 } from '../components/ui';
 import type { BookingDetail, CancelResult } from '../lib/types';
 import { useStartConversation } from './Messages';
+import { QrCode } from '../components/QrCode';
 
 /** `refund_status` — what stage the money is at on its way back. */
 const REFUND_STATUS_LABEL: Record<string, string> = {
@@ -327,6 +328,21 @@ export function TripDetailPage() {
               <p style={{ font: f(400, 12, 19), color: c.muted, margin: '10px 0 0' }}>
                 ເງິນຈະຄືນເຂົ້າບັນຊີເດີມພາຍໃນ 3–7 ວັນລັດຖະການ
               </p>
+            </Card>
+          )}
+
+          {b.checkInQr && (
+            <Card>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>QR ເຊັກອິນ</div>
+                <div style={{ display: 'inline-block' }}>
+                  <QrCode value={b.checkInQr} size={184} />
+                </div>
+                <div style={{ font: f(800, 15, 22), color: c.text, marginTop: 8 }}>{b.code}</div>
+                <p style={{ font: f(400, 12.5, 19), color: c.muted, margin: '4px 0 0' }}>
+                  ສະແດງ QR ນີ້ໃຫ້ພະນັກງານຕອນມາຮອດ
+                </p>
+              </div>
             </Card>
           )}
 
