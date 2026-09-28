@@ -35,15 +35,18 @@ npm run dev        # API :3100 + WebAdmin :5173 + ເວັບລູກຄ້າ
 ບັນຊີຕົວຢ່າງ — ທຸກຄົນເຂົ້າຜ່ານ `POST /api/auth/login` ອັນດຽວກັນ,
 ແອັບແຕ່ລະໂຕກວດ `role` ເອງ:
 
-| ອີເມວ | ເປັນໃຜ | ລະຫັດຜ່ານ |
+| ອີເມວ | ເປັນໃຜ | ລະຫັດຜ່ານ (env var) |
 |---|---|---|
-| `amnuay@laostay.la` | super_admin | `LaoStay@2026` |
-| `bounmy@laostay.la` | finance | `LaoStay@2026` |
-| `phonsy@laostay.la` | staff | `LaoStay@2026` |
-| `vintage@laostay.la` | partner (verified) | `Partner@2026` |
-| `homsabay@laostay.la` | partner (verified) | `Partner@2026` |
-| `newapplicant@laostay.la` | partner (ລໍອະນຸມັດ) | `Partner@2026` |
-| `souda.v@gmail.com` | ແຂກ | `Customer@2026` |
+| `amnuay@laostay.la` | super_admin | `DEMO_ADMIN_PASSWORD` |
+| `bounmy@laostay.la` | finance | `DEMO_ADMIN_PASSWORD` |
+| `phonsy@laostay.la` | staff | `DEMO_ADMIN_PASSWORD` |
+| `vintage@laostay.la` | partner (verified) | `DEMO_PARTNER_PASSWORD` |
+| `homsabay@laostay.la` | partner (verified) | `DEMO_PARTNER_PASSWORD` |
+| `newapplicant@laostay.la` | partner (ລໍອະນຸມັດ) | `DEMO_PARTNER_PASSWORD` |
+| `souda.v@gmail.com` | ແຂກ | `DEMO_CUSTOMER_PASSWORD` |
+
+> ລະຫັດຜ່ານບໍ່ຂຽນໄວ້ໃນ repo — ຖາມເພື່ອນຮ່ວມທີມ ແລ້ວໃສ່ໃນ `backend/.env`
+> (ເບິ່ງ `backend/.env.example`). ບັນຊີເຫຼົ່ານີ້ຫ້າມມີລະຫັດດຽວກັນໃນ production.
 
 > **ໝາຍເຫດ port**: ໃຊ້ **3100** ບໍ່ແມ່ນ 3000 ເພາະ 3000 ຖືກໃຊ້ໂດຍໂປຣເຈັກອື່ນໃນເຄື່ອງນີ້.
 > ປ່ຽນໄດ້ທີ່ `backend/.env` (`PORT`) ພ້ອມ proxy ໃນ `webadmin/vite.config.ts`

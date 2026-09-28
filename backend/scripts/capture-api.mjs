@@ -4,6 +4,13 @@ import { writeFile } from 'node:fs/promises';
 const API = 'http://localhost:3100/api';
 const out = {};
 
+// The seeded guest's password — from the shell, never the repo.
+const CUSTOMER_PW = process.env.DEMO_CUSTOMER_PASSWORD;
+if (!CUSTOMER_PW) {
+  console.error('\nMissing DEMO_CUSTOMER_PASSWORD — set it in the shell (see backend/.env.example).\n');
+  process.exit(1);
+}
+
 const call = async (name, path, { token, method = 'GET', body } = {}) => {
   const res = await fetch(API + path, {
     method,
@@ -21,7 +28,7 @@ const call = async (name, path, { token, method = 'GET', body } = {}) => {
 
 const login = await call('auth.login', '/auth/login', {
   method: 'POST',
-  body: { email: 'souda.v@gmail.com', password: 'Customer@2026' },
+  body: { email: 'souda.v@gmail.com', password: CUSTOMER_PW },
 });
 const token = login.accessToken;
 

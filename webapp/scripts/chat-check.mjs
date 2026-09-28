@@ -15,8 +15,15 @@ const BASE = 'http://localhost:5174';
 const API = 'http://localhost:3100/api';
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
-const GUEST = { email: 'souda.v@gmail.com', password: 'Customer@2026' };
-const HOST = { email: 'vintage@phaphak.la', password: 'Partner@2026' };
+// The seeded accounts' passwords — from the shell, never the repo.
+for (const name of ['DEMO_CUSTOMER_PASSWORD', 'DEMO_PARTNER_PASSWORD']) {
+  if (!process.env[name]) {
+    console.error(`\nMissing ${name} — set it in the shell (see backend/.env.example).\n`);
+    process.exit(1);
+  }
+}
+const GUEST = { email: 'souda.v@gmail.com', password: process.env.DEMO_CUSTOMER_PASSWORD };
+const HOST = { email: 'vintage@phaphak.la', password: process.env.DEMO_PARTNER_PASSWORD };
 
 const problems = [];
 const seen = new Set();
@@ -236,7 +243,7 @@ check(
 
 const otherHost = await apiCall('/auth/login', {
   method: 'POST',
-  body: { email: 'homsabay@phaphak.la', password: 'Partner@2026' },
+  body: { email: 'homsabay@phaphak.la', password: HOST.password },
 }).catch(() => null);
 
 if (otherHost?.accessToken) {

@@ -11,7 +11,12 @@ import puppeteer from 'puppeteer-core';
 const BASE = 'http://localhost:5173';
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const EMAIL = 'amnuay@phaphak.la';
-const PASSWORD = 'LaoStay@2026';
+// The seeded admin's password — from the shell, never the repo.
+const PASSWORD = process.env.DEMO_ADMIN_PASSWORD;
+if (!PASSWORD) {
+  console.error('\nMissing DEMO_ADMIN_PASSWORD — set it in the shell (see backend/.env.example).\n');
+  process.exit(1);
+}
 
 /** `drawer` is what the layout is expected to do, not what it does. */
 const DEVICES = [

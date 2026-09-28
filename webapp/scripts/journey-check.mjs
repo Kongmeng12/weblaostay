@@ -13,7 +13,15 @@ const API = 'http://localhost:3100/api';
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 const EMAIL = 'souda.v@gmail.com';
-const PASSWORD = 'Customer@2026';
+// The seeded accounts' passwords — from the shell, never the repo.
+for (const name of ['DEMO_CUSTOMER_PASSWORD', 'DEMO_PARTNER_PASSWORD']) {
+  if (!process.env[name]) {
+    console.error(`\nMissing ${name} — set it in the shell (see backend/.env.example).\n`);
+    process.exit(1);
+  }
+}
+const PASSWORD = process.env.DEMO_CUSTOMER_PASSWORD;
+const PARTNER_PASSWORD = process.env.DEMO_PARTNER_PASSWORD;
 
 const problems = [];
 const seen = new Set();
@@ -86,7 +94,7 @@ const partnerRefused = await page.evaluate(async (api) => {
   const res = await fetch(`${api}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'vintage@phaphak.la', password: 'Partner@2026' }),
+    body: JSON.stringify({ email: 'vintage@phaphak.la', password: PARTNER_PASSWORD }),
   });
   const body = await res.json();
   return body?.user?.role;

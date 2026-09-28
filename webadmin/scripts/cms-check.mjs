@@ -17,7 +17,12 @@ const API = 'http://localhost:3100/api';
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 const EMAIL = 'amnuay@phaphak.la';
-const PASSWORD = 'LaoStay@2026';
+// The seeded admin's password — from the shell, never the repo.
+const PASSWORD = process.env.DEMO_ADMIN_PASSWORD;
+if (!PASSWORD) {
+  console.error('\nMissing DEMO_ADMIN_PASSWORD — set it in the shell (see backend/.env.example).\n');
+  process.exit(1);
+}
 
 const stamp = Date.now();
 const BANNER_TITLE = `ໂປຣໂມຊັນທົດສອບ ${stamp}`;

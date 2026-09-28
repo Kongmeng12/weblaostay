@@ -63,7 +63,7 @@ Content-Type: application/json
 
 ```http
 POST /auth/login
-{ "email": "souda.v@gmail.com", "password": "Customer@2026" }
+{ "email": "souda.v@gmail.com", "password": "<DEMO_CUSTOMER_PASSWORD>" }
 ```
 
 ```json
@@ -647,7 +647,7 @@ final text = raw is List ? raw.join('\n') : raw.toString();
 
 | | |
 |---|---|
-| ລູກຄ້າ | `souda.v@gmail.com` / `Customer@2026` |
+| ລູກຄ້າ | `souda.v@gmail.com` / ລະຫັດໃນ `DEMO_CUSTOMER_PASSWORD` (ຖາມທີມ) |
 | ຈຳລອງການຈ່າຍ | `POST /payments/dev/settle/:paymentId` (ບໍ່ຕ້ອງ token) |
 
 ຂໍ້ມູນທົດສອບມີ 5 ທີ່ພັກ, ຫຼາຍປະເພດຫ້ອງ, ຮີວິວ ແລະ ການຈອງເກົ່າຢູ່ແລ້ວ.

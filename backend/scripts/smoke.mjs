@@ -15,9 +15,9 @@ import path from 'node:path';
 import url from 'node:url';
 
 const BASE = process.env.SMOKE_BASE ?? 'http://localhost:3100/api';
-const ADMIN_PW = 'LaoStay@2026';
-const PARTNER_PW = 'Partner@2026';
-const CUSTOMER_PW = 'Customer@2026';
+
+// The platform's terms with the property — never in a guest's response.
+const PARTNER_TERMS = ['commission', 'commissionRate', 'payout'];
 
 let pass = 0;
 let fail = 0;
@@ -117,6 +117,21 @@ const env = Object.fromEntries(
       return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
     }),
 );
+
+// The seeded demo accounts' passwords. Kept out of the repo: a password
+// written here works on any database it was never rotated on, production
+// included. Read from the shell first, then backend/.env.
+function demoPassword(name) {
+  const value = process.env[name] || env[name];
+  if (!value) {
+    console.error(`\nMissing ${name} — set it in backend/.env or the shell (see .env.example).\n`);
+    process.exit(1);
+  }
+  return value;
+}
+const ADMIN_PW = demoPassword('DEMO_ADMIN_PASSWORD');
+const PARTNER_PW = demoPassword('DEMO_PARTNER_PASSWORD');
+const CUSTOMER_PW = demoPassword('DEMO_CUSTOMER_PASSWORD');
 
 let db;
 async function sql(query, params = []) {
@@ -446,6 +461,11 @@ async function main() {
       body: { ...stay, idempotencyKey: idem },
       check: (b) => (b?.status === 'pending' ? null : `status is ${b?.status}`),
     });
+    if (booking) {
+      const leaked = PARTNER_TERMS.filter((k) => k in booking);
+      if (leaked.length === 0) ok("the guest's booking hides commission and payout");
+      else bad("the guest's booking hides commission and payout", `leaked: ${leaked.join(', ')}`);
+    }
 
     const [afterInv] = await sql(
       `SELECT held_count, booked_count FROM room_inventory
@@ -627,7 +647,11 @@ async function main() {
       await expect('the booking is confirmed after payment', 'GET',
         `/customer/bookings/${paidBooking.id}`, {
           token: CFRESH,
-          check: (b) => (b?.status === 'confirmed' ? null : `status is ${b?.status}`),
+          check: (b) => {
+            if (b?.status !== 'confirmed') return `status is ${b?.status}`;
+            const leaked = PARTNER_TERMS.filter((k) => k in b);
+            return leaked.length === 0 ? null : `leaked to the guest: ${leaked.join(', ')}`;
+          },
         });
 
       // The room does not leave inventory on payment, it changes column: the
