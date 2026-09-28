@@ -7,5 +7,5 @@ dist/
 
 # Photos uploaded at runtime. Local disk is the development store; production
 # points StorageService at object storage instead.
-uploads/
+/uploads/
 .tscheck.tsbuildinfo
