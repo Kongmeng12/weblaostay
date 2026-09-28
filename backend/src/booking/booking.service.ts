@@ -165,7 +165,9 @@ export class BookingService {
           payout_amount: quote.payoutAmount,
           status: booking_status.pending,
           hold_expires_at: new Date(Date.now() + settings.hold_ttl_minutes * 60_000),
-          special_request: dto.specialRequest ?? null,
+          // Whitespace-only is stored as "no request", so no client has to
+          // tell a blank note from a real one.
+          special_request: dto.specialRequest?.trim() || null,
           idempotency_key: dto.idempotencyKey ?? null,
           // Kept even if the partner later moves them: the dashboard counts
           // who made the choice, not who holds the room now.
@@ -367,7 +369,9 @@ export class BookingService {
       .reduce((sum, p) => sum + p.amount, 0n);
 
     return {
-      ...toBookingView(booking),
+      // `customerId` is only ever passed from the customer's own routes
+      // (GET/POST /customer/bookings…), so a scoped read is a guest read.
+      ...(customerId ? toGuestBookingView(booking) : toBookingView(booking)),
       property: {
         id: booking.properties.property_id.toString(),
         name: booking.properties.property_name,
@@ -925,8 +929,27 @@ type BookingRow = {
   created_at: Date;
 };
 
-/** Money leaves as numbers, ids as strings. See common/money.ts for why. */
+/**
+ * The partner/admin view: the guest view plus how the guest's money splits
+ * between the platform and the property. Money leaves as numbers, ids as
+ * strings. See common/money.ts for why.
+ */
 export function toBookingView(b: BookingRow) {
+  return {
+    ...toGuestBookingView(b),
+    commissionRate: rateOf(b.commission_rate),
+    commission: kipOf(b.commission_amount),
+    payout: kipOf(b.payout_amount),
+  };
+}
+
+/**
+ * What the guest may see of their own booking. An allowlist on purpose:
+ * commission and payout are the platform's commercial terms with the
+ * property, not the guest's business, and a column added to `BookingRow`
+ * later must be opted in here rather than leak by default.
+ */
+export function toGuestBookingView(b: BookingRow) {
   return {
     id: b.booking_id.toString(),
     code: b.booking_code,
@@ -940,9 +963,6 @@ export function toBookingView(b: BookingRow) {
     serviceFee: kipOf(b.service_fee),
     cleaningFee: kipOf(b.cleaning_fee),
     total: kipOf(b.total_amount),
-    commissionRate: rateOf(b.commission_rate),
-    commission: kipOf(b.commission_amount),
-    payout: kipOf(b.payout_amount),
     status: b.status,
     source: b.source,
     holdExpiresAt: b.hold_expires_at,

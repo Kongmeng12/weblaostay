@@ -466,6 +466,9 @@ export class PartnerService {
         status: b.status,
         source: b.source,
         paymentStatus: b.payments[0]?.status ?? null,
+        // So the list can flag a booking the front desk has to act on
+        // (late arrival, extra bed) without opening each one.
+        specialRequest: b.special_request?.trim() || null,
         createdAt: b.created_at,
       })),
       total,
