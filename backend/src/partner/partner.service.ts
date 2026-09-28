@@ -5,7 +5,7 @@ import { InventoryService } from '../booking/inventory.service';
 import { OwnershipService } from './ownership.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { kipOf, rateOf, toKip } from '../common/money';
-import { addDaysUtc, parseDateRange, todayUtc } from '../common/dates';
+import { addDaysUtc, parseDateRange, startOfWeekUtc, todayInLaos } from '../common/dates';
 import { REVENUE_STATUSES } from '../common/enums';
 import type {
   CreateRoomDto,
@@ -563,9 +563,12 @@ export class PartnerService {
 
   async dashboard(partnerId: bigint, userId: bigint) {
     const propertyIds = await this.own.propertyIds(partnerId);
-    const today = todayUtc();
+    // The front desk's day, not UTC's: before 07:00 in Vientiane the UTC day
+    // is still yesterday, and the whole screen used to show yesterday.
+    const today = todayInLaos();
     const tomorrow = addDaysUtc(today, 1);
-    const weekAgo = addDaysUtc(today, -7);
+    // Calendar week, Monday to today — the same Mon–Sun periods payouts use.
+    const weekStart = startOfWeekUtc(today);
 
     if (!propertyIds.length) {
       return {
@@ -580,7 +583,8 @@ export class PartnerService {
         roomsToAssign: { count: 0, items: [] },
         pendingBookings: 0,
         occupancy: { soldTonight: 0, capacity: 0, percent: 0 },
-        week: { bookings: 0, gross: 0, commission: 0, net: 0 },
+        week: { from: weekStart, bookings: 0, gross: 0, commission: 0, net: 0 },
+        revenueToday: { bookings: 0, gross: 0, net: 0 },
         payoutPending: { count: 0, amount: 0 },
         unreadNotifications: await this.notifications.unreadCount(userId),
       };
@@ -614,8 +618,10 @@ export class PartnerService {
       toAssign,
       toAssignCount,
     ] = await Promise.all([
+        // Paid bookings only: an unpaid hold is not an arrival yet, and most
+        // of them lapse.
         this.prisma.bookings.findMany({
-          where: { ...scope, check_in: today, status: { not: booking_status.cancelled } },
+          where: { ...scope, check_in: today, status: { in: REVENUE_STATUSES } },
           include: {
             users: { include: { user_profiles: { select: { full_name: true } } } },
             booking_items: {
@@ -629,18 +635,37 @@ export class PartnerService {
           },
           orderBy: { booking_id: 'asc' },
         }),
+        // Everyone leaving today, whether or not they have gone yet. Counting
+        // only `staying` made the number drop as each guest checked out.
         this.prisma.bookings.count({
-          where: { ...scope, check_out: today, status: booking_status.staying },
+          where: { ...scope, check_out: today, status: { in: REVENUE_STATUSES } },
         }),
-        this.prisma.bookings.count({ where: { ...scope, status: booking_status.staying } }),
+        // In the property tonight, by date. Most partners never press
+        // "check in" (and the sweeper completes a stay without it), so
+        // counting status `staying` alone left this at zero.
+        this.prisma.bookings.count({
+          where: {
+            ...scope,
+            check_in: { lte: today },
+            check_out: { gt: today },
+            status: { in: [booking_status.confirmed, booking_status.staying] },
+          },
+        }),
         this.prisma.bookings.count({ where: { ...scope, status: booking_status.pending } }),
+        // Revenue counts when the stay ends, as on the Reports screen, so the
+        // two always agree.
         this.prisma.bookings.findMany({
           where: {
             ...scope,
             status: { in: REVENUE_STATUSES },
-            check_out: { gte: weekAgo, lt: tomorrow },
+            check_out: { gte: weekStart, lt: tomorrow },
           },
-          select: { total_amount: true, commission_amount: true, payout_amount: true },
+          select: {
+            check_out: true,
+            total_amount: true,
+            commission_amount: true,
+            payout_amount: true,
+          },
         }),
         this.prisma.room_inventory.aggregate({
           where: { room_types: { property_id: { in: propertyIds } }, date: today },
@@ -670,6 +695,7 @@ export class PartnerService {
 
     const totalRooms = capacity._sum.total_count ?? 0;
     const sold = soldTonight._sum.booked_count ?? 0;
+    const todayRows = weekRows.filter((b) => b.check_out.getTime() === today.getTime());
 
     const arrivalViews = arrivals.map((b) => {
       const item = b.booking_items[0];
@@ -723,10 +749,16 @@ export class PartnerService {
         percent: totalRooms ? Math.round((sold / totalRooms) * 100) : 0,
       },
       week: {
+        from: weekStart,
         bookings: weekRows.length,
         gross: kipOf(weekRows.reduce((s, b) => s + b.total_amount, 0n)),
         commission: kipOf(weekRows.reduce((s, b) => s + b.commission_amount, 0n)),
         net: kipOf(weekRows.reduce((s, b) => s + b.payout_amount, 0n)),
+      },
+      revenueToday: {
+        bookings: todayRows.length,
+        gross: kipOf(todayRows.reduce((s, b) => s + b.total_amount, 0n)),
+        net: kipOf(todayRows.reduce((s, b) => s + b.payout_amount, 0n)),
       },
       payoutPending: {
         count: payoutAgg._count,
