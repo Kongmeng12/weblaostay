@@ -418,6 +418,27 @@ GET /customer/payments/:id
 > ກາຍເປັນ `partially_refunded` — ຖ້າແອັບບວກສະເພາະອັນທີ່ `status == "paid"` ຈະໄດ້ 0
 > ແລ້ວສະແດງວ່າ "ຍັງບໍ່ຈ່າຍ" ທັງທີ່ຈ່າຍໄປແລ້ວ. **ອັນນີ້ເປັນບັກຈິງທີ່ເຄີຍເກີດຢູ່ເວັບ.**
 
+### ດາວໂຫຼດໃບຢືນຢັນ ແລະ ປະຕິທິນ
+
+```http
+GET /customer/bookings/:id/confirmation   → application/pdf
+GET /customer/bookings/:id/calendar       → text/calendar; charset=utf-8
+```
+
+| | ໃບຢືນຢັນ (PDF) | ປະຕິທິນ (.ics) |
+|---|---|---|
+| ມາດຕະຖານ | PDF/A-2b (ISO 19005-2), A4, ຝັງ font ລາວ | iCalendar (RFC 5545), event ໝົດມື້ |
+| ສະຖານະທີ່ໄດ້ | `confirmed` `staying` `completed` `no_show` `cancelled` | `confirmed` `staying` |
+| ສະຖານະອື່ນ | `409` ພ້ອມຂໍ້ຄວາມ | `409` ພ້ອມຂໍ້ຄວາມ |
+| ຊື່ໄຟລ໌ | `PhaPhak-<code>.pdf` (ບໍ່ມີຊື່ແຂກ) | `PhaPhak-<code>.ics` |
+
+- ຕ້ອງມີ token ຄືກັບ endpoint ອື່ນ — ການຈອງຂອງຄົນອື່ນໄດ້ `404`. ລິ້ງທຳມະດາ (`<a href>`)
+  ຈຶ່ງໃຊ້ບໍ່ໄດ້: ດຶງດ້ວຍ token ແລ້ວຍື່ນ bytes ໃຫ້ OS (share sheet ໃນແອັບ, download ໃນເວັບ).
+- `Cache-Control: private, no-store` — ມີຊື່, ເບີໂທ ແລະ ການຈ່າຍເງິນຂອງແຂກ.
+- PDF ພິມສອງພາສາ (ລາວ · English), ວັນທີສະກົດເປັນຄຳ, ເງິນມີລະຫັດ `LAK`, QR ຂອງລະຫັດຈອງ,
+  ແລະ watermark `CANCELLED` ຖ້າຖືກຍົກເລີກ. **ບໍ່ແມ່ນໃບເກັບເງິນອາກອນ.**
+- `.ics` ມີແຈ້ງເຕືອນ 09:00 (ເວລາລາວ) ມື້ກ່ອນເຂົ້າພັກ, ທີ່ຢູ່, `GEO` ແລະ ລິ້ງໄປໜ້າການຈອງ.
+
 ### ຍົກເລີກ
 
 ```http

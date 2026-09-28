@@ -7,6 +7,7 @@ import { HoldSweeperService } from './hold-sweeper.service';
 import { CheckoutSweeperService } from './checkout-sweeper.service';
 import { HousekeepingSweeperService } from './housekeeping-sweeper.service';
 import { CustomerController } from './customer.controller';
+import { BookingDocumentsService } from './documents/booking-documents.service';
 
 /**
  * The booking domain: pricing, inventory holds, the ledger, and the sweeper
@@ -25,6 +26,7 @@ import { CustomerController } from './customer.controller';
     HoldSweeperService,
     CheckoutSweeperService,
     HousekeepingSweeperService,
+    BookingDocumentsService,
   ],
   exports: [
     BookingService,

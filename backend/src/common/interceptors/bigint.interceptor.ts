@@ -1,4 +1,4 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, StreamableFile } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
@@ -15,6 +15,9 @@ function serialize(value: unknown, seen = new WeakSet<object>()): unknown {
   if (typeof value === 'bigint') return value.toString();
   if (value === null || typeof value !== 'object') return value;
   if (value instanceof Date) return value;
+  // A file download (PDF, .ics) is bytes, not JSON: walking it would turn the
+  // StreamableFile into a plain object and send that instead of the file.
+  if (value instanceof StreamableFile || Buffer.isBuffer(value)) return value;
 
   // Prisma Decimal and anything else that knows how to render itself
   const maybeDecimal = value as { constructor?: { name?: string }; toString(): string };

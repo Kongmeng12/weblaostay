@@ -1,8 +1,20 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  StreamableFile,
+} from '@nestjs/common';
 import { ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { booking_status, user_role } from '@prisma/client';
 import { BookingService } from './booking.service';
+import { BookingDocumentsService, type DownloadableFile } from './documents/booking-documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CurrentUser, Roles, type AuthedUser } from '../common/decorators';
@@ -34,6 +46,7 @@ class UpdateProfileDto {
 export class CustomerController {
   constructor(
     private readonly bookings: BookingService,
+    private readonly documents: BookingDocumentsService,
     private readonly prisma: PrismaService,
     // `notifications_` because `notifications` is already a route handler here.
     private readonly notifications_: NotificationsService,
@@ -117,6 +130,20 @@ export class CustomerController {
   @Get('bookings/:id')
   findOne(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
     return this.bookings.findOne(BigInt(id), user.userId);
+  }
+
+  /** Booking confirmation + payment receipt, PDF/A-2b. Paid or cancelled bookings only. */
+  @Get('bookings/:id/confirmation')
+  @Header('Cache-Control', 'private, no-store')
+  async confirmation(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
+    return asDownload(await this.documents.confirmationPdf(BigInt(id), user.userId));
+  }
+
+  /** The stay as an iCalendar (RFC 5545) event. Confirmed or in-progress stays only. */
+  @Get('bookings/:id/calendar')
+  @Header('Cache-Control', 'private, no-store')
+  async calendar(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
+    return asDownload(await this.documents.calendarIcs(BigInt(id), user.userId));
   }
 
   @Post('bookings/:id/cancel')
@@ -341,4 +368,17 @@ export class CustomerController {
   markRead(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
     return this.notifications_.markRead(user.userId, BigInt(id));
   }
+}
+
+/**
+ * A file the browser or app should save, not render inline. The filename is
+ * ASCII by construction (BookingDocumentsService keeps it to [A-Za-z0-9-]), so
+ * the plain RFC 6266 `filename=` form needs no encoding.
+ */
+function asDownload(file: DownloadableFile): StreamableFile {
+  return new StreamableFile(file.body, {
+    type: file.contentType,
+    disposition: `attachment; filename="${file.filename}"`,
+    length: file.body.length,
+  });
 }

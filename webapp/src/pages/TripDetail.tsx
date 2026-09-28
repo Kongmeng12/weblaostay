@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, downloadFile } from '../lib/api';
 import { c, f, radius, space, BOOKING_STATUS_PILL, PAYMENT_STATUS_PILL, pillFor, type as t } from '../theme';
 import { countdown, kip, laoDateFull, laoDateTime, mapsUrl } from '../lib/format';
 import {
@@ -28,6 +28,66 @@ const REFUND_STATUS_LABEL: Record<string, string> = {
   completed: 'ຄືນສຳເລັດ',
   failed: 'ລົ້ມເຫຼວ',
 };
+
+/** Paid bookings get a confirmation; cancelled ones, one showing the refund. */
+const PDF_STATUSES = ['confirmed', 'staying', 'completed', 'no_show', 'cancelled'];
+/** Only a stay still ahead or under way belongs in a calendar. */
+const CALENDAR_STATUSES = ['confirmed', 'staying'];
+
+/**
+ * The booking confirmation (PDF) and the stay as a calendar file (.ics) — the
+ * same backend-generated documents the mobile app offers. Nothing for an
+ * unpaid booking, which the API would refuse anyway.
+ */
+function BookingDownloads({ booking }: { booking: BookingDetail }) {
+  const [busy, setBusy] = useState<'pdf' | 'ics' | null>(null);
+  const [error, setError] = useState<unknown>(null);
+
+  const canPdf = PDF_STATUSES.includes(booking.status);
+  const canIcs = CALENDAR_STATUSES.includes(booking.status);
+  if (!canPdf && !canIcs) return null;
+
+  // The code only — no guest name in a file that may be forwarded.
+  const base = `PhaPhak-${booking.code.replace(/[^A-Za-z0-9-]/g, '')}`;
+
+  const save = async (kind: 'pdf' | 'ics', path: string, filename: string) => {
+    setBusy(kind);
+    setError(null);
+    try {
+      await downloadFile(path, filename);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      {canPdf && (
+        <Button
+          variant="outline"
+          full
+          disabled={busy !== null}
+          onClick={() => void save('pdf', `/customer/bookings/${booking.id}/confirmation`, `${base}.pdf`)}
+        >
+          {busy === 'pdf' ? <Spinner size={16} /> : '⬇'} ໃບຢືນຢັນການຈອງ (PDF)
+        </Button>
+      )}
+      {canIcs && (
+        <Button
+          variant="outline"
+          full
+          disabled={busy !== null}
+          onClick={() => void save('ics', `/customer/bookings/${booking.id}/calendar`, `${base}.ics`)}
+        >
+          {busy === 'ics' ? <Spinner size={16} /> : '📅'} ເພີ່ມໃສ່ປະຕິທິນ
+        </Button>
+      )}
+      {error !== null && <ErrorNote error={error} />}
+    </>
+  );
+}
 
 export function TripDetailPage() {
   const { id = '' } = useParams();
@@ -278,6 +338,8 @@ export function TripDetailPage() {
           >
             💬 ຖາມທີ່ພັກ
           </Button>
+
+          <BookingDownloads booking={b} />
 
           {canCancel && (
             <Button variant="danger" full onClick={() => setCancelling(true)}>

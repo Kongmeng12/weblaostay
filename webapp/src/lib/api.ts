@@ -123,6 +123,34 @@ interface RequestOptions {
 }
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const res = await authedFetch(path, opts);
+  if (!res.ok) throw await readError(res);
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+/**
+ * Saves a file the API generates (booking PDF, .ics) to the visitor's device.
+ * Fetched with the guest's token like any other call — a plain link could not
+ * carry it — then handed to the browser as a normal download.
+ */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const res = await authedFetch(path, {});
+  if (!res.ok) throw await readError(res);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoked a moment later: doing it synchronously can cancel the download
+  // before Safari has started it.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** The fetch behind every call: the token, and one refresh-and-retry on 401. */
+async function authedFetch(path: string, opts: RequestOptions): Promise<Response> {
   const { method = 'GET', body, anonymous = false } = opts;
 
   const send = async (): Promise<Response> => {
@@ -155,9 +183,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     onAuthLost();
   }
 
-  if (!res.ok) throw await readError(res);
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return res;
 }
 
 export const api = {
