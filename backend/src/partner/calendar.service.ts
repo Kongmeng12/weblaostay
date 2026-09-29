@@ -9,6 +9,8 @@ interface StayRow {
   booking_id: bigint;
   booking_code: string;
   booking_status: string;
+  /** `booking_source`: `app` or `walk_in`. */
+  source: string;
   check_in: Date;
   check_out: Date;
   nights: number;
@@ -35,12 +37,15 @@ interface DayBooking {
   guests: number;
   status: string;
   paymentStatus: string | null;
+  /** How it was booked: `app` (online) or `walk_in` (at the desk). */
+  source: string;
 }
 
 function toDayBooking(r: StayRow): DayBooking {
   return {
     bookingId: r.booking_id.toString(),
     code: r.booking_code,
+    source: r.source,
     guestName: r.guest_name ?? 'Guest',
     guestPhone: r.guest_phone,
     checkIn: r.check_in,
@@ -177,6 +182,7 @@ export class CalendarService {
       }),
       this.prisma.$queryRaw<StayRow[]>`
         SELECT b.booking_id, b.booking_code, b.status::text AS booking_status,
+               b.source::text AS source,
                b.check_in, b.check_out, b.nights, b.total_guests,
                COALESCE(bg.full_name, up.full_name) AS guest_name,
                u.phone AS guest_phone,
