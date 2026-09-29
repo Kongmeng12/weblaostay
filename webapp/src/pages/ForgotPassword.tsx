@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { requestPasswordReset, resetPassword } from '../lib/api';
 import { c, f, radius, type as t } from '../theme';
 import { Button, ErrorNote, Field, inputStyle, PasswordInput, Spinner } from '../components/ui';
-import { looksLikeEmail } from '../lib/validation';
+import { looksLikeEmail, NEW_PASSWORD_HINT, NEW_PASSWORD_PATTERN } from '../lib/validation';
 import { AuthShell } from './SignIn';
 
 /**
@@ -111,12 +111,14 @@ export function ForgotPasswordPage() {
             </Field>
           )}
 
-          <Field label="ລະຫັດຜ່ານໃໝ່" hint="ຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ">
+          <Field label="ລະຫັດຜ່ານໃໝ່" hint={NEW_PASSWORD_HINT}>
             <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
+              pattern={NEW_PASSWORD_PATTERN}
+              title={NEW_PASSWORD_HINT}
               autoComplete="new-password"
             />
           </Field>

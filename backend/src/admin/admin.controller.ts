@@ -25,6 +25,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -57,6 +58,7 @@ import { kipOf, rateOf } from '../common/money';
 import { isoDayUtc } from '../common/dates';
 import { PaginationDto, paged } from '../common/dto/pagination.dto';
 import { CancelBookingDto, SetBookingStatusDto } from '../booking/booking.dto';
+import { NEW_PASSWORD_MESSAGE, NEW_PASSWORD_PATTERN } from '../auth/dto/auth.dto';
 
 class ListPartnersDto extends PaginationDto {
   @IsOptional()
@@ -258,6 +260,7 @@ class CreateAdminDto {
 
   @IsString()
   @MinLength(8)
+  @Matches(NEW_PASSWORD_PATTERN, { message: NEW_PASSWORD_MESSAGE })
   @MaxLength(128)
   password!: string;
 

@@ -3,7 +3,12 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { c, f, type as t, TAP } from '../theme';
 import { Button, ErrorNote, Field, inputStyle, PasswordInput, Spinner } from '../components/ui';
-import { looksLikeEmail, looksLikePhone } from '../lib/validation';
+import {
+  looksLikeEmail,
+  looksLikePhone,
+  NEW_PASSWORD_HINT,
+  NEW_PASSWORD_PATTERN,
+} from '../lib/validation';
 import { AuthShell } from './SignIn';
 
 export function SignUpPage() {
@@ -100,12 +105,14 @@ export function SignUpPage() {
           />
         </Field>
 
-        <Field label="ລະຫັດຜ່ານ" hint="ຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ">
+        <Field label="ລະຫັດຜ່ານ" hint={NEW_PASSWORD_HINT}>
           <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
+            pattern={NEW_PASSWORD_PATTERN}
+            title={NEW_PASSWORD_HINT}
             autoComplete="new-password"
             placeholder="••••••••"
           />

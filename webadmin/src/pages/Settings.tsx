@@ -667,7 +667,14 @@ function CreateAdminDialog({
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('staff');
 
-  const valid = email.includes('@') && name.trim().length >= 2 && password.length >= 8;
+  // Same rule the API enforces for a new password: 8+ characters, a letter
+  // and a digit.
+  const valid =
+    email.includes('@') &&
+    name.trim().length >= 2 &&
+    password.length >= 8 &&
+    /\p{L}/u.test(password) &&
+    /\p{Nd}/u.test(password);
 
   return (
     <Modal
@@ -707,7 +714,7 @@ function CreateAdminDialog({
             style={inputStyle}
           />
         </Field>
-        <Field label="ລະຫັດຜ່ານ" hint="ຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ">
+        <Field label="ລະຫັດຜ່ານ" hint="ຢ່າງໜ້ອຍ 8 ຕົວ · ມີທັງຕົວອັກສອນ ແລະ ຕົວເລກ">
           <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}

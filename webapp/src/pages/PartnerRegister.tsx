@@ -4,7 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { api, request } from '../lib/api';
 import { c, f, radius, shadow, type as t, TAP, PROPERTY_TYPE_LABEL } from '../theme';
 import { Button, ErrorNote, Field, Page, PasswordInput, Spinner, inputStyle } from '../components/ui';
-import { looksLikeEmail, looksLikePhone } from '../lib/validation';
+import {
+  looksLikeEmail,
+  looksLikePhone,
+  NEW_PASSWORD_HINT,
+  NEW_PASSWORD_PATTERN,
+} from '../lib/validation';
 import type { District, Province } from '../lib/types';
 
 const TYPES = Object.entries(PROPERTY_TYPE_LABEL);
@@ -178,12 +183,14 @@ export function PartnerRegisterPage() {
             </Field>
           </div>
 
-          <Field label="ລະຫັດຜ່ານ" hint="ຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ">
+          <Field label="ລະຫັດຜ່ານ" hint={NEW_PASSWORD_HINT}>
             <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
+              pattern={NEW_PASSWORD_PATTERN}
+              title={NEW_PASSWORD_HINT}
               autoComplete="new-password"
               placeholder="••••••••"
             />

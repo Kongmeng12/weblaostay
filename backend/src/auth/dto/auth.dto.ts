@@ -20,6 +20,17 @@ import { otp_purpose, property_type } from '@prisma/client';
 const PHONE_PATTERN = /^\+?[0-9][0-9\s-]{5,19}$/;
 const PHONE_MESSAGE = 'ເບີໂທບໍ່ຖືກຕ້ອງ · Invalid phone number';
 
+/**
+ * The rule for a *new* password: at least one letter (any script, so Lao
+ * counts) and at least one digit, on top of the 8-character minimum. The
+ * apps show the same three rules as a live checklist. Login keeps only the
+ * length check, so accounts made before this rule can still sign in.
+ */
+export const NEW_PASSWORD_PATTERN = /^(?=.*\p{L})(?=.*\p{Nd}).+$/u;
+export const NEW_PASSWORD_MESSAGE =
+  'ລະຫັດຜ່ານຕ້ອງມີທັງຕົວອັກສອນ ແລະ ຕົວເລກ · Password must contain a letter and a number';
+const NEW_PASSWORD_LENGTH_MESSAGE = 'ລະຫັດຜ່ານຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ · Minimum 8 characters';
+
 export class LoginDto {
   /** Email or phone — whichever the account was found by. */
   @IsString()
@@ -39,7 +50,8 @@ export class RegisterCustomerDto {
   email!: string;
 
   @IsString()
-  @MinLength(8, { message: 'ລະຫັດຜ່ານຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ · Minimum 8 characters' })
+  @MinLength(8, { message: NEW_PASSWORD_LENGTH_MESSAGE })
+  @Matches(NEW_PASSWORD_PATTERN, { message: NEW_PASSWORD_MESSAGE })
   @MaxLength(128)
   password!: string;
 
@@ -74,7 +86,8 @@ export class RegisterPartnerDto {
   email!: string;
 
   @IsString()
-  @MinLength(8, { message: 'ລະຫັດຜ່ານຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ · Minimum 8 characters' })
+  @MinLength(8, { message: NEW_PASSWORD_LENGTH_MESSAGE })
+  @Matches(NEW_PASSWORD_PATTERN, { message: NEW_PASSWORD_MESSAGE })
   @MaxLength(128)
   password!: string;
 
@@ -187,7 +200,8 @@ export class ResetPasswordDto {
   token!: string;
 
   @IsString()
-  @MinLength(8, { message: 'ລະຫັດຜ່ານຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ · Minimum 8 characters' })
+  @MinLength(8, { message: NEW_PASSWORD_LENGTH_MESSAGE })
+  @Matches(NEW_PASSWORD_PATTERN, { message: NEW_PASSWORD_MESSAGE })
   @MaxLength(128)
   password!: string;
 }
@@ -198,7 +212,8 @@ export class ChangePasswordDto {
   currentPassword!: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(8, { message: NEW_PASSWORD_LENGTH_MESSAGE })
+  @Matches(NEW_PASSWORD_PATTERN, { message: NEW_PASSWORD_MESSAGE })
   @MaxLength(128)
   newPassword!: string;
 }
