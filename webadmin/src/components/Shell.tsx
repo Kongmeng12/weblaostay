@@ -5,6 +5,7 @@ import { api, type AdminRole } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { c, f, radius, avatarFor } from '../theme';
 import { initials } from '../lib/format';
+import { NotificationBell } from './NotificationBell';
 
 /** What each `admin_role` is called on screen. */
 const ROLE_LABEL: Record<AdminRole, string> = {
@@ -536,6 +537,7 @@ export function Shell() {
             </div>
             <div style={{ font: f(400, 13), color: c.muted, marginTop: 2 }}>{current.subtitle}</div>
           </div>
+          <NotificationBell />
           </div>
         </header>
 

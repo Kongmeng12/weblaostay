@@ -474,3 +474,22 @@ export interface ReviewReportRow {
   createdAt: string | null;
 }
 
+/** One row of `GET /admin/notifications` — the header bell. */
+export interface AdminNotification {
+  id: string;
+  title: string;
+  message: string | null;
+  /** `notification_type` */
+  type: 'booking' | 'payment' | 'promo' | 'review' | 'system';
+  /** What clicking it opens: `partner`, `refund`, `review` or `booking`. */
+  referenceType: string | null;
+  referenceId: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface AdminNotificationFeed {
+  items: AdminNotification[];
+  unread: number;
+}
+

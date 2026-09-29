@@ -29,6 +29,7 @@ import {
 } from '../notifications/sms-provider.interface';
 import { EMAIL_PROVIDER, type EmailProvider } from '../notifications/email-provider.interface';
 import { otpEmail, passwordResetEmail } from '../notifications/emails';
+import { NotificationsService } from '../notifications/notifications.service';
 import type {
   LoginDto,
   RegisterCustomerDto,
@@ -79,6 +80,7 @@ export class AuthService {
     private readonly agreements: AgreementsService,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
     @Inject(EMAIL_PROVIDER) private readonly email: EmailProvider,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── sign in ───────────────────────────────────────────────────────────────
@@ -287,6 +289,17 @@ export class AuthService {
     });
 
     this.logger.log(`Partner application received: ${email}`);
+
+    // After the commit, and swallowed on failure: an admin not hearing about it
+    // must not cost the applicant their account.
+    if (user.partners) {
+      await this.notifications.sendToAdmins(null, {
+        templateCode: 'admin_partner_applied',
+        vars: { business: dto.businessName, property: dto.propertyName },
+        referenceType: 'partner',
+        referenceId: user.partners.partner_id,
+      });
+    }
 
     const tokens = await this.issueTokens(user.user_id, user.email, user.role, ip, userAgent);
     return { ...tokens, user: toIdentity(user) };

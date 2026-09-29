@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma, notification_type } from '@prisma/client';
+import {
+  Prisma,
+  admin_role,
+  notification_type,
+  user_role,
+  user_status,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -93,6 +99,68 @@ export class NotificationsService {
     inputs: Parameters<NotificationsService['send']>[1][],
   ): Promise<void> {
     for (const input of inputs) await this.send(tx, input);
+  }
+
+  /**
+   * One row per active admin — work that lands in the admin queue (a partner
+   * to approve, money to send back, a review to judge).
+   *
+   * Each admin gets their own row, so one admin reading it does not mark it
+   * read for the others. `roles` narrows it to the admins who can act: a
+   * refund means nothing to staff who cannot open the Refunds screen.
+   *
+   * Same failure rules as `send()`: never throws when `tx` is null.
+   */
+  async sendToAdmins(
+    tx: Prisma.TransactionClient | null,
+    input: Omit<Parameters<NotificationsService['send']>[1], 'userId'> & {
+      roles?: admin_role[];
+    },
+  ): Promise<void> {
+    const write = async (db: Prisma.TransactionClient | PrismaService) => {
+      const admins = await db.users.findMany({
+        where: {
+          role: user_role.ADMIN,
+          status: user_status.active,
+          deleted_at: null,
+          ...(input.roles ? { admin_role: { in: input.roles } } : {}),
+        },
+        select: { user_id: true },
+      });
+      if (!admins.length) return;
+
+      const template = await this.template(input.templateCode);
+      if (!template) {
+        this.logger.error(
+          `No active notification template "${input.templateCode}" — sending the code as the title`,
+        );
+      }
+
+      await db.notifications.createMany({
+        data: admins.map((a) => ({
+          user_id: a.user_id,
+          title: template ? render(template.title, input.vars) : input.templateCode,
+          message: template ? render(template.message, input.vars) : null,
+          notification_type: input.type ?? template?.type ?? notification_type.system,
+          reference_type: input.referenceType ?? null,
+          reference_id: input.referenceId ?? null,
+        })),
+      });
+    };
+
+    if (tx) {
+      await write(tx);
+      return;
+    }
+
+    try {
+      await write(this.prisma);
+    } catch (err) {
+      this.logger.error(
+        `Failed to notify admins (${input.templateCode})`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
   }
 
   // ── reading ───────────────────────────────────────────────────────────────

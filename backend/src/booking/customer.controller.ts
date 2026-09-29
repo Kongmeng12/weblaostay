@@ -212,7 +212,17 @@ export class CustomerController {
 
     const property = await this.prisma.properties.findUniqueOrThrow({
       where: { property_id: booking.property_id },
-      select: { rating_avg: true, review_count: true },
+      select: { rating_avg: true, review_count: true, partners: { select: { user_id: true } } },
+    });
+
+    // The host hears about it and can answer — or ask an admin to hide it —
+    // from their Reviews screen. Swallowed on failure: the review is written.
+    await this.notifications_.send(null, {
+      userId: property.partners.user_id,
+      templateCode: 'review_received',
+      vars: { booking_code: booking.booking_code, stars: dto.stars },
+      referenceType: 'review',
+      referenceId: review.review_id,
     });
 
     return {

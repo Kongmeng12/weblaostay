@@ -280,6 +280,12 @@ export class PaymentsService {
           referenceId: booking.booking_id,
         },
       ]);
+      await this.notifications.sendToAdmins(tx, {
+        templateCode: 'admin_booking_paid',
+        vars,
+        referenceType: 'booking',
+        referenceId: booking.booking_id,
+      });
 
       this.logger.log(`Payment ${payment.payment_id} settled for booking ${booking.booking_id}`);
 

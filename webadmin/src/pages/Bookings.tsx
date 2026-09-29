@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
 import type { Paged, BookingRow, BookingDetail as BookingDetailData } from '../lib/types';
@@ -37,7 +38,17 @@ export function Bookings() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<BookingRow | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Pick<BookingRow, 'id' | 'code'> | null>(null);
+
+  // `?open=<bookingId>` from a notification opens that booking straight away,
+  // then leaves the URL so the same link works again later.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const open = params.get('open');
+    if (!open) return;
+    setDetailId(open);
+    setParams({}, { replace: true });
+  }, [params, setParams]);
 
   const q = useDebounced(search, 350);
 
@@ -246,11 +257,10 @@ export function Bookings() {
                   <Button
                     variant="danger"
                     onClick={() => {
-                      const row = list.data?.items.find((b) => b.id === detailId);
-                      if (row) {
-                        setCancelTarget(row);
-                        setDetailId(null);
-                      }
+                      // From the detail itself, not the list row: a booking
+                      // opened from a notification may not be on this page.
+                      setCancelTarget({ id: detail.data!.id, code: detail.data!.code });
+                      setDetailId(null);
                     }}
                   >
                     ຍົກເລີກ & ຄືນເງິນ
@@ -398,7 +408,7 @@ function CancelDialog({
   onClose,
   onConfirm,
 }: {
-  booking: BookingRow;
+  booking: Pick<BookingRow, 'id' | 'code'>;
   busy: boolean;
   error: unknown;
   onClose: () => void;

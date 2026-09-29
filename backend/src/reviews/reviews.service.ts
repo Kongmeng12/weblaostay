@@ -10,6 +10,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { rateOf } from '../common/money';
 
+/** How a report's reason reads in the admin's notification. */
+const REPORT_REASON_LAO: Record<report_reason, string> = {
+  spam: 'ສະແປມ',
+  offensive: 'ຄຳຫຍາບຄາຍ',
+  fake: 'ຮີວິວປອມ',
+  other: 'ອື່ນໆ',
+};
+
 /**
  * Replies to reviews, and the photos guests attach to them.
  *
@@ -259,7 +267,7 @@ export class ReviewsService {
   ) {
     const review = await this.prisma.reviews.findUnique({
       where: { review_id: reviewId },
-      select: { review_id: true },
+      select: { review_id: true, properties: { select: { property_name: true } } },
     });
     if (!review) throw new NotFoundException(`ບໍ່ພົບຮີວິວ #${reviewId} · Review not found`);
 
@@ -284,6 +292,15 @@ export class ReviewsService {
         detail: detail?.slice(0, 1000) ?? null,
       },
       select: { report_id: true, status: true },
+    });
+
+    // A guest's report and a host's hide request are the same row, and the same
+    // job for a moderator.
+    await this.notifications.sendToAdmins(null, {
+      templateCode: 'admin_review_reported',
+      vars: { property: review.properties.property_name, reason: REPORT_REASON_LAO[reason] },
+      referenceType: 'review',
+      referenceId: reviewId,
     });
 
     return { id: created.report_id.toString(), status: created.status };

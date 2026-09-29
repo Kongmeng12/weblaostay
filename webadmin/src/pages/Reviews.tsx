@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
 import type { Paged, PropertyReviewCount, ReviewRow, ReviewSort } from '../lib/types';
@@ -22,6 +23,7 @@ import { useDebounced } from '../lib/useDebounced';
  * request from a partner or guest. The review stays published until decided.
  */
 type Filter = 'all' | 'published' | 'flagged' | 'hidden' | 'awaiting';
+const FILTERS: Filter[] = ['all', 'published', 'flagged', 'hidden', 'awaiting'];
 
 const selectStyle = {
   padding: '10px 14px',
@@ -53,6 +55,19 @@ export function Reviews() {
   const [sort, setSort] = useState<ReviewSort>('newest');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+
+  // `?filter=awaiting` from a notification picks the tab, then leaves the URL
+  // so the chips stay in charge — and so the same link works again later.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const wanted = params.get('filter');
+    if (!wanted) return;
+    if (FILTERS.includes(wanted as Filter)) {
+      setFilter(wanted as Filter);
+      setPage(1);
+    }
+    setParams({}, { replace: true });
+  }, [params, setParams]);
 
   const q = useDebounced(search, 350);
 

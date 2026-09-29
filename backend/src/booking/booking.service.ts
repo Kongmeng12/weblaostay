@@ -22,6 +22,7 @@ import { allowedStatusMoves, blockedReason } from './booking-lifecycle';
 import { bookingCode, cancellationSplit, formatKip, kipOf, rateOf } from '../common/money';
 import { NotificationsService } from '../notifications/notifications.service';
 import { utcMidnight } from '../common/dates';
+import { MONEY_ROLES } from '../common/enums';
 import type { CreateBookingDto, WalkInDto } from './booking.dto';
 
 /** What the status log records for each front-desk move, keyed `from>to`. */
@@ -706,6 +707,18 @@ export class BookingService {
         referenceType: 'booking',
         referenceId: bookingId,
       });
+
+      // The refund is only owed at this point — finance sends it by hand from
+      // PhaJay's portal, so they need to hear it is waiting.
+      if (refundRow) {
+        await this.notifications.sendToAdmins(tx, {
+          templateCode: 'admin_refund_pending',
+          vars: { booking_code: booking.booking_code, amount: formatKip(refund) },
+          referenceType: 'refund',
+          referenceId: refundRow.refund_id,
+          roles: MONEY_ROLES,
+        });
+      }
 
       return {
         bookingId: bookingId.toString(),
