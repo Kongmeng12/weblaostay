@@ -19,6 +19,7 @@ import { InventoryService } from './inventory.service';
 import { PricingService } from './pricing.service';
 import { LedgerService } from './ledger.service';
 import { allowedStatusMoves, blockedReason } from './booking-lifecycle';
+import { lockBooking } from './booking-lock';
 import { bookingCode, cancellationSplit, formatKip, kipOf, rateOf } from '../common/money';
 import { NotificationsService } from '../notifications/notifications.service';
 import { todayInLaos, utcMidnight } from '../common/dates';
@@ -554,6 +555,10 @@ export class BookingService {
    */
   async cancel(bookingId: bigint, reason: string | undefined, actor: { id: bigint; role: user_role }) {
     return this.prisma.$transaction(async (tx) => {
+      // Before reading the status: a payment settling at this instant would
+      // otherwise turn the hold into a booking after we decided to release
+      // the hold — and the guest's money would get no refund.
+      await lockBooking(tx, bookingId);
       const booking = await tx.bookings.findUnique({
         where: { booking_id: bookingId },
         include: {

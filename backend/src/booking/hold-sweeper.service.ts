@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { booking_status } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from './inventory.service';
+import { lockBooking } from './booking-lock';
 
 /**
  * Reclaims inventory from checkouts that were never paid for.
@@ -77,9 +78,11 @@ export class HoldSweeperService {
         // One transaction per booking. A single failure — a row that was
         // cancelled a moment ago, say — must not abandon the others.
         await this.prisma.$transaction(async (tx) => {
-          // Re-read under the transaction: the guest may have paid between the
-          // query above and this write, in which case the booking is no longer
-          // ours to cancel.
+          // Re-read under the booking's lock: the guest may have paid between
+          // the query above and this write, in which case the booking is no
+          // longer ours to cancel — and a payment settling right now waits for
+          // this transaction instead of moving the hold we are releasing.
+          await lockBooking(tx, booking.booking_id);
           const current = await tx.bookings.findUnique({
             where: { booking_id: booking.booking_id },
             select: { status: true, hold_expires_at: true },

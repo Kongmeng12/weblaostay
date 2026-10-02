@@ -7,11 +7,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, booking_status, payment_method, payment_status } from '@prisma/client';
+import { Prisma, booking_status, payment_method, payment_status, refund_status } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../common/settings.service';
 import { InventoryService } from '../booking/inventory.service';
 import { LedgerService } from '../booking/ledger.service';
+import { lockBooking } from '../booking/booking-lock';
+import { todayInLaos } from '../common/dates';
 import { formatKip, kipOf } from '../common/money';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -254,6 +256,12 @@ export class PaymentsService {
         return { accepted: true, duplicate: true, paymentId: payment.payment_id.toString() };
       }
 
+      // Queue behind the hold sweeper and a cancellation before reading the
+      // booking's status (see lockBooking): otherwise a hold released a
+      // moment ago gets "confirmed" again, and that decrement comes off some
+      // other guest's hold.
+      await lockBooking(tx, payment.booking_id);
+
       // The guest can switch bank, which leaves the first QR scannable in a
       // banking app that already opened it. If both get paid, the second must
       // not confirm the stay again — that would book the room twice in
@@ -267,10 +275,17 @@ export class PaymentsService {
         },
       });
       if (otherPaid > 0) {
-        this.logger.error(
-          `Booking ${payment.booking_id} paid twice (payment ${payment.payment_id} is the second) — refund needed`,
+        // Owed back in full, and on the admin Refunds screen rather than only
+        // in a log line nobody reads.
+        await this.owedInFull(
+          tx,
+          payment,
+          'ຈ່າຍຊ້ຳ ຄືນເງິນຄັ້ງທີສອງເຕັມຈຳນວນ · Paid twice — the second payment is returned in full',
         );
-        return { accepted: true, paid: true, secondPayment: true, paymentId: payment.payment_id.toString() };
+        this.logger.error(
+          `Booking ${payment.booking_id} paid twice (payment ${payment.payment_id} is the second) — full refund recorded`,
+        );
+        return { accepted: true, paid: true, secondPayment: true, refundOwed: true, paymentId: payment.payment_id.toString() };
       }
 
       const booking = await tx.bookings.findUniqueOrThrow({
@@ -281,9 +296,46 @@ export class PaymentsService {
         },
       });
 
-      // A booking cancelled while the QR was open stays cancelled: the money is
-      // recorded, and the refund is an operator decision, not an auto-revival.
-      if (booking.status !== booking_status.cancelled) {
+      // Money that arrives after the booking stopped waiting for it:
+      //  - the hold ran out (the system cancelled it) and the room is still
+      //    free → the guest paid, so they get the stay: take the nights again
+      //    through hold(), with its full availability check, and confirm;
+      //  - the room went to someone else meanwhile, or a PERSON cancelled the
+      //    booking (the guest walked away, the property cancelled) → no stay:
+      //    the payment is owed back in full, and none of it is the partner's.
+      // It used to stay cancelled AND go into the partner's ledger, with
+      // "payment received" sent to both sides and no refund on record.
+      let revived = false;
+      if (booking.status === booking_status.cancelled) {
+        revived = (await this.cancelledByHoldExpiry(tx, booking.booking_id))
+          && (await this.retakeNights(tx, booking));
+
+        if (!revived) {
+          await this.owedInFull(
+            tx,
+            payment,
+            'ຈ່າຍຫຼັງການຈອງຖືກຍົກເລີກ ຄືນເງິນເຕັມຈຳນວນ · Paid after the booking was cancelled — returned in full',
+          );
+          await this.notifications.send(tx, {
+            userId: booking.customer_id,
+            templateCode: 'booking_cancelled',
+            vars: { booking_code: booking.booking_code, refund: formatKip(payment.amount) },
+            referenceType: 'booking',
+            referenceId: booking.booking_id,
+          });
+          this.logger.error(
+            `Payment ${payment.payment_id} arrived for cancelled booking ${booking.booking_id} — full refund recorded`,
+          );
+          return {
+            accepted: true,
+            paid: true,
+            refundOwed: true,
+            paymentId: payment.payment_id.toString(),
+            bookingId: booking.booking_id.toString(),
+            bookingStatus: booking_status.cancelled,
+          };
+        }
+      } else {
         for (const item of booking.booking_items) {
           await this.inventory.confirmHold(
             tx,
@@ -293,22 +345,24 @@ export class PaymentsService {
             item.quantity,
           );
         }
-
-        await tx.bookings.update({
-          where: { booking_id: booking.booking_id },
-          data: { status: booking_status.confirmed, hold_expires_at: null },
-        });
-
-        await tx.booking_status_logs.create({
-          data: {
-            booking_id: booking.booking_id,
-            from_status: booking.status,
-            to_status: booking_status.confirmed,
-            changed_by: null,
-            note: 'ຮັບຊຳລະແລ້ວ · Payment settled',
-          },
-        });
       }
+
+      await tx.bookings.update({
+        where: { booking_id: booking.booking_id },
+        data: { status: booking_status.confirmed, hold_expires_at: null },
+      });
+
+      await tx.booking_status_logs.create({
+        data: {
+          booking_id: booking.booking_id,
+          from_status: booking.status,
+          to_status: booking_status.confirmed,
+          changed_by: null,
+          note: revived
+            ? 'ຈ່າຍຫຼັງໝົດເວລາ ຫ້ອງຍັງວ່າງ ຢືນຢັນແລ້ວ · Paid after the hold expired; the room was still free'
+            : 'ຮັບຊຳລະແລ້ວ · Payment settled',
+        },
+      });
 
       await this.ledger.recordCharge(tx, {
         bookingId: booking.booking_id,
@@ -360,11 +414,77 @@ export class PaymentsService {
         paid: true,
         paymentId: payment.payment_id.toString(),
         bookingId: booking.booking_id.toString(),
-        bookingStatus:
-          booking.status === booking_status.cancelled
-            ? booking_status.cancelled
-            : booking_status.confirmed,
+        bookingStatus: booking_status.confirmed,
+        ...(revived ? { revived: true } : {}),
       };
+    });
+  }
+
+  /**
+   * Whether the last move into `cancelled` was the hold sweeper's — the only
+   * cancellation a late payment may undo. Its log row has no person on it and
+   * comes from `pending`; a guest's or partner's cancellation names who did it.
+   */
+  private async cancelledByHoldExpiry(tx: Prisma.TransactionClient, bookingId: bigint): Promise<boolean> {
+    const last = await tx.booking_status_logs.findFirst({
+      where: { booking_id: bookingId, to_status: booking_status.cancelled },
+      orderBy: { created_at: 'desc' },
+      select: { from_status: true, changed_by: true },
+    });
+    return !!last && last.changed_by === null && last.from_status === booking_status.pending;
+  }
+
+  /**
+   * Takes an expired booking's nights again and books them, all or nothing.
+   * hold() is the same availability check every booking goes through, so a
+   * room sold meanwhile is never taken twice. A savepoint undoes a partial
+   * take (two of three nights) when a later night is full; the stay must
+   * also not have started already.
+   */
+  private async retakeNights(
+    tx: Prisma.TransactionClient,
+    booking: { check_in: Date; check_out: Date; booking_items: { room_type_id: bigint; quantity: number }[] },
+  ): Promise<boolean> {
+    if (booking.check_in < todayInLaos()) return false;
+
+    await tx.$executeRaw`SAVEPOINT retake_nights`;
+    try {
+      for (const item of booking.booking_items) {
+        await this.inventory.hold(tx, item.room_type_id, booking.check_in, booking.check_out, item.quantity);
+        await this.inventory.confirmHold(tx, item.room_type_id, booking.check_in, booking.check_out, item.quantity);
+      }
+      await tx.$executeRaw`RELEASE SAVEPOINT retake_nights`;
+      return true;
+    } catch (err) {
+      if (!(err instanceof ConflictException)) throw err;
+      await tx.$executeRaw`ROLLBACK TO SAVEPOINT retake_nights`;
+      return false;
+    }
+  }
+
+  /**
+   * Records a payment as owed back in full: a pending refund on the admin
+   * Refunds screen (paid back by hand from PhaJay's portal, as every refund
+   * is) and the payment marked refunded. No ledger entry: this money was
+   * never the partner's.
+   */
+  private async owedInFull(
+    tx: Prisma.TransactionClient,
+    payment: { payment_id: bigint; booking_id: bigint; amount: bigint },
+    reason: string,
+  ): Promise<void> {
+    await tx.refunds.create({
+      data: {
+        payment_id: payment.payment_id,
+        booking_id: payment.booking_id,
+        amount: payment.amount,
+        reason: reason.slice(0, 255),
+        status: refund_status.pending,
+      },
+    });
+    await tx.payments.update({
+      where: { payment_id: payment.payment_id },
+      data: { status: payment_status.refunded },
     });
   }
 
