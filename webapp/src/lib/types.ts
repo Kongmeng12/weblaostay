@@ -289,12 +289,11 @@ export interface Payment {
   id: string;
   bookingId: string;
   method: string;
-  /** The EMVCo string to render as a QR code. */
+  /** `bcel` · `jdb` · `ldb` · `ib` · `stb` · `m_money` · `card`; null on older payments. */
+  channel?: string | null;
+  /** The EMVCo string to render as a QR code. Null for a card payment. */
   qrPayload: string | null;
-  /**
-   * A link straight into the payer's banking app. Only returned by the call
-   * that creates the charge — a poll of `GET /customer/payments/:id` has null.
-   */
+  /** A link straight into the payer's banking app, or the card page. */
   deepLink?: string | null;
   amount: number;
   status: string;
@@ -303,6 +302,12 @@ export interface Payment {
   txnRef: string | null;
   /** Only on the polling endpoint. */
   bookingStatus?: string;
+}
+
+/** `GET /customer/payment-channels` */
+export interface PaymentChannels {
+  defaultChannel: string;
+  channels: { id: string; group: 'bank' | 'card'; minAmount: number | null }[];
 }
 
 export interface CancelResult {

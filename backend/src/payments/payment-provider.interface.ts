@@ -9,8 +9,12 @@
  * rather than once per provider.
  */
 
+import type { PaymentChannel } from './channels';
+
 export interface ChargeRequest {
   bookingId: bigint;
+  /** Which bank's QR, or `card`. Absent means `PHAJAY_BANK`. */
+  channel?: PaymentChannel;
   /** Whole kip. */
   amountKip: number;
   /** Our own reference, echoed back on the callback. */
@@ -20,10 +24,11 @@ export interface ChargeRequest {
 }
 
 export interface ChargeResult {
-  /** The EMVCo string the app draws as a QR code. */
-  qrPayload: string;
+  /** The EMVCo string the app draws as a QR code. Null for a card payment. */
+  qrPayload: string | null;
   /**
-   * A link straight into the payer's banking app, when the acquirer gives one.
+   * A link straight into the payer's banking app, when the acquirer gives one
+   * — or, for a card, the page where the card is entered.
    *
    * On a phone the payer cannot scan the screen they are holding, so the app
    * offers this as a button beside the QR.

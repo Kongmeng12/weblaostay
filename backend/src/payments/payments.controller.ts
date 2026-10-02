@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   ForbiddenException,
   Get,
@@ -11,21 +12,39 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { user_role } from '@prisma/client';
 import { timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { PaymentsService } from './payments.service';
 import { CurrentUser, Public, Roles, type AuthedUser } from '../common/decorators';
 
+class PayDto {
+  /** bcel · jdb · ldb · ib · stb · m_money · card. Absent: `PHAJAY_BANK`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  channel?: string;
+}
+
 @Controller('customer')
 @Roles(user_role.CUSTOMER)
 export class CustomerPaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
-  /** Issues, or returns, the QR for a booking. */
+  /** The banks (and card) the guest can pick from. */
+  @Get('payment-channels')
+  channels() {
+    return this.payments.channels();
+  }
+
+  /**
+   * Issues, or returns, the charge for a booking on the chosen channel.
+   * The body is optional so app builds from before the choice keep working.
+   */
   @Post('bookings/:id/pay')
-  pay(@CurrentUser() user: AuthedUser, @Param('id') id: string) {
-    return this.payments.createForBooking(user.userId, BigInt(id));
+  pay(@CurrentUser() user: AuthedUser, @Param('id') id: string, @Body() dto: PayDto) {
+    return this.payments.createForBooking(user.userId, BigInt(id), dto?.channel);
   }
 
   /** Polled by the "waiting for payment" screen. */

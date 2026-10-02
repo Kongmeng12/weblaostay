@@ -168,6 +168,10 @@ model payments {
   payment_method  payment_method   @default(phajay_qr)
   idempotency_key String           @unique @db.VarChar(255)
   qr_payload      String?
+  /// bcel · jdb · ldb · ib · stb · m_money · card. Null on payments made before the guest could choose (all BCEL).
+  channel         String?          @db.VarChar(20)
+  /// The bank app deep link, or the card page.
+  redirect_url    String?
   amount          BigInt
   status          payment_status   @default(pending)
   txn_ref         String?          @db.VarChar(120)
@@ -1436,6 +1440,7 @@ enum partner_status {
 
 enum payment_method {
   phajay_qr
+  phajay_card
 
   @@schema("public")
 }

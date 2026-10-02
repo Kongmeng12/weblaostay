@@ -6,7 +6,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, booking_status, payment_status } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { Prisma, booking_status, payment_method, payment_status } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../common/settings.service';
 import { InventoryService } from '../booking/inventory.service';
@@ -18,6 +19,13 @@ import {
   type CallbackResult,
   type PaymentProvider,
 } from './payment-provider.interface';
+import {
+  CHANNEL_MIN_KIP,
+  defaultChannel,
+  enabledChannels,
+  isChannel,
+  type PaymentChannel,
+} from './channels';
 
 @Injectable()
 export class PaymentsService {
@@ -30,6 +38,7 @@ export class PaymentsService {
     private readonly ledger: LedgerService,
     private readonly notifications: NotificationsService,
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -41,7 +50,15 @@ export class PaymentsService {
    * a fresh attempt, which is why the key carries an attempt number rather than
    * being the booking alone.
    */
-  async createForBooking(customerId: bigint, bookingId: bigint) {
+  async createForBooking(customerId: bigint, bookingId: bigint, requested?: string) {
+    if (requested !== undefined && !isChannel(requested)) {
+      throw new BadRequestException(`ບໍ່ຮູ້ຈັກຊ່ອງທາງ "${requested}" · Unknown payment channel`);
+    }
+    const channel: PaymentChannel = requested ?? defaultChannel(this.config);
+    if (!enabledChannels(this.config).includes(channel)) {
+      throw new BadRequestException('ຊ່ອງທາງນີ້ຍັງບໍ່ເປີດໃຫ້ໃຊ້ · This payment channel is not available');
+    }
+
     const booking = await this.prisma.bookings.findFirst({
       where: { booking_id: bookingId, customer_id: customerId, deleted_at: null },
       include: { payments: true, properties: { select: { property_name: true } } },
@@ -55,22 +72,30 @@ export class PaymentsService {
       throw new ConflictException('ຈ່າຍແລ້ວ · This booking is already paid');
     }
 
+    const min = CHANNEL_MIN_KIP[channel];
+    if (min !== undefined && booking.total_amount < BigInt(min)) {
+      throw new BadRequestException(
+        `ຊ່ອງທາງນີ້ຮັບຢ່າງໜ້ອຍ ${formatKip(min)} · This channel needs at least ${formatKip(min)}`,
+      );
+    }
+
     const now = new Date();
-    // A live QR is reused rather than replaced: the guest may already have it
-    // open in their banking app.
     const live = booking.payments.find(
       (p) => p.status === payment_status.pending && (!p.expired_at || p.expired_at > now),
     );
-    // An existing pending charge is reused. Its deep link was handed out when
-    // it was created and is not stored, so this reply carries the QR alone.
-    if (live) return { ...toPaymentView(live), deepLink: null };
-
+    // A live charge on the same channel is reused rather than replaced: the
+    // guest may already have it open in their banking app. Rows from before
+    // the guest could choose have no channel and were all `PHAJAY_BANK`.
+    if (live && (live.channel ?? defaultChannel(this.config)) === channel) {
+      return toPaymentView(live);
+    }
     const { qr_ttl_minutes } = await this.settings.get();
     const attempt = booking.payments.length + 1;
     const idempotencyKey = `booking:${bookingId}:${attempt}`;
 
     const charge = await this.provider.createCharge({
       bookingId,
+      channel,
       amountKip: Number(booking.total_amount),
       reference: booking.booking_code,
       description: `PhaPhak ${booking.booking_code} · ${booking.properties.property_name}`,
@@ -81,17 +106,27 @@ export class PaymentsService {
         data: {
           booking_id: bookingId,
           idempotency_key: idempotencyKey,
+          payment_method: channel === 'card' ? payment_method.phajay_card : payment_method.phajay_qr,
+          channel,
           qr_payload: charge.qrPayload,
+          redirect_url: charge.deepLink,
           amount: booking.total_amount,
           status: payment_status.pending,
           expired_at: charge.expiresAt ?? new Date(Date.now() + qr_ttl_minutes * 60_000),
           txn_ref: charge.providerRef,
         },
       });
-      // The deep link is returned, not stored: it is only useful at the moment
-      // the QR is first shown, and a column for a value read once would need a
-      // migration to hold it.
-      return { ...toPaymentView(payment), deepLink: charge.deepLink };
+      // A different bank: the old code is retired — only now, once the new
+      // one exists, so a gateway failure does not leave the guest with
+      // neither. Paying the old one anyway still settles: `settle` matches on
+      // the transaction id and does not require `pending`.
+      if (live) {
+        await this.prisma.payments.updateMany({
+          where: { payment_id: live.payment_id, status: payment_status.pending },
+          data: { status: payment_status.expired },
+        });
+      }
+      return toPaymentView(payment);
     } catch (err) {
       // Someone else won the race on the unique key — return their row, which
       // is exactly what this caller wanted anyway.
@@ -99,10 +134,22 @@ export class PaymentsService {
         const won = await this.prisma.payments.findUnique({
           where: { idempotency_key: idempotencyKey },
         });
-        if (won) return { ...toPaymentView(won), deepLink: null };
+        if (won) return toPaymentView(won);
       }
       throw err;
     }
+  }
+
+  /** What the "how would you like to pay" list offers. */
+  channels() {
+    return {
+      defaultChannel: defaultChannel(this.config),
+      channels: enabledChannels(this.config).map((id) => ({
+        id,
+        group: id === 'card' ? 'card' : 'bank',
+        minAmount: CHANNEL_MIN_KIP[id] ?? null,
+      })),
+    };
   }
 
   /** Status poll for the "waiting for payment" screen. */
@@ -205,6 +252,25 @@ export class PaymentsService {
       });
       if (updated.count === 0) {
         return { accepted: true, duplicate: true, paymentId: payment.payment_id.toString() };
+      }
+
+      // The guest can switch bank, which leaves the first QR scannable in a
+      // banking app that already opened it. If both get paid, the second must
+      // not confirm the stay again — that would book the room twice in
+      // inventory and charge the ledger twice. The money is recorded on its
+      // payment row; returning it is an operator's job.
+      const otherPaid = await tx.payments.count({
+        where: {
+          booking_id: payment.booking_id,
+          status: payment_status.paid,
+          payment_id: { not: payment.payment_id },
+        },
+      });
+      if (otherPaid > 0) {
+        this.logger.error(
+          `Booking ${payment.booking_id} paid twice (payment ${payment.payment_id} is the second) — refund needed`,
+        );
+        return { accepted: true, paid: true, secondPayment: true, paymentId: payment.payment_id.toString() };
       }
 
       const booking = await tx.bookings.findUniqueOrThrow({
@@ -337,7 +403,9 @@ function toPaymentView(p: {
   payment_id: bigint;
   booking_id: bigint;
   payment_method: string;
+  channel: string | null;
   qr_payload: string | null;
+  redirect_url: string | null;
   amount: bigint;
   status: payment_status;
   paid_at: Date | null;
@@ -348,7 +416,11 @@ function toPaymentView(p: {
     id: p.payment_id.toString(),
     bookingId: p.booking_id.toString(),
     method: p.payment_method,
+    channel: p.channel,
     qrPayload: p.qr_payload,
+    // The bank app's deep link or the card page — stored, so a guest who
+    // comes back to a live QR still gets the button.
+    deepLink: p.redirect_url,
     amount: kipOf(p.amount),
     status: p.status,
     paidAt: p.paid_at,

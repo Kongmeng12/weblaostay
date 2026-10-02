@@ -6,7 +6,7 @@ import { c, f, radius, type as t } from '../theme';
 import { countdown, kip, laoDateFull } from '../lib/format';
 import { Button, Card, ErrorNote, Loading, MoneyRow, Page, Spinner } from '../components/ui';
 import { QrCode } from '../components/QrCode';
-import type { BookingDetail, Payment } from '../lib/types';
+import type { BookingDetail, Payment, PaymentChannels } from '../lib/types';
 
 /**
  * Pay for a held booking.
@@ -27,13 +27,22 @@ export function PayPage() {
     queryFn: () => api.get<BookingDetail>(`/customer/bookings/${bookingId}`),
   });
 
-  // Issuing a QR is idempotent server-side: a live one is returned rather than
-  // replaced, so a refresh does not strand the code already open in a banking
-  // app.
-  const payment = useQuery({
-    queryKey: ['payment', bookingId],
-    queryFn: () => api.post<Payment>(`/customer/bookings/${bookingId}/pay`),
+  // The guest picks their bank (or card) first; null while choosing.
+  const [channel, setChannel] = useState<string | null>(null);
+
+  const channels = useQuery({
+    queryKey: ['payment-channels'],
+    queryFn: () => api.get<PaymentChannels>('/customer/payment-channels'),
     enabled: booking.data?.status === 'pending',
+  });
+
+  // Issuing a charge is idempotent server-side per channel: a live one is
+  // returned rather than replaced, so a refresh does not strand the code
+  // already open in a banking app. Picking another channel retires it.
+  const payment = useQuery({
+    queryKey: ['payment', bookingId, channel],
+    queryFn: () => api.post<Payment>(`/customer/bookings/${bookingId}/pay`, { channel }),
+    enabled: booking.data?.status === 'pending' && !!channel,
     retry: false,
   });
 
@@ -200,12 +209,55 @@ export function PayPage() {
               </div>
             )}
 
-            {payment.isLoading ? (
+            {!channel ? (
+              <ChannelPicker
+                data={channels.data}
+                loading={channels.isLoading}
+                error={channels.isError ? channels.error : null}
+                onRetry={() => void channels.refetch()}
+                total={b.total}
+                onPick={setChannel}
+              />
+            ) : payment.isLoading ? (
               <Loading label="ກຳລັງສ້າງ QR..." />
             ) : payment.isError ? (
-              <ErrorNote error={payment.error} onRetry={() => void payment.refetch()} />
+              <>
+                <ErrorNote error={payment.error} onRetry={() => void payment.refetch()} />
+                <ChangeChannel onClick={() => setChannel(null)} />
+              </>
+            ) : channel === 'card' && payment.data?.deepLink ? (
+              <>
+                <div style={{ fontSize: 44, marginBottom: 8 }}>💳</div>
+                <div style={{ font: t.h2, color: c.accent, margin: '0 0 6px' }}>
+                  {kip(payment.data.amount)}
+                </div>
+                <div style={{ font: t.bodySm, color: c.muted, maxWidth: 340, margin: '0 auto 16px' }}>
+                  ໃສ່ຂໍ້ມູນບັດໃນໜ້າທີ່ເປີດຂຶ້ນ — ໜ້ານີ້ຈະຢືນຢັນເອງເມື່ອຈ່າຍສຳເລັດ
+                </div>
+                <a
+                  href={payment.data.deepLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'inline-block',
+                    padding: '12px 22px',
+                    borderRadius: radius.md,
+                    background: c.accent,
+                    color: '#fff',
+                    font: t.label,
+                    textDecoration: 'none',
+                  }}
+                >
+                  ໄປໜ້າຈ່າຍດ້ວຍບັດ
+                </a>
+                <ChangeChannel onClick={() => setChannel(null)} />
+                <Waiting />
+              </>
             ) : payment.data?.qrPayload ? (
               <>
+                <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>
+                  ສະແກນດ້ວຍແອັບ {CHANNEL_LOOK[channel]?.name ?? channel}
+                </div>
                 <div
                   style={{
                     display: 'inline-block',
@@ -242,24 +294,12 @@ export function PayPage() {
                       color: c.text,
                     }}
                   >
-                    ເປີດແອັບທະນາຄານ
+                    ເປີດແອັບ {CHANNEL_LOOK[channel]?.name ?? 'ທະນາຄານ'}
                   </a>
                 )}
 
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    marginTop: 18,
-                    font: f(500, 12),
-                    color: c.faint,
-                  }}
-                >
-                  <Spinner size={13} color={c.faint} />
-                  ກຳລັງລໍການຊຳລະ...
-                </div>
+                <ChangeChannel onClick={() => setChannel(null)} />
+                <Waiting />
               </>
             ) : (
               <ErrorNote error={new Error('ຍັງບໍ່ມີ QR ສຳລັບການຈອງນີ້')} />
@@ -295,6 +335,144 @@ export function PayPage() {
         </div>
       </div>
     </Page>
+  );
+}
+
+/** How each channel is shown — the names on the guest's own banking app. */
+const CHANNEL_LOOK: Record<string, { name: string; mark: string; color: string }> = {
+  bcel: { name: 'BCEL One', mark: 'B', color: '#D71920' },
+  jdb: { name: 'JDB', mark: 'J', color: '#1B3F8B' },
+  ldb: { name: 'LDB', mark: 'L', color: '#1E88C8' },
+  ib: { name: 'Indochina Bank', mark: 'IB', color: '#5B2C83' },
+  stb: { name: 'STB', mark: 'S', color: '#1A3D9C' },
+  m_money: { name: 'M-Money', mark: 'm', color: '#E2231A' },
+  card: { name: 'Visa / Mastercard', mark: '💳', color: '#2B2521' },
+};
+
+/** Step one: the banks, then cards, each group one card with hairlines between rows. */
+function ChannelPicker({
+  data,
+  loading,
+  error,
+  onRetry,
+  total,
+  onPick,
+}: {
+  data: PaymentChannels | undefined;
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  total: number;
+  onPick: (id: string) => void;
+}) {
+  if (loading) return <Loading label="ກຳລັງໂຫຼດ..." />;
+  if (error || !data) return <ErrorNote error={error ?? new Error('ໂຫຼດບໍ່ໄດ້')} onRetry={onRetry} />;
+
+  const groups: { title: string; subtitle: string; ids: PaymentChannels['channels'] }[] = [
+    {
+      title: 'ຊຳລະຜ່ານທະນາຄານ',
+      subtitle: 'ຈ່າຍຜ່ານບັນຊີທະນາຄານ',
+      ids: data.channels.filter((ch) => ch.group === 'bank'),
+    },
+    {
+      title: 'ບັດ Credit / Debit',
+      subtitle: 'Visa · Mastercard (ບັດທີ່ຮອງຮັບ 3DS)',
+      ids: data.channels.filter((ch) => ch.group === 'card'),
+    },
+  ];
+
+  return (
+    <div style={{ textAlign: 'left' }}>
+      <div style={{ font: t.h3, color: c.text, marginBottom: 4 }}>ເລືອກວິທີຈ່າຍ</div>
+      {groups
+        .filter((g) => g.ids.length)
+        .map((g) => (
+          <div key={g.title}>
+            <div style={{ font: f(700, 12), color: c.muted, margin: '16px 2px 8px' }}>{g.title}</div>
+            <div style={{ border: `1px solid ${c.border}`, borderRadius: radius.lg, overflow: 'hidden' }}>
+              {g.ids.map((ch, i) => {
+                const look = CHANNEL_LOOK[ch.id] ?? { name: ch.id, mark: ch.id[0], color: c.muted };
+                const tooSmall = ch.minAmount !== null && total < ch.minAmount;
+                return (
+                  <button
+                    key={ch.id}
+                    disabled={tooSmall}
+                    onClick={() => onPick(ch.id)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 14,
+                      padding: '13px 16px',
+                      background: '#fff',
+                      border: 'none',
+                      borderTop: i ? `1px solid ${c.divider}` : 'none',
+                      cursor: tooSmall ? 'not-allowed' : 'pointer',
+                      opacity: tooSmall ? 0.45 : 1,
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        background: look.color,
+                        color: '#fff',
+                        display: 'grid',
+                        placeItems: 'center',
+                        font: f(800, 13),
+                        flex: 'none',
+                      }}
+                    >
+                      {look.mark}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', font: t.label, color: c.text }}>{look.name}</span>
+                      <span style={{ display: 'block', font: f(400, 12), color: c.muted }}>
+                        {tooSmall ? `ຂັ້ນຕ່ຳ ${kip(ch.minAmount)}` : g.subtitle}
+                      </span>
+                    </span>
+                    <span style={{ color: c.faint, fontSize: 18 }}>›</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function ChangeChannel({ onClick }: { onClick: () => void }) {
+  return (
+    <div style={{ marginTop: 12 }}>
+      <button
+        onClick={onClick}
+        style={{ background: 'none', border: 'none', color: c.accent, font: t.label, cursor: 'pointer' }}
+      >
+        ປ່ຽນວິທີຈ່າຍ
+      </button>
+    </div>
+  );
+}
+
+function Waiting() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginTop: 14,
+        font: f(500, 12),
+        color: c.faint,
+      }}
+    >
+      <Spinner size={13} color={c.faint} />
+      ກຳລັງລໍການຊຳລະ...
+    </div>
   );
 }
 

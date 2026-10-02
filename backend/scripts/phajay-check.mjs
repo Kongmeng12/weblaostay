@@ -218,6 +218,43 @@ console.log('\nPhaJay — Generate QR\n');
     {},
   );
   check('a Payment Link callback settles through the same path', viaLink.reference === 'STL-0080');
+
+  // Card callbacks echo no tags and report USD.
+  const card = p.verifyCallback(
+    body({ status: 'PAYMENT_COMPLETED', paymentMethod: 'CREDIT_CARD', transactionId: 'C1', txnAmount: 1, currency: 'USD', tag1: null }),
+    {},
+  );
+  check('a card callback is accepted on its transactionId alone', card.ok && card.txnRef === 'C1' && card.reference === null);
+  check('a USD amount is not compared with kip', card.amountKip === null);
+}
+
+// ── the guest's choice of channel ───────────────────────────────────────────
+{
+  const seen = stubGateway(REPLY);
+  const p = new PhaJayPaymentProvider(cfg({ PHAJAY_API_KEY: 'k', PHAJAY_BANK: 'bcel' }));
+  await p.createCharge({ ...charge, channel: 'ldb' });
+  check('the chosen channel beats PHAJAY_BANK', seen.url.endsWith('/generate-ldb-qr'), seen.url);
+}
+{
+  const seen = stubGateway({
+    message: 'SUCCESSFULLY',
+    paymentUrl: 'https://payment.paco.2c2p.com/payment/?pid=abc',
+    transactionId: 'C2',
+    expirationTime: '2026-10-03T07:29:33',
+    status: 'WAITING',
+  });
+  const p = new PhaJayPaymentProvider(cfg({ PHAJAY_API_KEY: 'k' }));
+  const r = await p.createCharge({ ...charge, channel: 'card' });
+  check('a card charge calls the card link endpoint', seen.url.endsWith('/v1/api/jdb2c2p/payment/payment-link'), seen.url);
+  check('a card charge uses Basic auth', String(seen.headers.Authorization).startsWith('Basic '));
+  check('a card charge returns the page, not a QR', r.qrPayload === null && r.deepLink.includes('2c2p'));
+  check('the card expiry is read as UTC', r.expiresAt.toISOString() === '2026-10-03T07:29:33.000Z', r.expiresAt.toISOString());
+}
+{
+  globalThis.fetch = async () => ({ ok: false, status: 403, text: async () => '{"message":"FORBIDDEN"}' });
+  const p = new PhaJayPaymentProvider(cfg({ PHAJAY_API_KEY: 'k' }));
+  const err = await p.createCharge({ ...charge, channel: 'card' }).then(() => null, (e) => e.message);
+  check('cards not enabled reads as "choose a bank"', String(err).includes('choose a bank'), String(err).slice(0, 60));
 }
 
 console.log('');

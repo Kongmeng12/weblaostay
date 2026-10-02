@@ -75,8 +75,10 @@ export class PhaJayPaymentProvider implements PaymentProvider {
   constructor(private readonly config: ConfigService) {}
 
   async createCharge(request: ChargeRequest): Promise<ChargeResult> {
+    if (request.channel === 'card') return this.createCardCharge(request);
+
     const secretKey = this.required('PHAJAY_API_KEY');
-    const bank = this.bank();
+    const bank = request.channel ?? this.bank();
     const baseUrl = this.optional('PHAJAY_BASE_URL', DEFAULT_BASE_URL).replace(/\/+$/, '');
     const ttlMin = Number(this.optional('PHAJAY_QR_TTL_MIN', '15'));
 
@@ -158,6 +160,76 @@ export class PhaJayPaymentProvider implements PaymentProvider {
   }
 
   /**
+   * A card payment: PhaJay's 3-D Secure page (run by JDB / 2C2P), not a QR.
+   *
+   * Only works once PhaJay has approved the merchant account for cards — until
+   * then it answers 403, which is why cards are off unless `PHAJAY_CARD=true`.
+   * There is no sandbox path for it in PhaJay's docs.
+   */
+  private async createCardCharge(request: ChargeRequest): Promise<ChargeResult> {
+    const secretKey = this.required('PHAJAY_API_KEY');
+    const baseUrl = this.optional('PHAJAY_BASE_URL', DEFAULT_BASE_URL).replace(/\/+$/, '');
+
+    let res: Response;
+    try {
+      res = await this.fetchWithRetry(`${baseUrl}/v1/api/jdb2c2p/payment/payment-link`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Basic auth here, unlike the QR endpoints' bare `secretKey` header.
+          Authorization: `Basic ${Buffer.from(secretKey).toString('base64')}`,
+        },
+        body: JSON.stringify({
+          amount: request.amountKip,
+          description: this.describe(request.description, 'bcel'),
+          tag1: request.reference,
+          tag2: request.bookingId.toString(),
+        }),
+      });
+    } catch (err) {
+      this.logger.error(`PhaJay card link request failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw new ServiceUnavailableException(
+        'ລະບົບຊຳລະບໍ່ຕອບສະໜອງ ກະລຸນາລອງໃໝ່ · The payment service is unavailable, please try again',
+      );
+    }
+
+    const text = await res.text();
+    if (res.status === 403) {
+      this.logger.error('PhaJay refused a card link (403): cards are not enabled for this account');
+      throw new ServiceUnavailableException(
+        'ຍັງຈ່າຍດ້ວຍບັດບໍ່ໄດ້ ກະລຸນາເລືອກທະນາຄານ · Card payment is not available yet, please choose a bank',
+      );
+    }
+    let json: { paymentUrl?: string; transactionId?: string; expirationTime?: string } = {};
+    try {
+      json = JSON.parse(text) as typeof json;
+    } catch {
+      /* handled below */
+    }
+    if (!res.ok || !json.paymentUrl) {
+      this.logger.error(`PhaJay card link failed: ${res.status} ${text.slice(0, 200)}`);
+      throw new ServiceUnavailableException(
+        'ສ້າງການຈ່າຍດ້ວຍບັດບໍ່ໄດ້ ກະລຸນາລອງໃໝ່ · Could not start the card payment, please try again',
+      );
+    }
+
+    // "2025-08-04T07:29:33" — UTC, but sent without the Z.
+    const expiry = json.expirationTime
+      ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(json.expirationTime) ? json.expirationTime : `${json.expirationTime}Z`)
+      : null;
+
+    return {
+      qrPayload: null,
+      deepLink: json.paymentUrl,
+      providerRef: json.transactionId ?? null,
+      expiresAt:
+        expiry && !Number.isNaN(expiry.getTime())
+          ? expiry
+          : new Date(Date.now() + Number(this.optional('PHAJAY_QR_TTL_MIN', '15')) * 60_000),
+    };
+  }
+
+  /**
    * Reads the callback. Whether to act on it is decided by the caller — see
    * the note on this class.
    */
@@ -178,20 +250,29 @@ export class PhaJayPaymentProvider implements PaymentProvider {
     // Not `exReferenceNo` or `billNumber`: those are PhaJay's identifiers, not
     // ours, and matching a payment on them would mean having stored them first.
     const reference = str(body.tag1) ?? str(body.orderNo);
-    if (!reference) return { ...empty(), reason: 'callback carries no reference' };
+    // `transactionId` is guaranteed present; the rest are what different
+    // banks happen to send, kept as fallbacks rather than relied on.
+    const txnRef =
+      str(body.transactionId) ??
+      str(body.exReferenceNo) ??
+      str(body.billNumber) ??
+      str(body.linkCode) ??
+      str(body.paymentId);
+    // A card callback echoes no tags — but its transactionId is the one the
+    // charge was created with and stored, which identifies the payment alone.
+    if (!reference && !txnRef) return { ...empty(), reason: 'callback carries no reference' };
+
+    // Card callbacks report the amount in USD. Comparing that with the kip
+    // charged would refuse every card payment, so the check is left to the
+    // transactionId match, which only a charge we created can produce.
+    const currency = str(body.currency)?.toUpperCase();
+    const inKip = !currency || currency === 'LAK';
 
     return {
       ok: true,
       reference,
-      // `transactionId` is guaranteed present; the rest are what different
-      // banks happen to send, kept as fallbacks rather than relied on.
-      txnRef:
-        str(body.transactionId) ??
-        str(body.exReferenceNo) ??
-        str(body.billNumber) ??
-        str(body.linkCode) ??
-        str(body.paymentId),
-      amountKip: num(body.txnAmount),
+      txnRef,
+      amountKip: inKip ? num(body.txnAmount) : null,
       status: status === COMPLETED ? 'paid' : 'failed',
       ...(status !== COMPLETED && { reason: `PhaJay reported ${status ?? 'no status'}` }),
     };
