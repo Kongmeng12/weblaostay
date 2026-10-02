@@ -197,15 +197,22 @@ export class PartnerService {
     await this.own.assertOwnsRoom(partnerId, roomId);
 
     try {
-      const room = await this.prisma.rooms.update({
-        where: { room_id: roomId },
-        data: {
-          ...(dto.roomNumber !== undefined && { room_number: dto.roomNumber }),
-          ...(dto.floor !== undefined && { floor: dto.floor }),
-          ...(dto.status !== undefined && { status: dto.status }),
-        },
+      return await this.prisma.$transaction(async (tx) => {
+        const room = await tx.rooms.update({
+          where: { room_id: roomId },
+          data: {
+            ...(dto.roomNumber !== undefined && { room_number: dto.roomNumber }),
+            ...(dto.floor !== undefined && { floor: dto.floor }),
+            ...(dto.status !== undefined && { status: dto.status }),
+          },
+        });
+        // A room sent to maintenance or deactivated leaves fewer to sell.
+        const overbooked =
+          dto.status !== undefined
+            ? await this.inventory.clampToRooms(tx, room.room_type_id, todayInLaos())
+            : [];
+        return { ...toRoomView(room), overbooked };
       });
-      return toRoomView(room);
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new BadRequestException(
@@ -224,17 +231,23 @@ export class PartnerService {
   async removeRoom(partnerId: bigint, roomId: bigint) {
     await this.own.assertOwnsRoom(partnerId, roomId);
 
-    const assignments = await this.prisma.room_assignments.count({ where: { room_id: roomId } });
-    if (assignments > 0) {
-      const room = await this.prisma.rooms.update({
-        where: { room_id: roomId },
-        data: { status: 'inactive' },
-      });
-      return { deleted: false, deactivated: true, room: toRoomView(room) };
-    }
+    // Either way one room fewer can be sold, so future nights are brought
+    // back under the new ceiling in the same transaction.
+    return this.prisma.$transaction(async (tx) => {
+      const assignments = await tx.room_assignments.count({ where: { room_id: roomId } });
+      if (assignments > 0) {
+        const room = await tx.rooms.update({
+          where: { room_id: roomId },
+          data: { status: 'inactive' },
+        });
+        const overbooked = await this.inventory.clampToRooms(tx, room.room_type_id, todayInLaos());
+        return { deleted: false, deactivated: true, room: toRoomView(room), overbooked };
+      }
 
-    await this.prisma.rooms.delete({ where: { room_id: roomId } });
-    return { deleted: true, deactivated: false, room: null };
+      const room = await tx.rooms.delete({ where: { room_id: roomId } });
+      const overbooked = await this.inventory.clampToRooms(tx, room.room_type_id, todayInLaos());
+      return { deleted: true, deactivated: false, room: null, overbooked };
+    });
   }
 
   /**
@@ -285,16 +298,22 @@ export class PartnerService {
       select: { total_rooms: true },
     });
 
+    // A room type with numbered rooms cannot put more on sale than it has
+    // rooms in service — that gap is exactly how a five-room type sold 50
+    // nights. Asked for more → refused with the real number; left to the
+    // default → the default is trimmed to fit.
+    const cap = await this.inventory.roomCapacity(this.prisma, roomTypeId);
+    if (cap !== null && dto.totalCount !== undefined && dto.totalCount > cap) {
+      throw new BadRequestException(
+        `ປະເພດຫ້ອງນີ້ມີຫ້ອງທີ່ໃຊ້ງານໄດ້ ${cap} ຫ້ອງ ເປີດຂາຍເກີນນັ້ນບໍ່ໄດ້ · ` +
+          `This room type has ${cap} room(s) in service — it cannot sell more than that`,
+      );
+    }
+    const totalCount = Math.min(dto.totalCount ?? roomType.total_rooms, cap ?? Number.MAX_SAFE_INTEGER);
+
     try {
       const affected = await this.prisma.$transaction((tx) =>
-        this.inventory.openRange(
-          tx,
-          roomTypeId,
-          from,
-          to,
-          dto.totalCount ?? roomType.total_rooms,
-          dto.status ?? 'open',
-        ),
+        this.inventory.openRange(tx, roomTypeId, from, to, totalCount, dto.status ?? 'open'),
       );
       return { roomTypeId: roomTypeId.toString(), nights: affected };
     } catch (err) {

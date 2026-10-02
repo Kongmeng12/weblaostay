@@ -47,16 +47,30 @@ export class InventoryService {
   ): Promise<void> {
     const nights = Math.round((checkOut.getTime() - checkIn.getTime()) / 86_400_000);
 
+    // Two ceilings, both checked: what the partner put on sale
+    // (`total_count`), and — for a room type with numbered rooms — how many of
+    // those rooms physically exist and are in service. `total_count` alone
+    // used to be the only ceiling, and nothing tied it to the rooms: a range
+    // opened at 50 sold 50 nights of a five-room type, to walk-ins and online
+    // guests alike. A room type with no numbered rooms keeps `total_count` as
+    // its only ceiling.
     const held = await tx.$executeRaw`
-      WITH bookable AS (
-        SELECT inventory_id
-        FROM room_inventory
+      WITH rooms_cap AS (
+        SELECT COUNT(*) AS any_rooms,
+               COUNT(*) FILTER (WHERE status IN ('available', 'needs_cleaning')) AS in_service
+        FROM rooms
         WHERE room_type_id = ${roomTypeId}
-          AND date >= ${checkIn}::date AND date < ${checkOut}::date
-          AND status = 'open'
-          AND total_count - held_count - booked_count >= ${quantity}
-        ORDER BY date
-        FOR UPDATE
+      ),
+      bookable AS (
+        SELECT ri.inventory_id
+        FROM room_inventory ri, rooms_cap rc
+        WHERE ri.room_type_id = ${roomTypeId}
+          AND ri.date >= ${checkIn}::date AND ri.date < ${checkOut}::date
+          AND ri.status = 'open'
+          AND ri.total_count - ri.held_count - ri.booked_count >= ${quantity}
+          AND (rc.any_rooms = 0 OR rc.in_service - ri.held_count - ri.booked_count >= ${quantity})
+        ORDER BY ri.date
+        FOR UPDATE OF ri
       )
       UPDATE room_inventory ri
       SET held_count = ri.held_count + ${quantity}
@@ -78,8 +92,10 @@ export class InventoryService {
     checkOut: Date,
     quantity: number,
   ): Promise<never> {
-    const rows = await tx.$queryRaw<{ date: Date; status: string; available_count: number }[]>`
-      SELECT date, status::text, available_count
+    const rows = await tx.$queryRaw<
+      { date: Date; status: string; available_count: number; used: number }[]
+    >`
+      SELECT date, status::text, available_count, (held_count + booked_count)::int AS used
       FROM room_inventory
       WHERE room_type_id = ${roomTypeId}
         AND date >= ${checkIn}::date AND date < ${checkOut}::date
@@ -104,7 +120,11 @@ export class InventoryService {
       );
     }
 
-    const full = rows.filter((r) => r.available_count < quantity);
+    // Measured against the same two ceilings `hold()` uses.
+    const cap = await this.roomCapacity(tx, roomTypeId);
+    const full = rows.filter(
+      (r) => r.available_count < quantity || (cap !== null && cap - r.used < quantity),
+    );
     if (full.length) {
       throw new ConflictException(
         `ຫ້ອງເຕັມໃນວັນທີ ${full.map((f) => isoDayUtc(f.date)).join(', ')} · ` +
@@ -187,6 +207,90 @@ export class InventoryService {
   ): Promise<void> {
     await this.hold(tx, roomTypeId, checkIn, checkOut, quantity);
     await this.confirmHold(tx, roomTypeId, checkIn, checkOut, quantity);
+  }
+
+  /**
+   * How many rooms of this type can actually be slept in — `null` for a room
+   * type with no numbered rooms, whose only ceiling is `total_count`.
+   * `needs_cleaning` counts: it is a few hours' state, not a room off sale;
+   * `maintenance` and `inactive` do not.
+   */
+  async roomCapacity(tx: Prisma.TransactionClient, roomTypeId: bigint): Promise<number | null> {
+    const [row] = await tx.$queryRaw<{ any_rooms: number; in_service: number }[]>`
+      SELECT COUNT(*)::int AS any_rooms,
+             (COUNT(*) FILTER (WHERE status IN ('available', 'needs_cleaning')))::int AS in_service
+      FROM rooms
+      WHERE room_type_id = ${roomTypeId}
+    `;
+    return row.any_rooms === 0 ? null : row.in_service;
+  }
+
+  /**
+   * Brings future nights back under the physical ceiling after a room left
+   * service (deleted, deactivated, sent to maintenance). Never below what is
+   * already sold — those guests are booked — so the nights that cannot fit
+   * are returned for the partner to resolve rather than silently dropped.
+   */
+  async clampToRooms(
+    tx: Prisma.TransactionClient,
+    roomTypeId: bigint,
+    fromDate: Date,
+  ): Promise<{ date: string; rooms: number; sold: number }[]> {
+    const cap = await this.roomCapacity(tx, roomTypeId);
+    if (cap === null) return [];
+
+    await tx.$executeRaw`
+      UPDATE room_inventory
+      SET total_count = GREATEST(${cap}, held_count + booked_count)
+      WHERE room_type_id = ${roomTypeId}
+        AND date >= ${fromDate}::date
+        AND total_count > ${cap}
+    `;
+
+    const over = await tx.$queryRaw<{ date: Date; sold: number }[]>`
+      SELECT date, (held_count + booked_count)::int AS sold
+      FROM room_inventory
+      WHERE room_type_id = ${roomTypeId}
+        AND date >= ${fromDate}::date
+        AND held_count + booked_count > ${cap}
+      ORDER BY date
+    `;
+    return over.map((o) => ({ date: isoDayUtc(o.date), rooms: cap, sold: o.sold }));
+  }
+
+  /**
+   * A stay ended before its last booked night — checked out early, or a
+   * no-show recorded after the arrival day. The nights from `fromDate` on go
+   * back on sale, and any physical room held for them is freed; otherwise a
+   * room sits "sold" and empty until the original check-out date.
+   */
+  async releaseRemainingNights(
+    tx: Prisma.TransactionClient,
+    bookingId: bigint,
+    fromDate: Date,
+  ): Promise<void> {
+    const booking = await tx.bookings.findUniqueOrThrow({
+      where: { booking_id: bookingId },
+      select: { check_in: true, check_out: true, booking_items: { select: { booking_item_id: true, room_type_id: true, quantity: true } } },
+    });
+    // Nothing left to give back once the last night has passed, and never
+    // release a night before the stay began.
+    const from = fromDate > booking.check_in ? fromDate : booking.check_in;
+    if (from >= booking.check_out) return;
+
+    for (const item of booking.booking_items) {
+      await this.releaseBooked(tx, item.room_type_id, from, booking.check_out, item.quantity);
+      // Shorten the room's claim to the nights actually used; a claim with no
+      // nights left goes entirely (an empty range cannot be stored).
+      await tx.$executeRaw`
+        DELETE FROM room_assignments
+        WHERE booking_item_id = ${item.booking_item_id} AND check_in >= ${from}::date
+      `;
+      await tx.$executeRaw`
+        UPDATE room_assignments SET check_out = ${from}::date
+        WHERE booking_item_id = ${item.booking_item_id} AND check_out > ${from}::date
+      `;
+    }
   }
 
   /**

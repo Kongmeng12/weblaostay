@@ -21,7 +21,7 @@ import { LedgerService } from './ledger.service';
 import { allowedStatusMoves, blockedReason } from './booking-lifecycle';
 import { bookingCode, cancellationSplit, formatKip, kipOf, rateOf } from '../common/money';
 import { NotificationsService } from '../notifications/notifications.service';
-import { utcMidnight } from '../common/dates';
+import { todayInLaos, utcMidnight } from '../common/dates';
 import { MONEY_ROLES } from '../common/enums';
 import type { CreateBookingDto, WalkInDto } from './booking.dto';
 
@@ -526,6 +526,16 @@ export class BookingService {
           referenceType: 'booking',
           referenceId: bookingId,
         });
+      }
+
+      // Checked out early, or never came: the nights from today on go back on
+      // sale (a no-show is only recordable after the arrival day, so the
+      // nights already past stay charged). After the cleaning flag above, which
+      // reads the room claim this may shorten or remove. A check-out on the
+      // last day, or one the checkout sweeper makes afterwards, has nothing
+      // left to release.
+      if (to === booking_status.completed || to === booking_status.no_show) {
+        await this.inventory.releaseRemainingNights(tx, bookingId, todayInLaos());
       }
 
       const updated = await tx.bookings.findUniqueOrThrow({ where: { booking_id: bookingId } });
