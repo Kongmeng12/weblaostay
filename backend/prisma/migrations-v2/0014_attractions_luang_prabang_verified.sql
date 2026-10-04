@@ -38,6 +38,6 @@ INSERT INTO attractions (name_lo, name_en, slug, latitude, longitude, province_i
     19.88278, 102.13000, (SELECT province_id FROM provinces WHERE province_code = 'LP'), 'curated'),
   ('ແມ່ນ້ຳຂອງ', 'Mekong River (Luang Prabang)', 'mekong-river-luang-prabang',
     19.88329, 102.13872, (SELECT province_id FROM provinces WHERE province_code = 'LP'), 'curated'),
-  ('ທາດຫຼວງ', 'Wat That Luang', 'wat-that-luang-lp',
+  ('ວັດທາດຫຼວງ ຫຼວງພະບາງ', 'Wat That Luang', 'wat-that-luang-lp',
     19.89333, 102.13694, (SELECT province_id FROM provinces WHERE province_code = 'LP'), 'curated')
 ON CONFLICT (slug) DO NOTHING;
