@@ -68,6 +68,11 @@ export class PlaceResolverService {
     // (what name_lo/name_en actually hold) reads differently from what was
     // typed. ILIKE/trigram similarity below is what lets a *different*
     // phrasing of a curated landmark's name still match.
+    //
+    // Ranking goes exact name, then names that *contain* the query, and only
+    // then fuzzy similarity — similarity alone favours short names, so
+    // "ຕາດຫຼວງ" scored Luang Prabang's 'ທາດຫຼວງ' (one letter off) above
+    // Xieng Khouang's 'ນ້ຳຕົກຕາດຫຼວງ' that literally contains it.
     const rows = await this.prisma.$queryRaw<AttractionRow[]>`
       SELECT name_lo, name_en, latitude, longitude
       FROM attractions
@@ -78,6 +83,8 @@ export class PlaceResolverService {
          OR similarity(coalesce(name_en, ''), ${query}) > 0.3
       ORDER BY
         (slug = ${slug}) DESC,
+        (lower(name_lo) = lower(${query}) OR lower(coalesce(name_en, '')) = lower(${query})) DESC,
+        (name_lo ILIKE '%' || ${query} || '%' OR coalesce(name_en, '') ILIKE '%' || ${query} || '%') DESC,
         GREATEST(similarity(name_lo, ${query}), similarity(coalesce(name_en, ''), ${query})) DESC
       LIMIT 1
     `;
