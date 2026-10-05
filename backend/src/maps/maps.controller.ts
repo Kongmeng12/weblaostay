@@ -1,5 +1,6 @@
-import { Controller, Get, Logger, Param, Res } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Logger, Param, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { Public } from '../common/decorators';
 
@@ -18,7 +19,12 @@ export class MapsController {
 
   constructor(private readonly config: ConfigService) {}
 
+  // Public, so it is also unauthenticated bandwidth against the free-tier
+  // MapTiler quota: one caller hammering /maps/tile could exhaust the key for
+  // everyone. The per-route cap sits well above a map pan/zoom burst (a screen
+  // of tiles is a few dozen requests) but far below what a scraper would want.
   @Public()
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
   @Get('tile/:z/:x/:y.png')
   async tile(
     @Param('z') z: string,
@@ -26,6 +32,12 @@ export class MapsController {
     @Param('y') y: string,
     @Res() res: Response,
   ): Promise<void> {
+    // z/x/y land in the upstream URL, so they are held to the digits a tile
+    // coordinate is — nothing else can reach api.maptiler.com through here.
+    if (!/^\d{1,2}$/.test(z) || !/^\d{1,7}$/.test(x) || !/^\d{1,7}$/.test(y)) {
+      throw new BadRequestException('ພິກັດ tile ບໍ່ຖືກຕ້ອງ · Invalid tile coordinate');
+    }
+
     const key = this.config.get<string>('MAPTILER_API_KEY')?.trim();
     if (!key) {
       res.status(503).end();

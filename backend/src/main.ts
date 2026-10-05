@@ -9,6 +9,7 @@ import cors from 'cors';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { existsSync, mkdirSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -170,12 +171,28 @@ async function bootstrap(): Promise<void> {
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
   const port = Number(config.get<string>('PORT', '3000'));
-  // No explicit host: Node binds dual-stack, so "localhost" works whether it
-  // resolves to 127.0.0.1 or ::1. Binding 0.0.0.0 is IPv4-only and breaks
-  // Node's own fetch on Windows, which prefers ::1.
-  await app.listen(port);
+  // Bind the loopback only. With no host, Node listens on the unspecified
+  // address (every interface), so the API would answer directly on the LAN and
+  // over Tailscale — letting anyone on the same network skip Cloudflare and the
+  // WAF, and (with `trust proxy` on) spoof X-Forwarded-For to dodge the rate
+  // limiter. Cloudflare Tunnel reaches this process as localhost, so loopback is
+  // all production needs. HOST is overridable for the rare container that must
+  // publish a port itself.
+  //
+  // Both loopbacks, not the name `localhost`: Node binds that to ::1 alone on
+  // Windows, which refuses 127.0.0.1 — the address the Android emulator's
+  // 10.0.2.2 lands on, and the one cloudflared may dial first. ::1 is a second
+  // listener on the same handler so Node's own fetch, which prefers ::1, still
+  // connects; a machine with IPv6 off just skips it.
+  const host = config.get<string>('HOST', '127.0.0.1');
+  await app.listen(port, host);
+  if (host === '127.0.0.1') {
+    createServer(app.getHttpAdapter().getInstance())
+      .on('error', (err) => new Logger('Bootstrap').warn(`No ::1 listener: ${err.message}`))
+      .listen(port, '::1');
+  }
 
-  new Logger('Bootstrap').log(`PhaPhak API listening on http://localhost:${port}/api`);
+  new Logger('Bootstrap').log(`PhaPhak API listening on http://localhost:${port}/api (loopback only)`);
 }
 
 void bootstrap();
