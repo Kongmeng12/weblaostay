@@ -255,6 +255,11 @@ export function PayPage() {
               </>
             ) : payment.data?.qrPayload ? (
               <>
+                {CHANNEL_LOOK[channel] && (
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+                    <ChannelMark look={CHANNEL_LOOK[channel]} size={56} />
+                  </div>
+                )}
                 <div style={{ font: t.h3, color: c.text, marginBottom: 12 }}>
                   ສະແກນດ້ວຍແອັບ {CHANNEL_LOOK[channel]?.name ?? channel}
                 </div>
@@ -338,16 +343,51 @@ export function PayPage() {
   );
 }
 
-/** How each channel is shown — the names on the guest's own banking app. */
-const CHANNEL_LOOK: Record<string, { name: string; mark: string; color: string }> = {
-  bcel: { name: 'BCEL One', mark: 'B', color: '#D71920' },
-  jdb: { name: 'JDB', mark: 'J', color: '#1B3F8B' },
-  ldb: { name: 'LDB', mark: 'L', color: '#1E88C8' },
-  ib: { name: 'Indochina Bank', mark: 'IB', color: '#5B2C83' },
-  stb: { name: 'STB', mark: 'S', color: '#1A3D9C' },
-  m_money: { name: 'M-Money', mark: 'm', color: '#E2231A' },
+type ChannelLook = { name: string; mark: string; color: string; logo?: string };
+
+/**
+ * How each channel is shown — the names on the guest's own banking app.
+ * `logo` is that app's own store icon (JDB's is the mark from
+ * jdbbank.com.la): the icon the guest is about to open is the fastest thing
+ * to recognise. `mark`/`color` stay as the fallback for a channel PhaJay adds
+ * before we have its icon.
+ */
+const CHANNEL_LOOK: Record<string, ChannelLook> = {
+  bcel: { name: 'BCEL One', mark: 'B', color: '#D71920', logo: '/banks/bcel.png' },
+  jdb: { name: 'JDB', mark: 'J', color: '#1B3F8B', logo: '/banks/jdb.png' },
+  ldb: { name: 'LDB', mark: 'L', color: '#1E88C8', logo: '/banks/ldb.png' },
+  ib: { name: 'Indochina Bank', mark: 'IB', color: '#5B2C83', logo: '/banks/ib.png' },
+  stb: { name: 'STB', mark: 'S', color: '#1A3D9C', logo: '/banks/stb.png' },
+  m_money: { name: 'M-Money', mark: 'm', color: '#E2231A', logo: '/banks/m_money.png' },
   card: { name: 'Visa / Mastercard', mark: '💳', color: '#2B2521' },
 };
+
+/** A channel's icon in a rounded tile — the bank's app icon, else its initial on its colour. */
+function ChannelMark({ look, size = 48 }: { look: ChannelLook; size?: number }) {
+  return (
+    <span
+      style={{
+        width: size,
+        height: size,
+        borderRadius: Math.round(size * 0.26),
+        background: look.logo ? '#fff' : look.color,
+        border: look.logo ? `1px solid ${c.border}` : 'none',
+        overflow: 'hidden',
+        color: '#fff',
+        display: 'grid',
+        placeItems: 'center',
+        font: f(800, Math.round(size * 0.36)),
+        flex: 'none',
+      }}
+    >
+      {look.logo ? (
+        <img src={look.logo} alt="" width={size} height={size} style={{ display: 'block', objectFit: 'cover' }} />
+      ) : (
+        look.mark
+      )}
+    </span>
+  );
+}
 
 /** Step one: the banks, then cards, each group one card with hairlines between rows. */
 function ChannelPicker({
@@ -391,7 +431,7 @@ function ChannelPicker({
             <div style={{ font: f(700, 12), color: c.muted, margin: '16px 2px 8px' }}>{g.title}</div>
             <div style={{ border: `1px solid ${c.border}`, borderRadius: radius.lg, overflow: 'hidden' }}>
               {g.ids.map((ch, i) => {
-                const look = CHANNEL_LOOK[ch.id] ?? { name: ch.id, mark: ch.id[0], color: c.muted };
+                const look: ChannelLook = CHANNEL_LOOK[ch.id] ?? { name: ch.id, mark: ch.id[0], color: c.muted };
                 const tooSmall = ch.minAmount !== null && total < ch.minAmount;
                 return (
                   <button
@@ -403,7 +443,7 @@ function ChannelPicker({
                       display: 'flex',
                       alignItems: 'center',
                       gap: 14,
-                      padding: '13px 16px',
+                      padding: '12px 16px',
                       background: '#fff',
                       border: 'none',
                       borderTop: i ? `1px solid ${c.divider}` : 'none',
@@ -412,23 +452,11 @@ function ChannelPicker({
                       textAlign: 'left',
                     }}
                   >
-                    <span
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: '50%',
-                        background: look.color,
-                        color: '#fff',
-                        display: 'grid',
-                        placeItems: 'center',
-                        font: f(800, 13),
-                        flex: 'none',
-                      }}
-                    >
-                      {look.mark}
-                    </span>
+                    <ChannelMark look={look} />
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', font: t.label, color: c.text }}>{look.name}</span>
+                      <span style={{ display: 'block', font: f(700, 15), color: c.text, marginBottom: 2 }}>
+                        {look.name}
+                      </span>
                       <span style={{ display: 'block', font: f(400, 12), color: c.muted }}>
                         {tooSmall ? `ຂັ້ນຕ່ຳ ${kip(ch.minAmount)}` : g.subtitle}
                       </span>
