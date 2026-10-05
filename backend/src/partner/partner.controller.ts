@@ -259,6 +259,22 @@ export class PartnerController {
     return this.partner.setPrice(this.own.partnerId(user), BigInt(roomTypeId), dto);
   }
 
+  /** Back to the base rate: drops the special prices in `[from, to)`. */
+  @Delete('room-types/:roomTypeId/prices')
+  @Audit('partner_price_clear', 'partner', 'room_prices', 'roomTypeId')
+  clearPrice(
+    @CurrentUser() user: AuthedUser,
+    @Param('roomTypeId') roomTypeId: string,
+    @Query() query: DateRangeDto,
+  ) {
+    return this.partner.clearPrice(
+      this.own.partnerId(user),
+      BigInt(roomTypeId),
+      query.from,
+      query.to,
+    );
+  }
+
   // ── bookings ──────────────────────────────────────────────────────────────
 
   @Get('bookings')

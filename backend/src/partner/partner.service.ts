@@ -49,6 +49,23 @@ export class PartnerService {
       },
     });
 
+    // Upcoming nights priced away from the base rate, so the pricing screen
+    // can say "N special nights" without a calendar per room type. A stored
+    // price equal to the base is not special — the seed wrote those out.
+    const typeIds = rows.flatMap((p) => p.room_types.map((rt) => rt.room_type_id));
+    const specialRows = typeIds.length
+      ? await this.prisma.$queryRaw<{ room_type_id: bigint; nights: number }[]>`
+          SELECT rp.room_type_id, COUNT(*)::int AS nights
+          FROM room_prices rp
+          JOIN room_types rt ON rt.room_type_id = rp.room_type_id
+          WHERE rp.room_type_id IN (${Prisma.join(typeIds)})
+            AND rp.date >= ${todayInLaos()}::date
+            AND rp.price <> rt.base_price
+          GROUP BY rp.room_type_id
+        `
+      : [];
+    const specialNights = new Map(specialRows.map((r) => [r.room_type_id.toString(), r.nights]));
+
     return rows.map((p) => ({
       id: p.property_id.toString(),
       name: p.property_name,
@@ -69,7 +86,10 @@ export class PartnerService {
         url: i.image_url,
         isCover: i.is_cover,
       })),
-      roomTypes: p.room_types.map(toRoomTypeView),
+      roomTypes: p.room_types.map((rt) => ({
+        ...toRoomTypeView(rt),
+        specialPriceNights: specialNights.get(rt.room_type_id.toString()) ?? 0,
+      })),
       bookingCount: p._count.bookings,
     }));
   }
@@ -145,25 +165,43 @@ export class PartnerService {
   async updateRoomType(partnerId: bigint, roomTypeId: bigint, dto: UpdateRoomTypeDto) {
     await this.own.assertOwnsRoomType(partnerId, roomTypeId);
 
-    const updated = await this.prisma.room_types.update({
-      where: { room_type_id: roomTypeId },
-      data: {
-        ...(dto.name !== undefined && { type_name: dto.name }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.bedType !== undefined && { bed_type: dto.bedType }),
-        ...(dto.hasAc !== undefined && { has_ac: dto.hasAc }),
-        ...(dto.maxOccupancy !== undefined && { max_occupancy: dto.maxOccupancy }),
-        ...(dto.basePrice !== undefined && { base_price: toKip(dto.basePrice) }),
-        ...(dto.totalRooms !== undefined && { total_rooms: dto.totalRooms }),
-        ...(dto.minNights !== undefined && { min_nights: dto.minNights }),
-        ...(dto.extraGuestFee !== undefined && { extra_guest_fee: toKip(dto.extraGuestFee) }),
-        ...(dto.sizeSqm !== undefined && { size_sqm: dto.sizeSqm }),
-        ...(dto.isActive !== undefined && { status: dto.isActive ? 'active' : 'inactive' }),
-        ...(dto.allowRoomSelection !== undefined && {
-          allow_room_selection: dto.allowRoomSelection,
-        }),
-      },
-      include: { room_type_images: true, rooms: { orderBy: { room_number: 'asc' } } },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // A night stored at the old base rate was never really special — the
+      // seed and older screens wrote every night out in full. Left in place,
+      // it would keep selling at the old rate after the base changes, so it
+      // follows the base instead. Nights priced differently stay as they are.
+      if (dto.basePrice !== undefined) {
+        const { base_price: oldBase } = await tx.room_types.findUniqueOrThrow({
+          where: { room_type_id: roomTypeId },
+          select: { base_price: true },
+        });
+        if (oldBase !== toKip(dto.basePrice)) {
+          await tx.room_prices.deleteMany({
+            where: { room_type_id: roomTypeId, date: { gte: todayInLaos() }, price: oldBase },
+          });
+        }
+      }
+
+      return tx.room_types.update({
+        where: { room_type_id: roomTypeId },
+        data: {
+          ...(dto.name !== undefined && { type_name: dto.name }),
+          ...(dto.description !== undefined && { description: dto.description }),
+          ...(dto.bedType !== undefined && { bed_type: dto.bedType }),
+          ...(dto.hasAc !== undefined && { has_ac: dto.hasAc }),
+          ...(dto.maxOccupancy !== undefined && { max_occupancy: dto.maxOccupancy }),
+          ...(dto.basePrice !== undefined && { base_price: toKip(dto.basePrice) }),
+          ...(dto.totalRooms !== undefined && { total_rooms: dto.totalRooms }),
+          ...(dto.minNights !== undefined && { min_nights: dto.minNights }),
+          ...(dto.extraGuestFee !== undefined && { extra_guest_fee: toKip(dto.extraGuestFee) }),
+          ...(dto.sizeSqm !== undefined && { size_sqm: dto.sizeSqm }),
+          ...(dto.isActive !== undefined && { status: dto.isActive ? 'active' : 'inactive' }),
+          ...(dto.allowRoomSelection !== undefined && {
+            allow_room_selection: dto.allowRoomSelection,
+          }),
+        },
+        include: { room_type_images: true, rooms: { orderBy: { room_number: 'asc' } } },
+      });
     });
 
     return toRoomTypeView(updated);
@@ -348,6 +386,22 @@ export class PartnerService {
     return { roomTypeId: roomTypeId.toString(), nights: affected };
   }
 
+  /**
+   * Puts nights back on the base rate by dropping their special prices.
+   * Bookings already made keep the price they were quoted — it is stored on
+   * the booking, not read from here.
+   */
+  async clearPrice(partnerId: bigint, roomTypeId: bigint, fromIso: string, toIso: string) {
+    await this.own.assertVerified(partnerId);
+    await this.own.assertOwnsRoomType(partnerId, roomTypeId);
+
+    const { from, to } = this.parseRange(fromIso, toIso);
+    const { count } = await this.prisma.room_prices.deleteMany({
+      where: { room_type_id: roomTypeId, date: { gte: from, lt: to } },
+    });
+    return { roomTypeId: roomTypeId.toString(), nights: count };
+  }
+
   /** The pricing calendar: one entry per night, gaps filled. */
   async calendar(partnerId: bigint, roomTypeId: bigint, fromIso: string, toIso: string) {
     await this.own.assertOwnsRoomType(partnerId, roomTypeId);
@@ -357,6 +411,7 @@ export class PartnerService {
       {
         day: string;
         price: bigint;
+        special: boolean;
         total_count: number | null;
         held_count: number | null;
         booked_count: number | null;
@@ -370,6 +425,7 @@ export class PartnerService {
       )
       SELECT to_char(n.d, 'YYYY-MM-DD')          AS day,
              COALESCE(rp.price, rt.base_price)   AS price,
+             COALESCE(rp.price <> rt.base_price, false) AS special,
              ri.total_count, ri.held_count, ri.booked_count, ri.available_count,
              ri.status::text
       FROM nights n
@@ -385,6 +441,8 @@ export class PartnerService {
       days: rows.map((r) => ({
         date: r.day,
         price: kipOf(r.price),
+        // Priced on its own rather than at the room type's base rate.
+        special: r.special,
         total: r.total_count ?? 0,
         held: r.held_count ?? 0,
         booked: r.booked_count ?? 0,
