@@ -85,6 +85,26 @@ export class UploadsController {
   }
 }
 
+/** Generic image upload for admin content — banners, etc. */
+@Controller('admin/uploads')
+@Roles(user_role.ADMIN)
+export class AdminUploadsController {
+  constructor(private readonly uploads: UploadsService) {}
+
+  @Post('image')
+  @HttpCode(201)
+  @Audit('admin_image_upload', 'admin', 'uploads')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_PHOTO_BYTES * 2 },
+    }),
+  )
+  async upload(@UploadedFile() file: Express.Multer.File | undefined) {
+    return this.uploads.uploadAdminImage(file);
+  }
+}
+
 /**
  * The one photo shown for a province on Home's "Explore regions" rail —
  * see UploadsService.setProvincePhoto for what it overrides.

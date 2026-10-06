@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
@@ -176,6 +177,15 @@ class GeneratePayoutDto {
   @IsOptional()
   @IsString()
   periodStart?: string;
+
+  @IsOptional()
+  @IsIn(['weekly', 'monthly'])
+  periodType?: 'weekly' | 'monthly';
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  partnerIds?: string[];
 }
 
 class UpdateSettingsDto {
@@ -946,7 +956,7 @@ export class AdminController {
   @AdminRoles(...MONEY_ROLES)
   @Audit('payout_generate', 'finance', 'payouts')
   generate(@Body() dto: GeneratePayoutDto) {
-    return this.payouts.generate(dto.periodStart);
+    return this.payouts.generate(dto.periodStart, dto.periodType ?? 'weekly', dto.partnerIds);
   }
 
   @Patch('payouts/:id/pay')

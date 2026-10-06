@@ -326,12 +326,18 @@ export function SettingsOperations() {
           onChange={(v) => set({ qr_ttl_minutes: v })}
         />
         <CountRow
-          title="ຮອບໂອນເງິນ"
-          hint="ຄວາມຍາວຂອງແຕ່ລະຮອບທີ່ ‘ສ້າງຮອບໃໝ່’ ຈະສ້າງ"
+          title="ຮອບໂອນ (ອາທິດ)"
+          hint="ຈຳນວນວັນຕໍ່ຮອບ — ເລີ່ມຈາກວັນຈັນຂອງຮອບ"
           unit="ວັນ"
           value={s.draft?.payout_period_days}
           disabled={!canEdit || !s.draft}
           onChange={(v) => set({ payout_period_days: v })}
+        />
+        <StaticRow
+          title="ຮອບໂອນ (ເດືອນ)"
+          hint="ເດືອນປະຕິທິນທີ່ຜ່ານມາ — ຄົງທີ່"
+          value="1"
+          unit="ເດືອນ"
         />
         <CountRow
           title="ຈຳນວນຄືນສູງສຸດຕໍ່ການຈອງ"
@@ -650,6 +656,57 @@ function RateRow(props: Omit<Parameters<typeof SettingRow>[0], 'unit' | 'step' |
 function CountRow(props: Omit<Parameters<typeof SettingRow>[0], 'step'>) {
   return <SettingRow {...props} step="1" />;
 }
+
+/** Read-only row styled identically to SettingRow so the value box aligns. */
+function StaticRow({
+  title,
+  hint,
+  value,
+  unit,
+  last,
+}: {
+  title: string;
+  hint?: string;
+  value: string;
+  unit: string;
+  last?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        padding: '16px 0',
+        borderBottom: last ? 'none' : `1px solid ${c.divider}`,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div style={{ font: f(600, 14), color: c.text }}>{title}</div>
+        {hint && <div style={{ font: f(400, 12, 18), color: c.muted }}>{hint}</div>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>
+        <div
+          style={{
+            width: 74,
+            padding: 10,
+            background: c.bg,
+            border: `1px solid ${c.border}`,
+            borderRadius: radius.sm,
+            font: f(700, 15),
+            color: c.soft,
+            textAlign: 'center',
+          }}
+        >
+          {value}
+        </div>
+        <span style={{ font: f(700, 13), color: c.soft, minWidth: 34 }}>{unit}</span>
+      </div>
+    </div>
+  );
+}
+
 
 function CreateAdminDialog({
   busy,

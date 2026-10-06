@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { RefundCounts, RefundRow } from '../lib/types';
@@ -7,6 +7,11 @@ import { kip, laoAgo, laoDateTime } from '../lib/format';
 import { Button, Card, Chips, DataTable, ErrorState, Field, Modal, Pill, inputStyle } from '../components/ui';
 
 type Filter = 'pending' | 'completed' | 'failed' | 'all';
+
+const LAO_MONTHS = [
+  'ມັງກອນ','ກຸມພາ','ມີນາ','ເມສາ','ພຶດສະພາ','ມິຖຸນາ',
+  'ກໍລະກົດ','ສິງຫາ','ກັນຍາ','ຕຸລາ','ພະຈິກ','ທັນວາ',
+];
 
 /**
  * Money owed back to guests.
@@ -21,6 +26,9 @@ export function Refunds() {
   const [filter, setFilter] = useState<Filter>('pending');
   const [paying, setPaying] = useState<RefundRow | null>(null);
   const [failing, setFailing] = useState<RefundRow | null>(null);
+  const [propSearch, setPropSearch] = useState('');
+  const [filterMonth, setFilterMonth] = useState('');
+  const [filterYear, setFilterYear] = useState('');
 
   const counts = useQuery({
     queryKey: ['refunds', 'counts'],
@@ -54,6 +62,29 @@ export function Refunds() {
     },
   });
 
+  const years = useMemo(() => {
+    const ys = new Set<string>();
+    (list.data ?? []).forEach((r) => ys.add(String(new Date(r.requestedAt).getFullYear())));
+    return Array.from(ys).sort().reverse();
+  }, [list.data]);
+
+  const filteredRows = useMemo(() => {
+    let data = list.data ?? [];
+    if (propSearch.trim()) {
+      const q = propSearch.trim().toLowerCase();
+      data = data.filter((r) => r.property.toLowerCase().includes(q));
+    }
+    if (filterMonth) {
+      data = data.filter((r) => String(new Date(r.requestedAt).getMonth() + 1) === filterMonth);
+    }
+    if (filterYear) {
+      data = data.filter((r) => String(new Date(r.requestedAt).getFullYear()) === filterYear);
+    }
+    return data;
+  }, [list.data, propSearch, filterMonth, filterYear]);
+
+  const hasFilter = propSearch.trim() || filterMonth || filterYear;
+
   if (list.isError) return <ErrorState error={list.error} onRetry={() => void list.refetch()} />;
 
   const owed = counts.data?.pending;
@@ -86,10 +117,56 @@ export function Refunds() {
         />
       </div>
 
+      {/* ─── Filters ─── */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          value={propSearch}
+          onChange={(e) => setPropSearch(e.target.value)}
+          placeholder="ຄົ້ນຫາທີ່ພັກ..."
+          style={{ ...inputStyle, width: 220 }}
+        />
+        <select
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(e.target.value)}
+          style={{ ...inputStyle, width: 150 }}
+        >
+          <option value="">ທຸກເດືອນ</option>
+          {LAO_MONTHS.map((m, i) => (
+            <option key={i + 1} value={String(i + 1)}>{m}</option>
+          ))}
+        </select>
+        <select
+          value={filterYear}
+          onChange={(e) => setFilterYear(e.target.value)}
+          style={{ ...inputStyle, width: 110 }}
+        >
+          <option value="">ທຸກປີ</option>
+          {years.map((y) => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
+        {hasFilter && (
+          <button
+            onClick={() => { setPropSearch(''); setFilterMonth(''); setFilterYear(''); }}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              font: f(500, 12), color: c.accent, padding: '0 4px',
+            }}
+          >
+            ລ້າງ ✕
+          </button>
+        )}
+        {hasFilter && (
+          <span style={{ font: f(400, 12), color: c.muted, marginLeft: 4 }}>
+            {filteredRows.length} ລາຍການ
+          </span>
+        )}
+      </div>
+
       <Card padding={0}>
         <DataTable
           loading={list.isLoading}
-          rows={list.data ?? []}
+          rows={filteredRows}
           keyOf={(r) => r.id}
           empty={filter === 'pending' ? 'ບໍ່ມີໃຜລໍເງິນຄືນ' : 'ບໍ່ມີລາຍການ'}
           columns={[

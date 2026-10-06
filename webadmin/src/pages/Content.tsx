@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { Announcement, AppPage, Audience, Banner, BannerTarget, Faq, RegionRow } from '../lib/types';
@@ -243,12 +243,10 @@ export function ContentBanners() {
                 style={{ ...inputStyle, resize: 'vertical' }}
               />
             </Field>
-            <Field label="ທີ່ຢູ່ຮູບ" hint="ອັບໂຫຼດຮູບຜ່ານ /uploads ແລ້ວວາງ URL ທີ່ໄດ້ໃສ່ນີ້">
-              <input
-                value={editing.imageUrl ?? ''}
-                onChange={(e) => setEditing({ ...editing, imageUrl: e.target.value || null })}
-                placeholder="/uploads/banner.jpg"
-                style={inputStyle}
+            <Field label="ຮູບ">
+              <ImageUrlField
+                value={editing.imageUrl}
+                onChange={(url) => setEditing({ ...editing, imageUrl: url })}
               />
             </Field>
 
@@ -340,6 +338,166 @@ export function ContentBanners() {
         </Modal>
       )}
     </Card>
+  );
+}
+
+// ── ImageUrlField ─────────────────────────────────────────────────────────────
+
+type ImgMode = 'upload' | 'url' | 'drive';
+
+function parseDriveUrl(raw: string): string | null {
+  const m1 = raw.match(/\/file\/d\/([^/?&#]+)/);
+  if (m1) return `https://drive.google.com/uc?export=view&id=${m1[1]}`;
+  const m2 = raw.match(/[?&]id=([^&#]+)/);
+  if (m2) return `https://drive.google.com/uc?export=view&id=${m2[1]}`;
+  return null;
+}
+
+function ImageUrlField({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (url: string | null) => void;
+}) {
+  const [mode, setMode] = useState<ImgMode>('url');
+  const [driveInput, setDriveInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const driveConverted = driveInput ? parseDriveUrl(driveInput.trim()) : null;
+
+  const TABS: { v: ImgMode; l: string }[] = [
+    { v: 'upload', l: 'ອັບໂຫຼດ' },
+    { v: 'url', l: 'URL ໂດຍກົງ' },
+    { v: 'drive', l: 'Google Drive' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* mode tabs */}
+      <div
+        style={{
+          display: 'flex',
+          border: `1px solid ${c.border}`,
+          borderRadius: radius.sm,
+          overflow: 'hidden',
+        }}
+      >
+        {TABS.map(({ v, l }, i) => (
+          <button
+            key={v}
+            onClick={() => { setMode(v); setErr(null); }}
+            style={{
+              flex: 1,
+              padding: '7px 0',
+              border: 'none',
+              borderRight: i < TABS.length - 1 ? `1px solid ${c.border}` : 'none',
+              background: mode === v ? c.accentSoft : c.surface,
+              color: mode === v ? c.accentDark : c.muted,
+              font: f(600, 12),
+              cursor: 'pointer',
+            }}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* upload mode */}
+      {mode === 'upload' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              setBusy(true);
+              setErr(null);
+              try {
+                const res = await api.upload<{ url: string }>('/admin/uploads/image', file);
+                onChange(res.url);
+              } catch (ex) {
+                setErr(ex instanceof Error ? ex.message : 'ອັບໂຫຼດບໍ່ສຳເລັດ');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+          <Button variant="ghost" disabled={busy} onClick={() => fileRef.current?.click()}>
+            {busy ? 'ກຳລັງອັບໂຫຼດ...' : 'ເລືອກຮູບ'}
+          </Button>
+          {value && (
+            <span style={{ font: f(400, 11), color: c.successFg }}>✓ ອັບໂຫຼດແລ້ວ</span>
+          )}
+        </div>
+      )}
+
+      {/* direct URL mode */}
+      {mode === 'url' && (
+        <input
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value || null)}
+          placeholder="https://example.com/banner.jpg"
+          style={inputStyle}
+        />
+      )}
+
+      {/* Google Drive mode */}
+      {mode === 'drive' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input
+            value={driveInput}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setDriveInput(raw);
+              const converted = raw.trim() ? parseDriveUrl(raw.trim()) : null;
+              onChange(converted);
+            }}
+            placeholder="https://drive.google.com/file/d/.../view"
+            style={inputStyle}
+          />
+          {driveInput.trim() && !driveConverted && (
+            <div style={{ font: f(400, 11), color: c.dangerFg }}>ລິ້ງບໍ່ຖືກຮູບແບບ Google Drive</div>
+          )}
+          {driveConverted && (
+            <div style={{ font: f(400, 11), color: c.successFg }}>
+              ✓ ປ່ຽນ URL ແລ້ວ (ໄຟລ໌ຕ້ອງ Share ແບບ "Anyone with the link")
+            </div>
+          )}
+        </div>
+      )}
+
+      {err && <div style={{ font: f(500, 11), color: c.dangerFg }}>{err}</div>}
+
+      {/* preview */}
+      {value && (
+        <div
+          style={{
+            width: '100%',
+            height: 120,
+            borderRadius: radius.sm,
+            border: `1px solid ${c.border}`,
+            overflow: 'hidden',
+            background: c.bg,
+          }}
+        >
+          <img
+            src={value}
+            alt="preview"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -719,6 +877,10 @@ export function ContentPages() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<AppPage | null>(null);
   const [creating, setCreating] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+  const filePickerRef = useRef<HTMLInputElement>(null);
 
   const list = useQuery({
     queryKey: ['content', 'pages'],
@@ -739,6 +901,38 @@ export function ContentPages() {
       setCreating(false);
     },
   });
+
+  /** Inserts `text` at the textarea cursor, or appends if no ref yet. */
+  const insertAtCursor = useCallback((text: string) => {
+    setEditing((prev) => {
+      if (!prev) return prev;
+      const el = contentRef.current;
+      if (!el) return { ...prev, content: (prev.content ?? '') + text };
+      const start = el.selectionStart ?? (prev.content ?? '').length;
+      const end = el.selectionEnd ?? start;
+      const current = prev.content ?? '';
+      const next = current.slice(0, start) + text + current.slice(end);
+      // Restore cursor after React re-render
+      requestAnimationFrame(() => {
+        el.selectionStart = el.selectionEnd = start + text.length;
+        el.focus();
+      });
+      return { ...prev, content: next };
+    });
+  }, []);
+
+  const handleFileUpload = useCallback(async (file: File) => {
+    setUploadBusy(true);
+    setUploadErr(null);
+    try {
+      const res = await api.upload<{ url: string }>('/admin/uploads/image', file);
+      insertAtCursor(res.url);
+    } catch (ex) {
+      setUploadErr(ex instanceof Error ? ex.message : 'ອັບໂຫຼດບໍ່ສຳເລັດ');
+    } finally {
+      setUploadBusy(false);
+    }
+  }, [insertAtCursor]);
 
   if (list.isError) return <ErrorState error={list.error} onRetry={() => void list.refetch()} />;
 
@@ -790,6 +984,7 @@ export function ContentPages() {
             onClick={() => {
               setCreating(false);
               setEditing({ ...p });
+              setUploadErr(null);
             }}
           >
             ແກ້ໄຂ
@@ -804,6 +999,7 @@ export function ContentPages() {
           onClose={() => {
             setEditing(null);
             setCreating(false);
+            setUploadErr(null);
           }}
           footer={
             <>
@@ -813,6 +1009,7 @@ export function ContentPages() {
                 onClick={() => {
                   setEditing(null);
                   setCreating(false);
+                  setUploadErr(null);
                 }}
               >
                 ຍົກເລີກ
@@ -856,11 +1053,75 @@ export function ContentPages() {
               />
             </Field>
             <Field label="ເນື້ອຫາ">
+              {/* upload toolbar */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 10px',
+                  background: c.bg,
+                  border: `1px solid ${c.border}`,
+                  borderBottom: 'none',
+                  borderRadius: `${radius.sm}px ${radius.sm}px 0 0`,
+                }}
+              >
+                <input
+                  ref={filePickerRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) await handleFileUpload(file);
+                  }}
+                />
+                <button
+                  disabled={uploadBusy}
+                  onClick={() => filePickerRef.current?.click()}
+                  title="ອັບໂຫຼດຮູບ ແລ້ວໃສ່ URL ທີ່ຕຳແໜ່ງ cursor"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '4px 10px',
+                    borderRadius: radius.sm,
+                    border: `1px solid ${c.border}`,
+                    background: '#fff',
+                    color: uploadBusy ? c.faint : c.soft,
+                    font: f(500, 12),
+                    cursor: uploadBusy ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {uploadBusy ? (
+                    'ກຳລັງອັບໂຫຼດ...'
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 14 }}>🖼</span> ອັບໂຫຼດຮູບ
+                    </>
+                  )}
+                </button>
+                <span style={{ font: f(400, 11), color: c.faint }}>
+                  URL ຈະຖືກໃສ່ທີ່ຕຳແໜ່ງ cursor
+                </span>
+                {uploadErr && (
+                  <span style={{ font: f(500, 11), color: c.dangerFg, marginLeft: 'auto' }}>
+                    {uploadErr}
+                  </span>
+                )}
+              </div>
               <textarea
+                ref={contentRef}
                 value={editing.content ?? ''}
                 onChange={(e) => setEditing({ ...editing, content: e.target.value })}
                 rows={14}
-                style={{ ...inputStyle, resize: 'vertical', font: f(400, 13, 21) }}
+                style={{
+                  ...inputStyle,
+                  resize: 'vertical',
+                  font: f(400, 13, 21),
+                  borderRadius: `0 0 ${radius.sm}px ${radius.sm}px`,
+                }}
               />
             </Field>
             <ActiveToggle

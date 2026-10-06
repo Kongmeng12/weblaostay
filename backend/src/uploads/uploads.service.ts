@@ -159,6 +159,20 @@ export class UploadsService {
     return { imageUrl: url };
   }
 
+  /** Generic image upload for admin content (banners, etc.). Returns the public URL. */
+  async uploadAdminImage(file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException('ກະລຸນາເລືອກຮູບ · No file was uploaded');
+    if (file.size > MAX_PHOTO_BYTES) throw new BadRequestException('ຮູບໃຫຍ່ເກີນໄປ ສູງສຸດ 5MB · File too large — 5MB maximum');
+    await detectFormat(file.buffer);
+    const processed = await sharp(file.buffer)
+      .rotate()
+      .resize({ width: 1200, withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toBuffer();
+    const url = await this.storage.save(`admin/${randomUUID()}.webp`, processed, FORMAT_TO_MIME.webp);
+    return { url };
+  }
+
   /** Back to the auto-derived cover photo. */
   async clearProvincePhoto(provinceId: bigint) {
     const { count } = await this.prisma.provinces.updateMany({

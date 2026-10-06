@@ -30,6 +30,7 @@ export function Approvals() {
   const qc = useQueryClient();
   const [rejecting, setRejecting] = useState<ApprovalRow | null>(null);
   const [viewing, setViewing] = useState<ApprovalRow | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const list = useQuery({
     queryKey: ['approvals'],
@@ -100,13 +101,21 @@ export function Approvals() {
                     width: 6,
                     background: c.warnBg,
                     borderRadius: `${radius.lg}px 0 0 ${radius.lg}px`,
+                    flexShrink: 0,
                   }}
                 />
                 <div style={{ flex: 1, padding: 20, display: 'flex', gap: 18, alignItems: 'center' }}>
-                  {/* Clicking the info area opens the detail modal */}
                   <div
-                    style={{ display: 'flex', gap: 18, alignItems: 'center', flex: 1, minWidth: 0, cursor: 'pointer' }}
+                    style={{
+                      display: 'flex', gap: 18, alignItems: 'center', flex: 1, minWidth: 0,
+                      cursor: 'pointer', borderRadius: radius.md,
+                      background: hoveredId === r.id ? c.rowHover : 'transparent',
+                      transition: 'background 0.15s',
+                      padding: '6px 10px', margin: '-6px -10px',
+                    }}
                     onClick={() => setViewing(r)}
+                    onMouseEnter={() => setHoveredId(r.id)}
+                    onMouseLeave={() => setHoveredId(null)}
                   >
                     <Avatar gradient={avatarFor(r.id)} size={54} />
 

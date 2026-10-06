@@ -82,19 +82,40 @@ export class PayoutService {
    * A booking is attributed by **check-out**: the partner has earned the money
    * once the guest has left.
    */
-  async generate(periodStartInput?: string) {
+  async generate(
+    periodStartInput?: string,
+    periodType: 'weekly' | 'monthly' = 'weekly',
+    partnerIds?: string[],
+  ) {
     const { payout_period_days } = await this.settings.get();
 
-    const anchor = periodStartInput
-      ? utcMidnight(periodStartInput)
-      : addDaysUtc(todayUtc(), -payout_period_days);
-    if (Number.isNaN(anchor.getTime())) {
-      throw new BadRequestException('periodStart ບໍ່ຖືກຕ້ອງ · Invalid periodStart date');
+    let start: Date;
+    let end: Date;
+
+    if (periodType === 'monthly') {
+      const anchor = periodStartInput ? new Date(periodStartInput + 'T00:00:00Z') : new Date();
+      if (Number.isNaN(anchor.getTime())) {
+        throw new BadRequestException('periodStart ບໍ່ຖືກຕ້ອງ · Invalid periodStart date');
+      }
+      const y = anchor.getUTCFullYear();
+      const m = anchor.getUTCMonth(); // 0-indexed current month
+      const pm = m === 0 ? 11 : m - 1;
+      const py = m === 0 ? y - 1 : y;
+      start = new Date(Date.UTC(py, pm, 1));
+      end = new Date(Date.UTC(py, pm + 1, 0)); // last day of previous month
+    } else {
+      const anchor = periodStartInput
+        ? utcMidnight(periodStartInput)
+        : addDaysUtc(todayUtc(), -payout_period_days);
+      if (Number.isNaN(anchor.getTime())) {
+        throw new BadRequestException('periodStart ບໍ່ຖືກຕ້ອງ · Invalid periodStart date');
+      }
+      start = startOfWeekUtc(anchor);
+      end = addDaysUtc(start, payout_period_days - 1);
     }
 
-    const start = startOfWeekUtc(anchor);
-    const end = addDaysUtc(start, payout_period_days - 1);
     const endExclusive = addDaysUtc(end, 1);
+    const partnerBigIds = partnerIds?.length ? partnerIds.map((id) => BigInt(id)) : undefined;
 
     return this.prisma.$transaction(async (tx) => {
       const bookings = await tx.bookings.findMany({
@@ -102,6 +123,7 @@ export class PayoutService {
           status: booking_status.completed,
           deleted_at: null,
           check_out: { gte: start, lt: endExclusive },
+          ...(partnerBigIds ? { properties: { partner_id: { in: partnerBigIds } } } : {}),
         },
         select: {
           booking_id: true,
