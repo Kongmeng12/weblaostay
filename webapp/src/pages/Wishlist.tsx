@@ -4,10 +4,12 @@ import { api } from '../lib/api';
 import { c, radius, PROPERTY_TYPE_LABEL, type as t } from '../theme';
 import { kip } from '../lib/format';
 import { Button, Empty, ErrorNote, Page, PageTitle, Photo, Skeleton, Stars } from '../components/ui';
+import { usePlannedStay, withStay } from '../lib/stay';
 import type { WishlistItem } from '../lib/types';
 
 export function WishlistPage() {
   const queryClient = useQueryClient();
+  const stay = usePlannedStay();
 
   const query = useQuery({
     queryKey: ['wishlist'],
@@ -55,13 +57,13 @@ export function WishlistPage() {
                 overflow: 'hidden',
               }}
             >
-              <Link to={`/property/${item.propertyId}`}>
+              <Link to={withStay(`/property/${item.propertyId}`, stay)}>
                 <Photo url={item.photo} alt={item.name} height={168} rounded={0} />
               </Link>
 
               <div style={{ padding: 14 }}>
                 <Link
-                  to={`/property/${item.propertyId}`}
+                  to={withStay(`/property/${item.propertyId}`, stay)}
                   style={{ font: t.h3, color: c.text, display: 'block', marginBottom: 3 }}
                 >
                   {item.name}

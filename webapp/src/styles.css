@@ -15,18 +15,18 @@ body,
 
 body {
   font-family: 'Noto Sans Lao', system-ui, -apple-system, sans-serif;
-  /* The guest app is a plain white page, not the admin console's framed card:
-     it is read on a phone, mostly outdoors, mostly one-handed. */
-  background: #ffffff;
-  color: #2b2521;
+  /* The customer app's cream page (AppColors.cream), so the website and the
+     phone app read as one product. */
+  background: #fbf6ef;
+  color: #2a1f19;
 }
 
 a {
-  color: #fd4d1c;
+  color: #ff5722;
   text-decoration: none;
 }
 a:hover {
-  color: #d13a0e;
+  color: #e64a19;
 }
 
 button {
@@ -45,7 +45,8 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #fd4d1c !important;
+  border-color: #ff5722 !important;
+  box-shadow: 0 0 0 3px rgba(255, 87, 34, 0.14);
   outline: none;
 }
 input:disabled,
@@ -60,14 +61,14 @@ img {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #d8cdbb transparent;
+  scrollbar-color: #d9cbb8 transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #d8cdbb;
+  background: #d9cbb8;
   border-radius: 4px;
 }
 *::-webkit-scrollbar-track {
@@ -151,30 +152,6 @@ img {
   }
 }
 
-/* The stay picker (DateRangePicker). Two months side by side where there is
-   room; on a phone the second is dropped rather than squeezed, because paging
-   a month at a time is the familiar gesture there anyway. */
-.phaphak-cal-sheet {
-  min-width: 300px;
-  max-width: min(640px, calc(100vw - 32px));
-}
-.phaphak-cal-months {
-  display: grid;
-  /* Capped, not stretched: a month spread across a 1120px row puts each day so
-     far from its weekday heading that the grid stops reading as a calendar. */
-  grid-template-columns: repeat(2, minmax(0, 290px));
-  justify-content: center;
-  gap: 28px;
-}
-@media (max-width: 720px) {
-  .phaphak-cal-months {
-    grid-template-columns: minmax(0, 330px);
-  }
-  .phaphak-cal-second {
-    display: none;
-  }
-}
-
 /* Leaflet ships 30x30 zoom buttons. They are as much a tap target as anything
    else on the page, so they get the same floor. The attribution links stay at
    their default size: they are licence small print, not navigation, and every
@@ -213,13 +190,13 @@ img {
    attach a style prop to. */
 .phaphak-prose h2 {
   font: 800 20px/28px 'Noto Sans Lao', system-ui, sans-serif;
-  color: #2B2521;
+  color: #2A1F19;
   margin: 28px 0 10px;
 }
 .phaphak-prose h3,
 .phaphak-prose h4 {
   font: 700 16px/24px 'Noto Sans Lao', system-ui, sans-serif;
-  color: #2B2521;
+  color: #2A1F19;
   margin: 22px 0 8px;
 }
 .phaphak-prose h2:first-child,
@@ -239,20 +216,96 @@ img {
 }
 .phaphak-prose strong,
 .phaphak-prose b {
-  color: #2B2521;
+  color: #2A1F19;
   font-weight: 700;
 }
 .phaphak-prose a {
-  color: #FD4D1C;
+  color: #FF5722;
 }
 .phaphak-prose blockquote {
   margin: 0 0 14px;
   padding-left: 14px;
-  border-left: 3px solid #E8DFD1;
-  color: #8C8073;
+  border-left: 3px solid #EDE4D8;
+  color: #8A7B6F;
 }
 .phaphak-prose hr {
   border: none;
-  border-top: 1px solid #F1EAE0;
+  border-top: 1px solid #F3EADD;
   margin: 24px 0;
+}
+
+/* ── App shell ───────────────────────────────────────────────────────────
+   The customer app's navigation, translated to the web: on a phone the five
+   tabs sit in a bar at the bottom (AppBottomNav), and the header keeps only
+   the wordmark and the round icon buttons. From 861px the tabs move up into
+   the header as pills and the bottom bar goes away — below that the five pills
+   and the icons do not fit on one line. */
+.phaphak-tabbar {
+  display: none;
+}
+@media (max-width: 860px) {
+  .phaphak-tabbar {
+    display: grid;
+  }
+  .phaphak-topnav {
+    display: none !important;
+  }
+  /* Room for the fixed tab bar, so the last row of a page is never under it. */
+  .phaphak-has-tabbar {
+    padding-bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Secondary header links, shown only once there is room beside the tabs. */
+@media (max-width: 999px) {
+  .phaphak-wide-only {
+    display: none !important;
+  }
+}
+
+/* A row that scrolls sideways on a phone and wraps into a grid on a laptop —
+   the region rail. */
+.phaphak-rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 104px;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+.phaphak-rail::-webkit-scrollbar {
+  display: none;
+}
+@media (min-width: 721px) {
+  .phaphak-rail {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    overflow: visible;
+  }
+}
+
+/* Cards that lift a little under the pointer. Hover only — a touch screen
+   would leave the card stuck in its raised state after a tap. */
+@media (hover: hover) {
+  .phaphak-lift {
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .phaphak-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 30px -18px rgba(42, 31, 25, 0.35);
+  }
+}
+
+/* Shown only on a phone — the search page's folded-form summary. */
+.phaphak-phone-only {
+  display: none !important;
+}
+@media (max-width: 720px) {
+  .phaphak-phone-only {
+    display: flex !important;
+  }
+  .phaphak-collapsible:not([data-open]) {
+    display: none;
+  }
 }

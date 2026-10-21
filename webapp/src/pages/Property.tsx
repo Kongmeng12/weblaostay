@@ -21,6 +21,7 @@ import {
   Button,
   Card,
   ErrorNote,
+  GuestStepper,
   Loading,
   Photo,
   Pill,
@@ -38,6 +39,7 @@ import {
 const PropertyMap = lazy(() => import('../components/PropertyMap'));
 import type { PropertyDetail, RoomOffer, RoomUnitsResponse, WishlistItem } from '../lib/types';
 import { useStartConversation } from './Messages';
+import { rememberStay, usePlannedStay } from '../lib/stay';
 import { ReviewReplies } from '../components/ReviewReplies';
 import { ReportReview } from '../components/ReportReview';
 
@@ -55,6 +57,23 @@ export function PropertyPage() {
   const hasRange = !!checkIn && !!checkOut;
   const nights = hasRange ? nightsBetween(checkIn, checkOut) : 0;
 
+  // Arriving without dates — from home, the wishlist, a shared link — but the
+  // guest already chose a stay elsewhere: use it, rather than asking again.
+  // `replace`, so Back still leaves the page instead of undoing this.
+  const planned = usePlannedStay();
+  const adopt = !hasRange && !params.get('dates') && planned;
+  useEffect(() => {
+    if (!adopt) return;
+    setParams(
+      new URLSearchParams({
+        checkIn: adopt.checkIn,
+        checkOut: adopt.checkOut,
+        guests: params.get('guests') ?? String(adopt.guests),
+      }),
+      { replace: true },
+    );
+  }, [adopt, params, setParams]);
+
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   // The specific physical room picked inside the selected room type, if any —
@@ -63,12 +82,19 @@ export function PropertyPage() {
   // ordinary "partner assigns later" flow is just this staying null.
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
 
+  // Keyed on the *range*, not on each end: the arrival alone changes nothing
+  // the API returns. And while new dates are being priced, the page keeps
+  // showing the old answer. Both matter — this used to swap the whole page for
+  // a spinner between the calendar's two taps, which remounted the calendar,
+  // forgot the arrival had been picked, and made the guest choose again.
   const query = useQuery({
-    queryKey: ['property', id, checkIn, checkOut],
+    queryKey: ['property', id, hasRange ? checkIn : '', hasRange ? checkOut : ''],
     queryFn: () =>
       api.get<PropertyDetail>(
         `/properties/${id}` + qs(hasRange ? { checkIn, checkOut } : {}),
       ),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === id ? previous : undefined,
   });
 
   const wishlist = useQuery({
@@ -103,12 +129,17 @@ export function PropertyPage() {
     if (merged.checkIn !== checkIn || merged.checkOut !== checkOut) {
       setSelectedUnit(null);
     }
+    // What is picked here is the guest's stay from now on, everywhere.
+    rememberStay(merged);
     setParams(
       new URLSearchParams(
         Object.entries({
           checkIn: merged.checkIn,
           checkOut: merged.checkOut,
           guests: String(merged.guests),
+          // Cleared on purpose: without this the remembered stay would be put
+          // straight back while the guest is between the two taps.
+          dates: !merged.checkIn || !merged.checkOut ? 'none' : '',
         }).filter(([, v]) => !!v) as [string, string][],
       ),
       { replace: true },
@@ -443,22 +474,7 @@ export function PropertyPage() {
               onChange={(range) => setDates(range)}
             />
 
-            <label>
-              <span style={{ font: t.label, color: c.muted, display: 'block', marginBottom: space[1] }}>
-                ຜູ້ເຂົ້າພັກ
-              </span>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                inputMode="numeric"
-                value={guests}
-                onChange={(e) =>
-                  setDates({ guests: Math.max(1, Math.floor(Number(e.target.value)) || 1) })
-                }
-                style={dateInput}
-              />
-            </label>
+            <GuestStepper value={guests} onChange={(n) => setDates({ guests: n })} />
 
             {!hasRange && (
               <p style={{ font: t.caption, color: c.warnFg, margin: 0 }}>
@@ -792,18 +808,6 @@ function unitChipStyle(active: boolean): React.CSSProperties {
     cursor: 'pointer',
   };
 }
-
-const dateInput: React.CSSProperties = {
-  width: '100%',
-  height: 44,
-  padding: '0 12px',
-  background: '#fff',
-  border: `1px solid ${c.border}`,
-  borderRadius: radius.md,
-  font: t.bodySm,
-  color: c.text,
-  outline: 'none',
-};
 
 function Rule({ label, value }: { label: string; value: string }) {
   return (

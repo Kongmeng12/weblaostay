@@ -63,6 +63,8 @@ export interface Province {
   name: string;
   nameEn: string;
   propertyCount: number;
+  /** The province's own photo, else a cover from one of its properties. */
+  imageUrl?: string | null;
 }
 
 export interface Amenity {

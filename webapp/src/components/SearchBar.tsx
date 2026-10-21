@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { c, radius, space, type as t, TAP, PROPERTY_TYPE_LABEL } from '../theme';
+import { c, radius, shadow, space, type as t, TAP, PROPERTY_TYPE_LABEL } from '../theme';
 import type { District, Province } from '../lib/types';
-import { Button } from './ui';
+import { Button, GuestStepper } from './ui';
 import { DateRangePicker } from './DateRangePicker';
 
 export interface SearchCriteria {
@@ -153,7 +153,8 @@ export function SearchBar({
         background: c.surface,
         border: `1px solid ${c.border}`,
         borderRadius: radius.lg,
-        padding: compact ? 12 : 16,
+        boxShadow: shadow.card,
+        padding: compact ? 14 : 18,
         display: 'grid',
         gap: 10,
         gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
@@ -219,22 +220,17 @@ export function SearchBar({
         </select>
       </Cell>
 
-      <Cell label="ຜູ້ເຂົ້າພັກ">
-        <input
-          type="number"
-          min={1}
-          step={1}
-          inputMode="numeric"
-          value={draft.guests}
-          onChange={(e) => set('guests', Math.max(1, Math.floor(Number(e.target.value)) || 1))}
-          style={cellInput}
-        />
-      </Cell>
+      <div style={{ alignSelf: 'end' }}>
+        <GuestStepper value={draft.guests} onChange={(n) => set('guests', n)} />
+      </div>
 
       {/* Takes the whole row: a two-month calendar has nowhere to open inside
           a 150px grid cell, and the arrival and departure belong together. */}
       <div style={{ gridColumn: '1 / -1' }}>
+        {/* A field that opens the calendar, not a calendar always open: an
+            open month here pushed every result below the first screen. */}
         <DateRangePicker
+          inline={false}
           checkIn={draft.checkIn}
           checkOut={draft.checkOut}
           onChange={({ checkIn, checkOut }) => setDraft((d) => ({ ...d, checkIn, checkOut }))}
@@ -301,7 +297,7 @@ export function SearchBar({
           {locateError && <span style={{ font: t.caption, color: c.warnFg }}>{locateError}</span>}
         </div>
 
-        <Button type="submit" size="lg" className="phaphak-search-submit" style={{ height: 46, minWidth: 160 }}>
+        <Button type="submit" size="lg" className="phaphak-search-submit" style={{ height: 48, minWidth: 160 }}>
           ຄົ້ນຫາ
         </Button>
       </div>
@@ -309,12 +305,13 @@ export function SearchBar({
   );
 }
 
+/** The app's filled input: sand, no edge until focused. */
 const cellInput: React.CSSProperties = {
   width: '100%',
-  height: 46,
-  padding: '0 12px',
+  height: 48,
+  padding: '0 14px',
   background: c.bg,
-  border: `1px solid ${c.border}`,
+  border: '1px solid transparent',
   borderRadius: radius.md,
   font: t.bodySm,
   color: c.text,

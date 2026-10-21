@@ -74,12 +74,12 @@ type ButtonVariant = 'primary' | 'ghost' | 'outline' | 'danger';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 const BUTTON_PADDING: Record<ButtonSize, string> = {
-  sm: '8px 14px',
-  md: '11px 18px',
-  lg: '15px 24px',
+  sm: '8px 16px',
+  md: '12px 22px',
+  lg: '16px 28px',
 };
 
-const BUTTON_FONT: Record<ButtonSize, number> = { sm: 12, md: 13, lg: 15 };
+const BUTTON_FONT: Record<ButtonSize, number> = { sm: 12.5, md: 14, lg: 16 };
 
 export function Button({
   children,
@@ -95,10 +95,17 @@ export function Button({
   full?: boolean;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const palette: Record<ButtonVariant, CSSProperties> = {
-    primary: { background: c.accent, color: '#fff', border: '1px solid transparent' },
+    // The app's CtaButton: brand orange with its own glow underneath.
+    primary: {
+      background: c.accent,
+      color: '#fff',
+      border: '1px solid transparent',
+      boxShadow: rest.disabled ? 'none' : shadow.cta,
+    },
     ghost: { background: 'transparent', color: c.soft, border: '1px solid transparent' },
-    outline: { background: '#fff', color: c.text, border: `1px solid ${c.border}` },
-    danger: { background: '#fff', color: c.dangerFg, border: `1px solid ${c.dangerBg}` },
+    // The app's PillButton / OutlineCtaButton: white with a hairline edge.
+    outline: { background: c.surface, color: c.text, border: `1px solid ${c.border}` },
+    danger: { background: c.surface, color: c.dangerFg, border: `1px solid ${c.dangerBg}` },
   };
 
   return (
@@ -107,11 +114,12 @@ export function Button({
       style={{
         ...palette[variant],
         padding: BUTTON_PADDING[size],
-        borderRadius: radius.md,
+        // Every button in the app is a pill.
+        borderRadius: radius.pill,
         font: f(700, BUTTON_FONT[size]),
         cursor: rest.disabled ? 'not-allowed' : 'pointer',
         width: full ? '100%' : undefined,
-        transition: 'filter .15s, opacity .15s',
+        transition: 'filter .15s, opacity .15s, transform .1s',
         ...style,
       }}
       onMouseEnter={(e) => {
@@ -130,7 +138,7 @@ export function Button({
 
 export function Card({
   children,
-  padding = 18,
+  padding = 20,
   style,
   onClick,
   testId,
@@ -210,11 +218,12 @@ export function Pill({ bg, fg, children }: { bg: string; fg: string; children: R
 
 // ── form fields ──────────────────────────────────────────────────────────────
 
+/** The app's input: sand-filled, borderless until focused, 16px corners. */
 export const inputStyle: CSSProperties = {
   width: '100%',
-  padding: '13px 14px',
-  background: '#fff',
-  border: `1px solid ${c.border}`,
+  padding: '15px 18px',
+  background: c.bg,
+  border: '1px solid transparent',
   borderRadius: radius.md,
   font: t.body,
   color: c.text,
@@ -363,7 +372,7 @@ export function ErrorNote({ error, onRetry }: { error: unknown; onRetry?: () => 
     <div
       style={{
         background: c.dangerBg,
-        border: '1px solid #F8C5B2',
+        border: '1px solid #F2C9C6',
         borderRadius: radius.md,
         padding: '14px 16px',
         font: f(500, 12.5, 20),
@@ -468,16 +477,19 @@ export function Photo({
         style={{
           height,
           width,
-          background: c.neutralBg,
+          background: c.placeholderBg,
           borderRadius: rounded,
           display: 'grid',
           placeItems: 'center',
-          fontSize: 22,
-          color: c.faint,
+          color: c.placeholderFg,
           ...style,
         }}
       >
-        🏠
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="3" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <path d="M21 15l-5-5L5 21" />
+        </svg>
       </div>
     );
   }
@@ -492,7 +504,7 @@ export function Photo({
         objectFit: 'cover',
         borderRadius: rounded,
         display: 'block',
-        background: c.neutralBg,
+        background: c.placeholderBg,
         ...style,
       }}
     />
@@ -504,7 +516,7 @@ export function Stars({ value, count }: { value: number; count?: number }) {
     return <span style={{ font: f(500, 12), color: c.faint }}>ຍັງບໍ່ມີຮີວິວ</span>;
   }
   return (
-    <span style={{ font: t.label, color: c.soft }}>
+    <span style={{ font: f(700, 13, 20), color: c.text }}>
       <span style={{ color: c.star }}>★</span> {value.toFixed(1)}
       <span style={{ color: c.faint }}> ({count})</span>
     </span>
@@ -561,7 +573,7 @@ export function Modal({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(43,37,33,.45)',
+        background: 'rgba(42,31,25,.45)',
         display: 'grid',
         placeItems: 'center',
         padding: 18,
@@ -576,7 +588,7 @@ export function Modal({
           maxHeight: '90vh',
           overflowY: 'auto',
           background: c.surface,
-          borderRadius: radius.lg,
+          borderRadius: radius.sheet,
           boxShadow: shadow.raised,
         }}
       >
@@ -647,6 +659,67 @@ export function MoneyRow({
         {negative ? '− ' : ''}
         {amount}
       </span>
+    </div>
+  );
+}
+
+/**
+ * The guest count, as the app's reserve screen sets it: "2 ຄົນ" with a ring
+ * − and + beside it. No upper bound, as in the app — a room's occupancy is a
+ * description the page shows, not a limit this control enforces.
+ */
+export function GuestStepper({
+  value,
+  onChange,
+  label = 'ຜູ້ເຂົ້າພັກ',
+}: {
+  value: number;
+  onChange: (next: number) => void;
+  label?: string;
+}) {
+  const ring = (disabled: boolean): CSSProperties => ({
+    width: 36,
+    height: 36,
+    borderRadius: '50%',
+    border: `1px solid ${disabled ? c.divider : c.border}`,
+    background: c.surface,
+    color: disabled ? c.faint : c.text,
+    font: f(700, 18, 20),
+    display: 'grid',
+    placeItems: 'center',
+    padding: 0,
+    cursor: disabled ? 'default' : 'pointer',
+  });
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 48 }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ font: t.label, color: c.muted }}>{label}</div>
+        <div style={{ font: f(600, 14, 22), color: c.text }}>{value} ຄົນ</div>
+      </div>
+      <button
+        type="button"
+        aria-label="ຫຼຸດຈຳນວນຄົນ"
+        disabled={value <= 1}
+        onClick={() => onChange(Math.max(1, value - 1))}
+        style={ring(value <= 1)}
+      >
+        −
+      </button>
+      <span style={{ font: f(700, 15, 22), color: c.text, minWidth: 18, textAlign: 'center' }} aria-live="polite">
+        {value}
+      </span>
+      <button
+        type="button"
+        aria-label="ເພີ່ມຈຳນວນຄົນ"
+        onClick={() => onChange(value + 1)}
+        style={ring(false)}
+      >
+        +
+      </button>
     </div>
   );
 }

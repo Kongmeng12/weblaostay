@@ -1,47 +1,56 @@
 /**
  * Design tokens.
  *
- * The same brand as the admin panel — Phapai orange on warm neutrals — but a
- * different frame. The admin console is a dark-sidebar card floating on a
- * coloured page because it is a desk tool. This is a shopfront: white, edge to
- * edge, laid out for a phone first.
+ * Taken from the customer app (`customer_app/lib/core/theme/app_colors.dart`)
+ * so a guest moving between the phone app and the website sees one product:
+ * Phapai orange on a cream page, sand fills, hairline borders and dark-ink
+ * selection. The names are the website's own — every page reads them — only
+ * the values follow the app.
  */
 export const c = {
-  page: '#ffffff',
+  /** The page itself — the app's `cream`. */
+  page: '#FBF6EF',
   /** Sections that need to lift off the page — cards, sheets, summaries. */
-  surface: '#ffffff',
-  /** A tint behind grouped content. */
-  bg: '#FBF7F1',
-  /** The hero / footer band. */
-  dark: '#2C1E16',
-  darkSoft: '#3A2A1E',
+  surface: '#FFFFFF',
+  /** A tint behind grouped content and filled inputs — the app's `sand`. */
+  bg: '#F3EADD',
+  /** Ink: selected chips, the footer band. */
+  dark: '#2A1F19',
+  darkSoft: '#3A2C23',
 
-  accent: '#FD4D1C',
-  accentDark: '#D13A0E',
-  accentSoft: '#FFE3D6',
+  accent: '#FF5722',
+  accentDark: '#E64A19',
+  accentSoft: '#FFF0EA',
 
-  text: '#2B2521',
-  soft: '#5C5348',
-  muted: '#8C8073',
-  faint: '#A2988A',
-  onDark: '#E4D8C4',
-  onDarkSoft: '#B39C86',
+  text: '#2A1F19',
+  soft: '#5E5046',
+  muted: '#8A7B6F',
+  faint: '#B6A99C',
+  onDark: '#EDE4D8',
+  onDarkSoft: '#B6A99C',
 
-  border: '#E8DFD1',
-  divider: '#F1EAE0',
+  border: '#EDE4D8',
+  divider: '#F3EADD',
 
-  successBg: '#E7EAD7',
-  successFg: '#4E5836',
-  warnBg: '#F6E7C9',
-  warnFg: '#8A6B1F',
-  dangerBg: '#FFF0EA',
-  dangerFg: '#D13A0E',
-  neutralBg: '#EDE8E0',
-  neutralFg: '#5C5348',
-  infoBg: '#F3E6D8',
-  infoFg: '#4A3527',
+  successBg: '#EAF6EE',
+  successFg: '#0A7C4A',
+  warnBg: '#FBEEDD',
+  warnFg: '#B45309',
+  dangerBg: '#FBEAE9',
+  dangerFg: '#B3261E',
+  neutralBg: '#F3EADD',
+  neutralFg: '#8A7B6F',
+  infoBg: '#F3EADD',
+  infoFg: '#5E5046',
 
-  star: '#C89B4A',
+  star: '#FF5722',
+  gold: '#C98A3B',
+
+  /** An unselected tab-bar icon. */
+  inactive: '#BEB1A3',
+  /** A photo that has not arrived, or never will. */
+  placeholderBg: '#E7DCCC',
+  placeholderFg: '#C6B7A4',
 } as const;
 
 export const font = "'Noto Sans Lao', system-ui, -apple-system, sans-serif";
@@ -56,7 +65,8 @@ export const font = "'Noto Sans Lao', system-ui, -apple-system, sans-serif";
 export const f = (weight: number, size: number, lineHeight?: number): string =>
   `${weight} ${size}px${lineHeight ? `/${lineHeight}px` : ''} ${font}`;
 
-export const radius = { sm: 8, md: 12, lg: 18, pill: 999 } as const;
+/** The app's `AppRadii`: 22px cards, 16px inputs, pill buttons and chips. */
+export const radius = { sm: 10, md: 16, lg: 22, sheet: 28, pill: 999 } as const;
 
 /**
  * The spacing scale. Every gap, padding and margin should be one of these.
@@ -89,10 +99,10 @@ export const space = {
  * half-pixel values that only ever blurred.
  */
 export const type = {
-  display: f(800, 34, 46),
-  h1: f(800, 26, 36),
-  h2: f(800, 20, 28),
-  h3: f(700, 16, 24),
+  display: f(800, 32, 44),
+  h1: f(700, 24, 34),
+  h2: f(700, 19, 28),
+  h3: f(700, 15.5, 24),
   body: f(400, 15, 24),
   bodySm: f(400, 13.5, 22),
   label: f(600, 13, 20),
@@ -115,9 +125,11 @@ export const TAP = 44;
 export const MAX_WIDTH = 1120;
 
 export const shadow = {
-  card: '0 1px 3px rgba(43,37,33,.06), 0 6px 20px -8px rgba(43,37,33,.12)',
-  raised: '0 10px 34px -12px rgba(43,37,33,.28)',
-  sheet: '0 -8px 34px -12px rgba(43,37,33,.24)',
+  card: '0 1px 2px rgba(42,31,25,.04), 0 10px 22px -14px rgba(42,31,25,.16)',
+  raised: '0 10px 34px -12px rgba(42,31,25,.28)',
+  sheet: '0 -8px 34px -12px rgba(42,31,25,.24)',
+  /** The orange glow under the app's primary `CtaButton`. */
+  cta: '0 12px 24px -10px rgba(255,87,34,.6)',
 } as const;
 
 type Pill = { bg: string; fg: string; label: string };

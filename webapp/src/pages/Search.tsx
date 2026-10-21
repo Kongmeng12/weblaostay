@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, qs } from '../lib/api';
 import { c, type as t, TAP } from '../theme';
-import { nightsBetween } from '../lib/format';
+import { laoDate, nightsBetween } from '../lib/format';
+import { rememberStay, usePlannedStay } from '../lib/stay';
 import { Button, Empty, ErrorNote, Loading, Page, Skeleton } from '../components/ui';
 import { PropertyCard } from '../components/PropertyCard';
 import { SearchBar, blankCriteria, type SearchCriteria } from '../components/SearchBar';
@@ -52,6 +54,23 @@ export function SearchPage() {
   const hasRange = !!criteria.checkIn && !!criteria.checkOut;
   const nights = hasRange ? nightsBetween(criteria.checkIn, criteria.checkOut) : 0;
 
+  // A search opened without dates — the tab bar, the home search pill, a
+  // province tile — uses the stay the guest already chose, so the results are
+  // what is actually free for them. Clearing the dates in the form forgets it.
+  const planned = usePlannedStay();
+  useEffect(() => {
+    if (hasRange || !planned) return;
+    const next = new URLSearchParams(params);
+    next.set('checkIn', planned.checkIn);
+    next.set('checkOut', planned.checkOut);
+    if (!params.get('guests')) next.set('guests', String(planned.guests));
+    setParams(next, { replace: true });
+  }, [hasRange, planned, params, setParams]);
+
+  // On a phone the form folds behind one summary line, so the first screen is
+  // places to stay rather than five empty fields.
+  const [formOpen, setFormOpen] = useState(false);
+
   const query = useQuery({
     queryKey: ['search', criteria, sort, page],
     queryFn: () =>
@@ -76,6 +95,8 @@ export function SearchPage() {
 
   function apply(next: Partial<SearchCriteria & { sort: string; page: number }>) {
     const merged = { ...criteria, sort, page: 1, ...next };
+    rememberStay(merged);
+    setFormOpen(false);
 
     // Turning "near me" on or off changes what the results should be ordered
     // by, and the sort already in the URL would otherwise win over the default
@@ -116,7 +137,42 @@ export function SearchPage() {
 
   return (
     <Page width="wide">
-      <SearchBar value={criteria} onSearch={(next) => apply(next)} compact />
+      <button
+        type="button"
+        className="phaphak-phone-only"
+        onClick={() => setFormOpen((o) => !o)}
+        aria-expanded={formOpen}
+        style={{
+          width: '100%',
+          alignItems: 'center',
+          gap: 10,
+          minHeight: 52,
+          padding: '8px 18px',
+          background: c.bg,
+          border: 'none',
+          borderRadius: 999,
+          textAlign: 'left',
+          cursor: 'pointer',
+          marginBottom: formOpen ? 12 : 0,
+        }}
+      >
+        <span aria-hidden="true" style={{ fontSize: 16 }}>🔍</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', font: t.label, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {criteria.q || (criteria.provinceId ? 'ແຂວງທີ່ເລືອກ' : 'ທຸກບ່ອນ')}
+          </span>
+          <span style={{ display: 'block', font: t.caption, color: c.muted }}>
+            {hasRange
+              ? `${laoDate(criteria.checkIn)} → ${laoDate(criteria.checkOut)} · ${criteria.guests} ຄົນ`
+              : `ທຸກວັນ · ${criteria.guests} ຄົນ`}
+          </span>
+        </span>
+        <span style={{ font: t.label, color: c.accent }}>{formOpen ? 'ປິດ' : 'ແກ້ໄຂ'}</span>
+      </button>
+
+      <div className="phaphak-collapsible" data-open={formOpen || undefined}>
+        <SearchBar value={criteria} onSearch={(next) => apply(next)} compact />
+      </div>
 
       <div
         style={{
