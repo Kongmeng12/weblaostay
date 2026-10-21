@@ -253,6 +253,8 @@ export class AuthService {
         data: {
           user_id: created.user_id,
           business_name: dto.businessName,
+          ...(dto.businessType && { business_type: dto.businessType }),
+          tax_id: dto.taxId?.trim() || null,
           contact_phone: dto.phone,
         },
       });
@@ -267,6 +269,7 @@ export class AuthService {
           address_detail: dto.address,
           ...(dto.lat !== undefined && { latitude: new Prisma.Decimal(dto.lat) }),
           ...(dto.lng !== undefined && { longitude: new Prisma.Decimal(dto.lng) }),
+          maps_url: dto.mapsUrl?.trim() || null,
           // Not sellable until an admin approves the partner.
           status: 'draft',
         },

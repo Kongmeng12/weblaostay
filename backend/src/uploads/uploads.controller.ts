@@ -17,7 +17,7 @@ import { UploadsService } from './uploads.service';
 import { OwnershipService } from '../partner/ownership.service';
 import { Audit, CurrentUser, Roles, type AuthedUser } from '../common/decorators';
 import { MAX_PHOTO_BYTES } from './storage.interface';
-import { ReorderPhotosDto } from './uploads.dto';
+import { PartnerDocumentDto, ReorderPhotosDto } from './uploads.dto';
 
 /**
  * Property photos for the partner app.
@@ -82,6 +82,42 @@ export class UploadsController {
     const partnerId = this.own.partnerId(user);
     await this.own.assertOwnsProperty(partnerId, BigInt(id));
     return this.uploads.removePropertyPhoto(BigInt(id), BigInt(photoId));
+  }
+}
+
+/**
+ * Verification documents sent with a partner application. Deliberately not
+ * gated on approval (no assertVerified): these are what the approval is
+ * decided on, so a pending partner is exactly who uploads them.
+ */
+@Controller('partner/documents')
+@Roles(user_role.PARTNER)
+export class PartnerDocumentsController {
+  constructor(
+    private readonly uploads: UploadsService,
+    private readonly own: OwnershipService,
+  ) {}
+
+  @Get()
+  list(@CurrentUser() user: AuthedUser) {
+    return this.uploads.listPartnerDocuments(this.own.partnerId(user));
+  }
+
+  @Post()
+  @HttpCode(201)
+  @Audit('partner_document_upload', 'partner', 'partner_documents')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_PHOTO_BYTES * 2 },
+    }),
+  )
+  async upload(
+    @CurrentUser() user: AuthedUser,
+    @Body() dto: PartnerDocumentDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    return this.uploads.addPartnerDocument(this.own.partnerId(user), dto.type, file);
   }
 }
 

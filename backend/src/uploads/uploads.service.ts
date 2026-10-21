@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
+import type { document_type } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ALLOWED_IMAGE_FORMATS,
@@ -171,6 +172,62 @@ export class UploadsService {
       .toBuffer();
     const url = await this.storage.save(`admin/${randomUUID()}.webp`, processed, FORMAT_TO_MIME.webp);
     return { url };
+  }
+
+  /**
+   * A verification document (ID card, business licence) photographed by the
+   * applicant. Kept larger and sharper than a listing photo — the admin has to
+   * read a card number off it — and stored under a random key, since the URL
+   * is all that stands between the file and anyone who has it.
+   *
+   * A pending document of the same type is replaced rather than added to: a
+   * retake after a blurry first photo should not leave the admin two to compare.
+   * An approved one is left alone.
+   */
+  async addPartnerDocument(
+    partnerId: bigint,
+    type: document_type,
+    file: Express.Multer.File | undefined,
+  ) {
+    if (!file) throw new BadRequestException('ກະລຸນາເລືອກຮູບ · No file was uploaded');
+    if (file.size > MAX_PHOTO_BYTES) {
+      throw new BadRequestException('ຮູບໃຫຍ່ເກີນໄປ ສູງສຸດ 5MB · File too large — 5MB maximum');
+    }
+
+    await detectFormat(file.buffer);
+    const processed = await sharp(file.buffer)
+      .rotate()
+      .resize({ width: 2400, height: 2400, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 88 })
+      .toBuffer();
+    const url = await this.storage.save(
+      `partner-docs/${partnerId}/${randomUUID()}.webp`,
+      processed,
+      FORMAT_TO_MIME.webp,
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.partner_documents.deleteMany({
+        where: { partner_id: partnerId, document_type: type, status: 'pending' },
+      }),
+      this.prisma.partner_documents.create({
+        data: { partner_id: partnerId, document_type: type, file_url: url },
+      }),
+    ]);
+    return this.listPartnerDocuments(partnerId);
+  }
+
+  async listPartnerDocuments(partnerId: bigint) {
+    const rows = await this.prisma.partner_documents.findMany({
+      where: { partner_id: partnerId },
+      orderBy: { created_at: 'asc' },
+    });
+    return rows.map((d) => ({
+      id: d.document_id.toString(),
+      type: d.document_type,
+      status: d.status,
+      uploadedAt: d.created_at,
+    }));
   }
 
   /** Back to the auto-derived cover photo. */

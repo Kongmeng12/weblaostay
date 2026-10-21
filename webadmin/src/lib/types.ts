@@ -210,6 +210,8 @@ export interface ApprovalRow {
     district: string | null;
     village: string | null;
     address: string | null;
+    /** The link the applicant pasted, or one to their pin; null if neither. */
+    mapsUrl: string | null;
   }[];
 }
 

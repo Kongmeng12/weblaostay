@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { UploadsController, AdminProvincePhotoController, AdminUploadsController } from './uploads.controller';
+import {
+  UploadsController,
+  AdminProvincePhotoController,
+  AdminUploadsController,
+  PartnerDocumentsController,
+} from './uploads.controller';
 import { UploadsService } from './uploads.service';
 import { LocalStorageProvider } from './local-storage.provider';
 import { R2StorageProvider } from './r2-storage.provider';
@@ -9,7 +14,12 @@ import { PartnerModule } from '../partner/partner.module';
 
 @Module({
   imports: [ConfigModule, PartnerModule],
-  controllers: [UploadsController, AdminProvincePhotoController, AdminUploadsController],
+  controllers: [
+    UploadsController,
+    PartnerDocumentsController,
+    AdminProvincePhotoController,
+    AdminUploadsController,
+  ],
   providers: [
     UploadsService,
     {
