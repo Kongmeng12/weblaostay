@@ -230,6 +230,8 @@ model properties {
   address_detail         String?
   latitude               Decimal?                  @db.Decimal(10, 7)
   longitude              Decimal?                  @db.Decimal(11, 7)
+  /// Google Maps link pasted at sign-up instead of (or as well as) a pin.
+  maps_url               String?                   @db.VarChar(500)
   geog                   Unsupported("geography")? @default(dbgenerated("\nCASE\n    WHEN ((latitude IS NULL) OR (longitude IS NULL)) THEN NULL::geography\n    ELSE (st_setsrid(st_makepoint((longitude)::double precision, (latitude)::double precision), 4326))::geography\nEND"))
   search_vector          Unsupported("tsvector")?  @default(dbgenerated("to_tsvector('simple'::regconfig, (((COALESCE(property_name, ''::character varying))::text || ' '::text) || COALESCE(description, ''::text)))"))
   rating_avg             Decimal                   @default(0) @db.Decimal(3, 2)

@@ -297,6 +297,20 @@ function DetailModal({
               <div style={{ gridColumn: '1 / -1' }}>
                 <DetailField label="ທີ່ຢູ່ / ລາຍລະອຽດ" value={p.address} />
               </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                {p.mapsUrl ? (
+                  <a
+                    href={p.mapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ font: f(600, 12.5), color: c.infoFg }}
+                  >
+                    📍 ເປີດທີ່ຕັ້ງໃນ Google Maps
+                  </a>
+                ) : (
+                  <DetailField label="ທີ່ຕັ້ງໃນແຜນທີ່" value="ບໍ່ໄດ້ປັກໝຸດ" />
+                )}
+              </div>
               {p.description && (
                 <div style={{ gridColumn: '1 / -1' }}>
                   <DetailField label="ລາຍລະອຽດທີ່ພັກ" value={p.description} />

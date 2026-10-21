@@ -14,7 +14,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { otp_purpose, property_type } from '@prisma/client';
+import { business_type, otp_purpose, property_type } from '@prisma/client';
 
 /** Loose enough for `+856 20 5555 0001`, `020 5555 0001`, `2055550001`, ... */
 const PHONE_PATTERN = /^\+?[0-9][0-9\s-]{5,19}$/;
@@ -30,6 +30,10 @@ export const NEW_PASSWORD_PATTERN = /^(?=.*\p{L})(?=.*\p{Nd}).+$/u;
 export const NEW_PASSWORD_MESSAGE =
   'ລະຫັດຜ່ານຕ້ອງມີທັງຕົວອັກສອນ ແລະ ຕົວເລກ · Password must contain a letter and a number';
 const NEW_PASSWORD_LENGTH_MESSAGE = 'ລະຫັດຜ່ານຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ · Minimum 8 characters';
+
+/** `maps.app.goo.gl/…`, `goo.gl/maps/…`, `google.com/maps/…`, `maps.google.com/…`. */
+const GOOGLE_MAPS_URL =
+  /^https:\/\/(maps\.app\.goo\.gl\/|goo\.gl\/maps\/|(www\.)?google\.[a-z.]{2,6}\/maps|maps\.google\.[a-z.]{2,6}\/)\S*$/i;
 
 export class LoginDto {
   /** Email or phone — whichever the account was found by. */
@@ -106,6 +110,18 @@ export class RegisterPartnerDto {
   @MaxLength(255)
   businessName!: string;
 
+  /** Optional so an older app build can still apply; the column defaults to `individual`. */
+  @IsOptional()
+  @IsEnum(business_type, {
+    message: `ປະເພດທຸລະກິດຕ້ອງເປັນ: ${Object.values(business_type).join(' | ')}`,
+  })
+  businessType?: business_type;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  taxId?: string;
+
   @IsString()
   @MinLength(2)
   @MaxLength(255)
@@ -144,6 +160,19 @@ export class RegisterPartnerDto {
   @Type(() => Number)
   @IsLongitude()
   lng?: number;
+
+  /**
+   * A Google Maps link, the alternative to a pin. Only Google hosts are
+   * accepted: the admin opens this link from the Approvals screen, so it must
+   * not be a way to send staff to an arbitrary site.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  @Matches(GOOGLE_MAPS_URL, {
+    message: 'ລິ້ງ Google Maps ບໍ່ຖືກຕ້ອງ · Not a Google Maps link',
+  })
+  mapsUrl?: string;
 
   /**
    * Ticking the box. `@Equals(true)` rather than `@IsBoolean()`: an unticked

@@ -392,6 +392,9 @@ export class AdminController {
             description: true,
             phone: true,
             address_detail: true,
+            latitude: true,
+            longitude: true,
+            maps_url: true,
             provinces: { select: { province_name_lo: true } },
             districts: { select: { district_name_lo: true } },
             villages: { select: { village_name_lo: true } },
@@ -425,6 +428,13 @@ export class AdminController {
         district: pr.districts?.district_name_lo ?? null,
         village: pr.villages?.village_name_lo ?? null,
         address: pr.address_detail,
+        // The pasted link if there is one, else a link to the dropped pin —
+        // either way the admin can see where the property claims to be.
+        mapsUrl:
+          pr.maps_url ??
+          (pr.latitude && pr.longitude
+            ? `https://www.google.com/maps?q=${pr.latitude},${pr.longitude}`
+            : null),
       })),
     }));
   }

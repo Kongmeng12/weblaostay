@@ -68,6 +68,7 @@ export class PartnerController {
       include: {
         users: { include: { user_profiles: true } },
         partner_bank_accounts: { where: { status: 'active' } },
+        partner_documents: { select: { document_type: true, status: true } },
         _count: { select: { properties: true } },
       },
     });
@@ -92,6 +93,12 @@ export class PartnerController {
         // Only the last digits ever leave the server.
         account: `***${b.account_number.slice(-4)}`,
         isDefault: b.is_default,
+      })),
+      // Type and status only — the file URLs are for the admin reviewing them.
+      // The "under review" screen uses this to ask for whatever is missing.
+      documents: row.partner_documents.map((d) => ({
+        type: d.document_type,
+        status: d.status,
       })),
     };
   }
