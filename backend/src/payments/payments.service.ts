@@ -100,7 +100,7 @@ export class PaymentsService {
       channel,
       amountKip: Number(booking.total_amount),
       reference: booking.booking_code,
-      description: `PhaPhak ${booking.booking_code} · ${booking.properties.property_name}`,
+      description: `Phapai ${booking.booking_code} · ${booking.properties.property_name}`,
     });
 
     try {

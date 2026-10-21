@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "PhaPhak — the guest-facing web app: search, book, pay, and manage a stay.",
+  "description": "Phapai — the guest-facing web app: search, book, pay, and manage a stay.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

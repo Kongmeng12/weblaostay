@@ -345,7 +345,7 @@ export class PartnerController {
     const bookingId = this.checkinQr.verify(dto.qr);
     if (bookingId === null) {
       throw new BadRequestException(
-        'QR ນີ້ບໍ່ແມ່ນ QR ເຊັກອິນຂອງ PhaPhak · This is not a PhaPhak check-in QR',
+        'QR ນີ້ບໍ່ແມ່ນ QR ເຊັກອິນຂອງ Phapai · This is not a Phapai check-in QR',
       );
     }
     await this.own.assertOwnsBooking(partnerId, bookingId);

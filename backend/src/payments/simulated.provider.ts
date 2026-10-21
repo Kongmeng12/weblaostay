@@ -31,7 +31,7 @@ export class SimulatedPaymentProvider implements PaymentProvider {
     const qrPayload = buildQrPayload({
       acquirerId: 'la.phajay.sim',
       merchantId: this.config.get<string>('PHAJAY_MERCHANT_ID', 'SIMULATED-MERCHANT'),
-      merchantName: 'PhaPhak',
+      merchantName: 'Phapai',
       merchantCity: 'Vientiane',
       amountKip: request.amountKip,
       reference: request.reference,

@@ -116,7 +116,7 @@ export class BookingDocumentsService {
       checkInQr: CHECK_IN_QR_STATUSES.has(b.status) ? this.checkinQr.urlFor(b.id) : null,
     });
 
-    return { filename: `PhaPhak-${safeCode(b.code)}.pdf`, contentType: 'application/pdf', body };
+    return { filename: `Phapai-${safeCode(b.code)}.pdf`, contentType: 'application/pdf', body };
   }
 
   async calendarIcs(bookingId: bigint, customerId: bigint): Promise<DownloadableFile> {
@@ -144,7 +144,7 @@ export class BookingDocumentsService {
     });
 
     return {
-      filename: `PhaPhak-${safeCode(b.code)}.ics`,
+      filename: `Phapai-${safeCode(b.code)}.ics`,
       contentType: 'text/calendar; charset=utf-8',
       body: Buffer.from(text, 'utf8'),
     };

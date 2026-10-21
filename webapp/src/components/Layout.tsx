@@ -55,7 +55,7 @@ export function Layout() {
             to="/"
             style={{ display: 'flex', alignItems: 'center', minHeight: TAP }}
           >
-            <img src="/logo.png" alt="PhaPhak" style={{ height: 36, width: 36, borderRadius: '50%' }} />
+            <img src="/logo.png" alt="Phapai" style={{ height: 36, width: 36, borderRadius: '50%' }} />
           </Link>
 
           <nav style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -176,7 +176,7 @@ export function Layout() {
           }}
         >
           <div>
-            <div style={{ font: t.h3, color: '#fff', marginBottom: 4 }}>PhaPhak</div>
+            <div style={{ font: t.h3, color: '#fff', marginBottom: 4 }}>Phapai</div>
             <div style={{ font: t.caption }}>ຈອງທີ່ພັກທົ່ວລາວ</div>
           </div>
 
@@ -193,7 +193,7 @@ export function Layout() {
             ))}
           </nav>
 
-          <div style={{ font: t.caption }}>© 2026 PhaPhak · ສະຫງວນລິຂະສິດ</div>
+          <div style={{ font: t.caption }}>© 2026 Phapai · ສະຫງວນລິຂະສິດ</div>
         </div>
       </footer>
     </div>

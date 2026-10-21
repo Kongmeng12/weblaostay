@@ -16,12 +16,12 @@ export function CheckInQrPage() {
     <Page>
       <Card padding={32} style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 40, lineHeight: 1 }}>🏨</div>
-        <h1 style={{ font: t.h2, color: c.text, margin: '14px 0 6px' }}>QR ເຊັກອິນ PhaPhak</h1>
+        <h1 style={{ font: t.h2, color: c.text, margin: '14px 0 6px' }}>QR ເຊັກອິນ Phapai</h1>
         <p style={{ font: f(400, 14, 22), color: c.muted, margin: 0 }}>
-          ສະແດງ QR ນີ້ໃຫ້ພະນັກງານທີ່ພັກຕອນມາຮອດ — ພະນັກງານຈະສະແກນດ້ວຍແອັບ PhaPhak Partner.
+          ສະແດງ QR ນີ້ໃຫ້ພະນັກງານທີ່ພັກຕອນມາຮອດ — ພະນັກງານຈະສະແກນດ້ວຍແອັບ Phapai Partner.
         </p>
         <p style={{ font: f(400, 13, 20), color: c.muted, margin: '6px 0 0' }}>
-          Show this QR to the front desk when you arrive. Staff scan it with the PhaPhak Partner app.
+          Show this QR to the front desk when you arrive. Staff scan it with the Phapai Partner app.
         </p>
         <div style={{ marginTop: 22 }}>
           <Link to="/trips">

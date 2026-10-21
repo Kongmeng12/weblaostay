@@ -89,7 +89,7 @@ export function buildStayIcs(e: StayEvent): string {
   const now = e.now ?? new Date();
 
   const description = [
-    `PhaPhak · ລະຫັດຈອງ / Confirmation: ${e.code}`,
+    `Phapai · ລະຫັດຈອງ / Confirmation: ${e.code}`,
     `ເຂົ້າພັກ / Check-in: ${readableDate(e.checkIn)}`,
     `ອອກ / Check-out: ${readableDate(e.checkOut)}`,
     e.roomName ? `${e.roomName} · ${e.guests} ຄົນ / guests` : `${e.guests} ຄົນ / guests`,
@@ -107,7 +107,7 @@ export function buildStayIcs(e: StayEvent): string {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//PhaPhak//Booking confirmation//EN',
+    'PRODID:-//Phapai//Booking confirmation//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

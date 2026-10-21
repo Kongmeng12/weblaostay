@@ -192,7 +192,7 @@ async function bootstrap(): Promise<void> {
       .listen(port, '::1');
   }
 
-  new Logger('Bootstrap').log(`PhaPhak API listening on http://localhost:${port}/api (loopback only)`);
+  new Logger('Bootstrap').log(`Phapai API listening on http://localhost:${port}/api (loopback only)`);
 }
 
 void bootstrap();

@@ -49,7 +49,7 @@ function BookingDownloads({ booking }: { booking: BookingDetail }) {
   if (!canPdf && !canIcs) return null;
 
   // The code only — no guest name in a file that may be forwarded.
-  const base = `PhaPhak-${booking.code.replace(/[^A-Za-z0-9-]/g, '')}`;
+  const base = `Phapai-${booking.code.replace(/[^A-Za-z0-9-]/g, '')}`;
 
   const save = async (kind: 'pdf' | 'ics', path: string, filename: string) => {
     setBusy(kind);

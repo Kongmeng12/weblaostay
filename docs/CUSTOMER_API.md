@@ -430,7 +430,7 @@ GET /customer/bookings/:id/calendar       → text/calendar; charset=utf-8
 | ມາດຕະຖານ | PDF/A-2b (ISO 19005-2), A4, ຝັງ font ລາວ | iCalendar (RFC 5545), event ໝົດມື້ |
 | ສະຖານະທີ່ໄດ້ | `confirmed` `staying` `completed` `no_show` `cancelled` | `confirmed` `staying` |
 | ສະຖານະອື່ນ | `409` ພ້ອມຂໍ້ຄວາມ | `409` ພ້ອມຂໍ້ຄວາມ |
-| ຊື່ໄຟລ໌ | `PhaPhak-<code>.pdf` (ບໍ່ມີຊື່ແຂກ) | `PhaPhak-<code>.ics` |
+| ຊື່ໄຟລ໌ | `Phapai-<code>.pdf` (ບໍ່ມີຊື່ແຂກ) | `Phapai-<code>.ics` |
 
 - ຕ້ອງມີ token ຄືກັບ endpoint ອື່ນ — ການຈອງຂອງຄົນອື່ນໄດ້ `404`. ລິ້ງທຳມະດາ (`<a href>`)
   ຈຶ່ງໃຊ້ບໍ່ໄດ້: ດຶງດ້ວຍ token ແລ້ວຍື່ນ bytes ໃຫ້ OS (share sheet ໃນແອັບ, download ໃນເວັບ).

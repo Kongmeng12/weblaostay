@@ -131,7 +131,7 @@ export function HomePage() {
                 margin: `0 0 ${space[3]}px`,
               }}
             >
-              ລົງທະບຽນກັບ PhaPhak — ຮັບການຈອງ, ຈ່າຍທຸກອາທິດ, ຈັດການຜ່ານແອັບ
+              ລົງທະບຽນກັບ Phapai — ຮັບການຈອງ, ຈ່າຍທຸກອາທິດ, ຈັດການຜ່ານແອັບ
             </p>
             <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
               {['ລາຍໄດ້ທຸກອາທິດ', 'ຈັດການຜ່ານແອັບ', 'ຮັບຈອງ 24/7'].map((b) => (

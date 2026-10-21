@@ -458,7 +458,7 @@ export class AuthService {
       // Deliberately plain ASCII: Wenova bills per segment, and one Lao
       // character drops a segment from 153 characters to 67.
       void this.sms
-        .send(target, `PhaPhak code: ${code}. Valid ${otp_ttl_minutes} minutes.`)
+        .send(target, `Phapai code: ${code}. Valid ${otp_ttl_minutes} minutes.`)
         .catch(failed);
     } else if (target.includes('@')) {
       void this.email.send(otpEmail(target, code, otp_ttl_minutes)).catch(failed);

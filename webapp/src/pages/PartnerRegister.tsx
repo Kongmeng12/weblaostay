@@ -106,7 +106,7 @@ export function PartnerRegisterPage() {
           <div style={{ font: f(400, 48), marginBottom: 16, lineHeight: 1 }}>🎉</div>
           <h1 style={{ font: t.h1, color: c.text, margin: '0 0 10px' }}>ສົ່ງຄຳຂໍສຳເລັດ</h1>
           <p style={{ font: t.body, color: c.muted, margin: '0 0 8px' }}>
-            ທີມງານ PhaPhak ຈະກວດສອບຂໍ້ມູນ ແລະ ຕິດຕໍ່ທ່ານທາງອີເມວ
+            ທີມງານ Phapai ຈະກວດສອບຂໍ້ມູນ ແລະ ຕິດຕໍ່ທ່ານທາງອີເມວ
           </p>
           <p style={{ font: t.bodySm, color: c.faint, margin: '0 0 28px' }}>
             ພາຍໃນ 1–2 ວັນເຮັດການ
@@ -132,7 +132,7 @@ export function PartnerRegisterPage() {
       >
         <h1 style={{ font: t.h1, color: c.text, margin: '0 0 6px' }}>ສະໝັກເປັນ Partner</h1>
         <p style={{ font: t.bodySm, color: c.muted, margin: '0 0 24px' }}>
-          ລົງທະບຽນທີ່ພັກຂອງທ່ານກັບ PhaPhak — ຮັບການຈອງ ແລະ ຊຳລະທຸກວັນ
+          ລົງທະບຽນທີ່ພັກຂອງທ່ານກັບ Phapai — ຮັບການຈອງ ແລະ ຊຳລະທຸກວັນ
         </p>
 
         <form onSubmit={submit} style={{ display: 'grid', gap: 16 }}>

@@ -86,7 +86,7 @@ console.log('\nSMS — Wenova Link\n');
 {
   const seen = stubGateway(DELIVERED);
   const p = new WenovaSmsProvider(cfg({ WENOVA_SCRIPT_ID: '42' }));
-  await p.send('+856 20 5511 0001', 'PhaPhak code: 123456');
+  await p.send('+856 20 5511 0001', 'Phapai code: 123456');
 
   check('POST /sms/package', seen.url.endsWith('/sms/package'), seen.url);
   check('the number is normalised on the way out', seen.body.phoneNumber === '2055110001');
@@ -203,7 +203,7 @@ console.log('\nSMS — Wenova Link\n');
 // ── the console provider ────────────────────────────────────────────────────
 {
   const p = new ConsoleSmsProvider();
-  await p.send('+856 20 5511 0001', 'PhaPhak code: 123456');
+  await p.send('+856 20 5511 0001', 'Phapai code: 123456');
   check('the console provider accepts a stored number', true);
   const err = await p.send('021 260 000', 'x').then(() => null, (e) => e.message);
   check('and still refuses a landline, so bad numbers surface early', err !== null);

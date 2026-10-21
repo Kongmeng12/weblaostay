@@ -1,7 +1,7 @@
 {
   "name": "phaphak-backend",
   "version": "0.1.0",
-  "description": "PhaPhak API — serves WebAdmin, the guest web app and the Partner app",
+  "description": "Phapai API — serves WebAdmin, the guest web app and the Partner app",
   "private": true,
   "scripts": {
     "build": "nest build",

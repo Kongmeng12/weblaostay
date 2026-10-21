@@ -117,11 +117,11 @@ export async function renderConfirmationPdf(d: ConfirmationDoc): Promise<Buffer>
     displayTitle: true,
     bufferPages: true,
     info: {
-      Title: `PhaPhak booking confirmation ${d.code}`,
-      Author: 'PhaPhak',
+      Title: `Phapai booking confirmation ${d.code}`,
+      Author: 'Phapai',
       Subject: 'Booking confirmation and payment receipt',
       Keywords: `booking, confirmation, receipt, ${d.code}`,
-      Creator: 'PhaPhak',
+      Creator: 'Phapai',
       CreationDate: d.issuedAt,
     },
   });
@@ -326,7 +326,7 @@ export async function renderConfirmationPdf(d: ConfirmationDoc): Promise<Buffer>
     doc.moveTo(x0, fy).lineTo(x0 + CONTENT_W, fy).lineWidth(0.6).strokeColor(C.line).stroke();
     doc.font('reg').fontSize(7.5).fillColor(C.sub);
     doc.text(
-      `ອອກໂດຍ PhaPhak · ${d.url.replace(/^https?:\/\//, '').split('/')[0]} — ເອກະສານສ້າງໂດຍລະບົບ ບໍ່ຕ້ອງມີລາຍເຊັນ · Computer-generated; no signature required.`,
+      `ອອກໂດຍ Phapai · ${d.url.replace(/^https?:\/\//, '').split('/')[0]} — ເອກະສານສ້າງໂດຍລະບົບ ບໍ່ຕ້ອງມີລາຍເຊັນ · Computer-generated; no signature required.`,
       x0, fy + 6, { width: CONTENT_W, lineBreak: false },
     );
     doc.text(

@@ -1,5 +1,5 @@
 /**
- * What a payment provider has to do for PhaPhak.
+ * What a payment provider has to do for Phapai.
  *
  * Two implementations exist: `SimulatedPaymentProvider` for development, and
  * `PhaJayPaymentProvider` for the real LAPNet/PhaJay rails. Everything else in

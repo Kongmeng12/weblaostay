@@ -51,9 +51,9 @@ export function LoginPage() {
           style={{ background: `linear-gradient(150deg, ${c.sidebarFrom}, #241B15 70%)` }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <img src="/logo.png" alt="PhaPhak" style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0 }} />
+            <img src="/logo.png" alt="Phapai" style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0 }} />
             <div>
-              <div style={{ font: f(800, 18), color: '#fff' }}>PhaPhak</div>
+              <div style={{ font: f(800, 18), color: '#fff' }}>Phapai</div>
               <div style={{ font: f(400, 12), color: c.onDarkSoft }}>ພັກເຮືອນລາວ</div>
             </div>
           </div>
@@ -70,7 +70,7 @@ export function LoginPage() {
           </div>
 
           <div style={{ font: f(400, 12), color: '#8C7F6C' }}>
-            © 2026 PhaPhak · ສະຫງວນລິຂະສິດ
+            © 2026 Phapai · ສະຫງວນລິຂະສິດ
           </div>
         </div>
 

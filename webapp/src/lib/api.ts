@@ -221,7 +221,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
     throw new ApiError(
       403,
       res.user.role === 'PARTNER'
-        ? 'ບັນຊີນີ້ເປັນຂອງເຈົ້າຂອງທີ່ພັກ · ກະລຸນາໃຊ້ແອັບ PhaPhak Partner'
+        ? 'ບັນຊີນີ້ເປັນຂອງເຈົ້າຂອງທີ່ພັກ · ກະລຸນາໃຊ້ແອັບ Phapai Partner'
         : 'ບັນຊີນີ້ໃຊ້ກັບໜ້ານີ້ບໍ່ໄດ້',
     );
   }

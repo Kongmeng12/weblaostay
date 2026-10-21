@@ -130,7 +130,7 @@ function Splash() {
             animation: 'phaphakSpin .8s linear infinite',
           }}
         />
-        <div style={{ font: f(600, 13), color: c.muted }}>ກຳລັງໂຫຼດ PhaPhak Admin...</div>
+        <div style={{ font: f(600, 13), color: c.muted }}>ກຳລັງໂຫຼດ Phapai Admin...</div>
       </div>
     </div>
   );
