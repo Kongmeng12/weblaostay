@@ -13,6 +13,14 @@ $root    = Split-Path -Parent $PSScriptRoot
 $backend = Join-Path $root 'backend'
 $logs    = Join-Path $PSScriptRoot 'logs'
 
+# Production runs only from the folder deploy\release.ps1 manages, which it
+# marks with this file. Started from a dev checkout instead, it would serve
+# whatever a developer last built or generated there — on 2026-10-21 that was a
+# Prisma client ahead of the database, and every property page answered 500.
+if (-not (Test-Path (Join-Path $root '.phapai-prod'))) {
+  throw "This is a development checkout. Production runs from E:\phapai-prod — start it with E:\phapai-prod\deploy\start.ps1, and deploy with deploy\release.ps1."
+}
+
 if (-not (Test-Path $logs)) { New-Item -ItemType Directory -Force $logs | Out-Null }
 
 # The API refuses to start on a taken port with an error that scrolls past in a
