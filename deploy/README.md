@@ -44,14 +44,36 @@ https://phaphak.com/api/payments/phajay/webhook/<PHAJAY_WEBHOOK_SECRET>
 .\deploy\install-autostart.ps1
 ```
 
+## Production ຢູ່ folder ແຍກ: `E:\phapai-prod`
+
+ຕັ້ງແຕ່ 2026-10-21 production **ບໍ່ແລ່ນຈາກ folder ທີ່ dev ເຮັດວຽກອີກແລ້ວ**. ກ່ອນນັ້ນ
+ທັງສອງໃຊ້ `node_modules` ຮ່ວມກັນ: dev ແລ່ນ `prisma generate` ສຳລັບ column ໃໝ່ທີ່ຍັງບໍ່ໄດ້
+run migration ແລ້ວໜ້າທີ່ພັກທຸກໜ້າໃນ production ຕອບ 500 ທັນທີ ໂດຍບໍ່ມີໃຜ deploy ຫຍັງເລີຍ.
+
+`E:\phapai-prod` ເປັນ git worktree ທີ່ຊີ້ໄປ commit ດຽວ ມີ `node_modules`, Prisma client,
+`.env` ແລະ `uploads` ຂອງມັນເອງ. **ຢ່າແກ້ໄຟລ໌ໃນນັ້ນດ້ວຍມື** — ມີແຕ່ `release.ps1` ທີ່ປ່ຽນມັນ:
+
+```powershell
+.\deploy\release.ps1                    # deploy origin/main (commit + push ກ່ອນ)
+.\deploy\release.ps1 -Commit a8dd1e3    # deploy ຫຼື rollback ໄປ commit ນັ້ນ
+```
+
+`release.ps1` **ປະຕິເສດ** ຖ້າ database ຍັງບໍ່ມີ table/column ທີ່ commit ນັ້ນໃຊ້
+(`check-schema.js`) — ໃຫ້ run migration ໃນ `prisma/migrations-v2` ກ່ອນ. ມັນ build ໄວ້ຂ້າງໆ
+ໃນຂະນະທີ່ເວັບເກົ່າຍັງແລ່ນ ແລ້ວປິດແຕ່ສອງສາມວິນາທີຕອນສັບ (ປະມານ 1 ນາທີ ຖ້າ schema ຫຼື
+dependency ຂອງ backend ປ່ຽນ).
+
+`start.ps1` ແລະ `install-autostart.ps1` ຈະບໍ່ຍອມແລ່ນຈາກ folder dev ອີກ.
+
 ## ໃຊ້ປະຈຳວັນ
 
 | ຢາກເຮັດຫຍັງ | ຄຳສັ່ງ |
 |---|---|
-| ແກ້ເວັບ (React) | `.\deploy\build.ps1` — **ຂຶ້ນທັນທີ ບໍ່ຕ້ອງ restart** |
-| ແກ້ backend (`.ts`) | `.\deploy\build.ps1` ແລ້ວ `.\deploy\stop.ps1; .\deploy\start.ps1` |
-| ແກ້ `.env` | `.\deploy\stop.ps1; .\deploy\start.ps1` (ບໍ່ຕ້ອງ build) |
-| ເບິ່ງ log | `Get-Content .\deploy\logs\api.log -Tail 50 -Wait` |
+| deploy ສິ່ງທີ່ push ແລ້ວ | `.\deploy\release.ps1` |
+| rollback | `.\deploy\release.ps1 -Commit <sha ກ່ອນໜ້າ>` (ເບິ່ງ `E:\phapai-prod\deploy\logs\releases.log`) |
+| ເປີດ / ປິດ | `E:\phapai-prod\deploy\start.ps1` / `E:\phapai-prod\deploy\stop.ps1` |
+| ແກ້ `.env` ຂອງ production | ແກ້ `E:\phapai-prod\backend\.env` ແລ້ວ stop + start |
+| ເບິ່ງ log | `Get-Content E:\phapai-prod\deploy\logs\api.log -Tail 50 -Wait` |
 | ເຊັກວ່າຍັງດີຢູ່ | `curl https://phaphak.com/api/health` |
 | ປິດ | `.\deploy\stop.ps1` |
 | Backup ດຽວນີ້ | `.\deploy\backup.ps1` (ແລ່ນເອງທຸກຄືນ ຕີ 3 ຢູ່ແລ້ວ) |

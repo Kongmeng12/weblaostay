@@ -16,3 +16,8 @@ scripts/_capture.json
 # They belong on disk and in an offsite copy, never in the repository.
 deploy/backups/
 deploy/logs/
+
+# The production worktree (deploy/release.ps1) marks itself with this file,
+# and builds land in dist-next before they are swapped in.
+.phapai-prod
+dist-next/

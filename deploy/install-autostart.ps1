@@ -16,6 +16,9 @@ $ErrorActionPreference = 'Stop'
 $root    = Split-Path -Parent $PSScriptRoot
 $backend = Join-Path $root 'backend'
 $logs    = Join-Path $PSScriptRoot 'logs'
+if (-not (Test-Path (Join-Path $root '.phapai-prod'))) {
+  throw "This is a development checkout. Run E:\phapai-prod\deploy\install-autostart.ps1 so the tasks start production, not this folder."
+}
 
 if (-not (Test-Path $logs)) { New-Item -ItemType Directory -Force $logs | Out-Null }
 if (-not (Test-Path (Join-Path $backend 'dist\main.js'))) {
