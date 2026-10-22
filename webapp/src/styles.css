@@ -309,3 +309,23 @@ img {
     display: none;
   }
 }
+
+/* The property's photo carousel (PhotoCarousel). Edge to edge on a phone, as
+   the app shows it; on a wide screen a rounded frame in line with the page. */
+@media (min-width: 861px) {
+  .phaphak-hero {
+    max-width: min(1120px, calc(100% - 36px));
+    margin: 16px auto 0;
+    border-radius: 22px;
+  }
+}
+/* Arrows only where there is a pointer to click them — on a touch screen the
+   swipe is the control, and arrows would sit on the photo for nothing. */
+.phaphak-hero-arrow {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .phaphak-hero-arrow {
+    display: grid;
+  }
+}

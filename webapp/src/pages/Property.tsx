@@ -17,6 +17,8 @@ import {
 } from '../theme';
 import { addDaysIso, kip, laoDate, mapsUrl, nightsBetween, stars } from '../lib/format';
 import { DateRangePicker } from '../components/DateRangePicker';
+import { AmenityList } from '../components/AmenityList';
+import { PhotoCarousel } from '../components/PhotoCarousel';
 import {
   Button,
   Card,
@@ -197,54 +199,8 @@ export function PropertyPage() {
         />
       )}
 
-      {/* gallery strip — click any photo to open the lightbox */}
-      <div
-        className="phaphak-strip"
-        style={{ display: 'flex', gap: 4, background: c.neutralBg, position: 'relative' }}
-      >
-        {(p.images.length ? p.images : [{ url: '', caption: null, isCover: true }]).map(
-          (img, i) => (
-            <div
-              key={i}
-              onClick={() => p.images.length > 0 && setGalleryIndex(i)}
-              style={{
-                flex: 'none',
-                scrollSnapAlign: 'start',
-                cursor: p.images.length > 0 ? 'pointer' : 'default',
-              }}
-            >
-              <Photo
-                url={img.url || null}
-                alt={p.name}
-                height={300}
-                width={p.images.length > 1 ? 'min(78vw, 560px)' : '100%'}
-                rounded={0}
-              />
-            </div>
-          ),
-        )}
-
-        {p.images.length > 1 && (
-          <button
-            onClick={() => setGalleryIndex(0)}
-            style={{
-              position: 'absolute',
-              bottom: 12,
-              right: 12,
-              padding: '6px 14px',
-              background: 'rgba(0,0,0,0.55)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: radius.pill,
-              font: f(600, 12),
-              cursor: 'pointer',
-              backdropFilter: 'blur(4px)',
-            }}
-          >
-            ເບິ່ງທັງໝົດ {p.images.length} ຮູບ
-          </button>
-        )}
-      </div>
+      {/* The photos, sliding on their own — tap one for the full-screen gallery. */}
+      <PhotoCarousel images={p.images.map((img) => img.url)} alt={p.name} onOpen={setGalleryIndex} />
 
       <div style={{ maxWidth: MAX_WIDTH, margin: '0 auto', padding: `${space[4]}px 18px 0` }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: space[4], flexWrap: 'wrap' }}>
@@ -339,27 +295,7 @@ export function PropertyPage() {
           </div>
         </Section>
 
-        {p.amenities.length > 0 && (
-          <Section title="ສິ່ງອຳນວຍຄວາມສະດວກ">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              {p.amenities.map((a) => (
-                <span
-                  key={a.id}
-                  style={{
-                    padding: '8px 14px',
-                    background: c.bg,
-                    border: `1px solid ${c.border}`,
-                    borderRadius: 999,
-                    font: t.caption,
-                    color: c.soft,
-                  }}
-                >
-                  {a.name}
-                </span>
-              ))}
-            </div>
-          </Section>
-        )}
+        {p.amenities.length > 0 && <AmenityList amenities={p.amenities} />}
 
         {p.rules && (
           <Section title="ກົດລະບຽບທີ່ພັກ">

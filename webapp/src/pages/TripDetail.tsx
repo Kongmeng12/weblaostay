@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft } from 'lucide-react';
 import { api, downloadFile } from '../lib/api';
 import { c, f, radius, space, BOOKING_STATUS_PILL, PAYMENT_STATUS_PILL, pillFor, type as t } from '../theme';
 import { countdown, kip, laoDateFull, laoDateTime, mapsUrl } from '../lib/format';
@@ -128,8 +129,38 @@ export function TripDetailPage() {
 
   return (
     <Page width="wide">
-      <Link to="/trips" style={{ font: t.label, color: c.muted }}>
-        ← ການເດີນທາງທັງໝົດ
+      {/* The app's back control: a round button with the arrow, the label
+          beside it, the whole row one 44px target. The bare 13px grey text
+          link it replaces was easy to miss and hard to hit with a thumb. */}
+      <Link
+        to="/trips"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 10,
+          minHeight: 44,
+          paddingRight: 12,
+          marginBottom: space[3],
+          color: c.text,
+          font: f(700, 15, 22),
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            background: c.surface,
+            border: `1px solid ${c.border}`,
+            boxShadow: '0 4px 12px -6px rgba(42,31,25,.25)',
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+          <ArrowLeft size={20} strokeWidth={2} />
+        </span>
+        ການເດີນທາງທັງໝົດ
       </Link>
 
       <PageTitle
