@@ -15,7 +15,7 @@ import {
   PROPERTY_TYPE_LABEL,
   BED_TYPE_LABEL,
 } from '../theme';
-import { addDaysIso, kip, laoDate, mapsUrl, nightsBetween, stars } from '../lib/format';
+import { addDaysIso, clockTime, kip, laoDate, mapsUrl, nightsBetween, stars } from '../lib/format';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { AmenityList } from '../components/AmenityList';
 import { PhotoCarousel } from '../components/PhotoCarousel';
@@ -166,6 +166,11 @@ export function PropertyPage() {
   }
 
   const p = query.data!;
+  // TIME columns arrive as a 1970 timestamp — show the clock only.
+  const checkInFrom = clockTime(p.rules?.checkInFrom);
+  const checkOutUntil = clockTime(p.rules?.checkOutUntil);
+  const quietFrom = clockTime(p.rules?.quietHoursStart);
+  const quietUntil = clockTime(p.rules?.quietHoursEnd);
   const room = p.roomTypes.find((r) => r.id === selectedRoom) ?? null;
   const bookable = room && hasRange && room.available === true;
 
@@ -301,20 +306,14 @@ export function PropertyPage() {
           <Section title="ກົດລະບຽບທີ່ພັກ">
             <Card>
               <div style={{ display: 'grid', gap: 8 }}>
-                <Rule label="ເຊັກອິນ" value={p.rules.checkInFrom ? `ຈາກ ${p.rules.checkInFrom}` : '—'} />
-                <Rule
-                  label="ເຊັກເອົາ"
-                  value={p.rules.checkOutUntil ? `ກ່ອນ ${p.rules.checkOutUntil}` : '—'}
-                />
+                <Rule label="ເຊັກອິນ" value={checkInFrom ? `ຈາກ ${checkInFrom} ໂມງ` : '—'} />
+                <Rule label="ເຊັກເອົາ" value={checkOutUntil ? `ກ່ອນ ${checkOutUntil} ໂມງ` : '—'} />
                 <Rule label="ສູບຢາ" value={p.rules.smokingAllowed ? 'ອະນຸຍາດ' : 'ບໍ່ອະນຸຍາດ'} />
                 <Rule label="ສັດລ້ຽງ" value={p.rules.petAllowed ? 'ອະນຸຍາດ' : 'ບໍ່ອະນຸຍາດ'} />
                 <Rule label="ເດັກນ້ອຍ" value={p.rules.childAllowed ? 'ອະນຸຍາດ' : 'ບໍ່ອະນຸຍາດ'} />
                 <Rule label="ຈັດງານລ້ຽງ" value={p.rules.partyAllowed ? 'ອະນຸຍາດ' : 'ບໍ່ອະນຸຍາດ'} />
-                {p.rules.quietHoursStart && (
-                  <Rule
-                    label="ເວລາງຽບ"
-                    value={`${p.rules.quietHoursStart} – ${p.rules.quietHoursEnd ?? ''}`}
-                  />
+                {quietFrom && (
+                  <Rule label="ເວລາງຽບ" value={quietUntil ? `${quietFrom} – ${quietUntil}` : `ຈາກ ${quietFrom}`} />
                 )}
                 {p.rules.note && (
                   <p style={{ font: t.bodySm, color: c.muted, margin: '6px 0 0' }}>

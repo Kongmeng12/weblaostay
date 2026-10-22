@@ -104,6 +104,19 @@ export function laoTime(value: string | Date | null | undefined): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+/**
+ * `14:00` from a Postgres `TIME` column — check-in from, check-out until,
+ * quiet hours. Prisma has no time-only type, so the API sends these as
+ * `"1970-01-01T14:00:00.000Z"` (see docs/CUSTOMER_API.md: use the time, the
+ * 1970 date means nothing). The clock is read straight from the string, never
+ * through `Date` in local time: 14:00 at the property is 14:00 for a guest
+ * browsing from any time zone. A bare `"14:00"` or `"14:00:00"` passes too.
+ */
+export function clockTime(value: string | null | undefined): string | null {
+  const m = value?.match(/(?:T|^)(\d{2}):(\d{2})/);
+  return m ? `${m[1]}:${m[2]}` : null;
+}
+
 export function laoAgo(value: string | Date | null | undefined): string {
   if (!value) return '—';
   const d = new Date(value);
